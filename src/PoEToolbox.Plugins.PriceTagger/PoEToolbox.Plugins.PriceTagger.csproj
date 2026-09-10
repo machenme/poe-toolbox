@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>PoEToolbox.Plugins.PriceTagger</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Core\PoEToolbox.Core.csproj" />
+    <ProjectReference Include="..\LibBundledGGPK3\LibBundledGGPK3.csproj" />
+    <ProjectReference Include="..\LibDat2\LibDat2.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,352 @@
+using PoEToolbox.Sdk;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Interop;
+using System.ComponentModel;
+using System.Windows.Data;
+using System.Diagnostics;
+using System.IO;
+using PoEToolbox.Shared;
+
+namespace PoEToolbox.App;
+
+public partial class MainWindow : Window
+{
+    private const string ReleasesUrl = "https://gitee.com/osmc/poe-toolbox/releases/";
+    private readonly PluginManager _pluginManager;
+    private readonly IAppState _sessionState;
+    private IPlugin? _activePlugin;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        _pluginManager = new PluginManager(new EventBus());
+        _sessionState = _pluginManager.SessionState;
+        _pluginManager.EventBus.Subscribe<GameContextChanged>(OnGameContextChanged);
+        _pluginManager.EventBus.Subscribe<LeagueChanged>(OnLeagueChanged);
+        GameDataAccess.LocksChanged += OnGameDataLocksChanged;
+        _pluginManager.RegisterAll();
+        NavList.ItemsSource = CreateNavigationView();
+        ApplyLocalization();
+        _pluginManager.EventBus.Publish(new GameContextChanged(
+            PoeGameKind.Unknown, null, PoeDetector.Default.IsPoeRunning()));
+        SourceInitialized += (_, _) => InitializeGlobalPluginHotkeys();
+
+        // Show disclaimer on first run
+        if (!DisclaimerPage.IsAccepted())
+        {
+            var page = new DisclaimerPage();
+            page.Accepted += () =>
+            {
+                DisclaimerOverlay.Visibility = Visibility.Collapsed;
+                if (NavList.Items.Count > 0) NavList.SelectedIndex = 0;
+            };
+            page.Declined += () => Application.Current.Shutdown();
+            DisclaimerOverlay.Child = page;
+            DisclaimerOverlay.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            if (NavList.Items.Count > 0) NavList.SelectedIndex = 0;
+        }
+
+        ApplyVersionState(UpdateChecker.GetCachedResult());
+        _ = LoadUpdateStateAsync();
+    }
+
+    private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (NavList.SelectedItem is not NavigationEntry { Plugin: { } plugin }) return;
+
+        _activePlugin?.OnDeactivated();
+        _activePlugin = plugin;
+        try
+        {
+            PluginContent.Content = plugin.CreateView();
+            _activePlugin.OnActivated();
+        }
+        catch (Exception ex)
+        {
+            var msg = $"{plugin.Name}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+            FileLogger.WriteCritical(msg, ex);
+            MessageBox.Show(msg, "Plugin Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void InitializeGlobalPluginHotkeys()
+    {
+        var bagCleaner = _pluginManager.Plugins
+            .OfType<PoEToolbox.Plugins.BagCleaner.BagCleanerPlugin>()
+            .FirstOrDefault();
+        if (bagCleaner == null) return;
+
+        bagCleaner.InitializeHotkeys(new WindowInteropHelper(this).Handle);
+    }
+
+    private void ThemeBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var next = ThemeManager.Current switch
+        {
+            ThemeManager.Theme.Light => ThemeManager.Theme.Dark,
+            ThemeManager.Theme.Dark => ThemeManager.Theme.FollowSystem,
+            _ => ThemeManager.Theme.Light,
+        };
+        ThemeManager.Apply(next);
+        UpdateThemeIcon();
+    }
+
+    private void LangBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var next = UILabels.Current switch
+        {
+            UILabels.Lang.English => UILabels.Lang.SimplifiedChinese,
+            UILabels.Lang.SimplifiedChinese => UILabels.Lang.TraditionalChinese,
+            _ => UILabels.Lang.English,
+        };
+        UILabels.SetLanguage(next);
+        ApplyLocalization();
+    }
+
+    private void ReleaseGgpkButton_Click(object sender, RoutedEventArgs e)
+    {
+        _pluginManager.EventBus.Publish(new ReleaseGameDataLocksRequested());
+        OnGameDataLocksChanged(GameDataAccess.HasOpenLocks);
+        StatusLabel.Text = UILabels.Get("GgpkLocksReleased");
+    }
+
+    private void OpenDataFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Directory.CreateDirectory(ConfigService.DataDirectory);
+            Process.Start(new ProcessStartInfo(ConfigService.DataDirectory)
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            FileLogger.WriteCritical("Failed to open the application data directory.", ex);
+        }
+    }
+
+    private void UpdateThemeIcon()
+    {
+        ThemeBtn.Content = ThemeManager.Current switch
+        {
+            ThemeManager.Theme.Dark => "",
+            ThemeManager.Theme.Light => "",
+            _ => "",
+        };
+    }
+
+    private async Task LoadUpdateStateAsync()
+    {
+        var result = await UpdateChecker.CheckAsync();
+        await Dispatcher.InvokeAsync(() => ApplyVersionState(result));
+    }
+
+    private void ApplyVersionState(UpdateCheckResult result)
+    {
+        var current = result.CurrentVersion ?? typeof(App).Assembly.GetName().Version;
+        var currentText = current is null
+            ? "v?"
+            : $"v{FormatVersion(current)}";
+        LblVersion.Text = currentText;
+
+        UpdateDot.Visibility = result.HasUpdate ? Visibility.Visible : Visibility.Collapsed;
+        if (!result.HasUpdate)
+            UpdateDialogOverlay.Visibility = Visibility.Collapsed;
+        VersionBtn.ToolTip = result.HasUpdate
+            ? UILabels.Get("UpdateAvailableTooltip")
+            : UILabels.Get("VersionTooltip");
+    }
+
+    private void VersionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var cached = UpdateChecker.GetCachedResult();
+        if (!cached.HasUpdate || cached.LatestVersion is null)
+            return;
+
+        UpdateDialogTitle.Text = UILabels.Get("UpdateDialogTitle");
+        UpdateDialogVersion.Text = $"v{FormatVersion(cached.LatestVersion)}";
+        UpdateDialogNotes.Text = string.IsNullOrWhiteSpace(cached.Notes)
+            ? UILabels.Get("UpdateNotesUnavailable")
+            : cached.Notes;
+        SkipUpdateButton.Content = string.Format(
+            UILabels.Get("SkipVersion"),
+            FormatVersion(cached.LatestVersion));
+        UpdateDialogOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void SkipUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        var cached = UpdateChecker.GetCachedResult();
+        if (cached.LatestVersion is not null)
+            UpdateChecker.SkipVersion(cached.LatestVersion);
+
+        ApplyVersionState(UpdateChecker.GetCachedResult());
+    }
+
+    private void OpenReleasesButton_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateDialogOverlay.Visibility = Visibility.Collapsed;
+        OpenReleasesPage();
+    }
+
+    private static void OpenReleasesPage()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(ReleasesUrl)
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            FileLogger.WriteCritical("Failed to open update URL.", ex);
+        }
+    }
+
+    private static string FormatVersion(Version version) => version.Build < 0
+        ? $"{version.Major}.{version.Minor}"
+        : $"{version.Major}.{version.Minor}.{version.Build}";
+
+    private void ApplyLocalization()
+    {
+        Title = UILabels.Get("AppTitle");
+        LblAppTitle.Text = UILabels.Get("AppTitle");
+        LblSubtitle.Text = UILabels.Get("Subtitle");
+        OnGameDataLocksChanged(GameDataAccess.HasOpenLocks);
+        UpdateShellStatus();
+
+        var lang = UILabels.Current switch
+        {
+            UILabels.Lang.SimplifiedChinese => "简",
+            UILabels.Lang.TraditionalChinese => "繁",
+            _ => "EN",
+        };
+        LangBtn.Content = lang;
+
+        UpdateThemeIcon();
+        ApplyVersionState(UpdateChecker.GetCachedResult());
+        OpenReleasesButton.Content = UILabels.Get("OpenReleasePage");
+        OpenDataFolderButton.Content = UILabels.Get("OpenAppDataFolder");
+        OpenDataFolderButton.ToolTip = UILabels.Get("OpenAppDataFolder");
+
+        // Refresh nav list display names
+        NavList.Items.Refresh();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        try
+        {
+            _pluginManager.EventBus.Unsubscribe<GameContextChanged>(OnGameContextChanged);
+            _pluginManager.EventBus.Unsubscribe<LeagueChanged>(OnLeagueChanged);
+            GameDataAccess.LocksChanged -= OnGameDataLocksChanged;
+            _pluginManager.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            FileLogger.WriteCritical("Failed during application shutdown.", ex);
+        }
+        finally
+        {
+            base.OnClosed(e);
+            try
+            {
+                Application.Current.Shutdown();
+            }
+            catch (InvalidOperationException)
+            {
+                // The dispatcher may already be shutting down.
+            }
+        }
+    }
+
+    private void OnGameContextChanged(GameContextChanged _) => UpdateShellStatus();
+
+    private void OnLeagueChanged(LeagueChanged _) => UpdateShellStatus();
+
+    private void OnGameDataLocksChanged(bool hasOpenLocks)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => OnGameDataLocksChanged(GameDataAccess.HasOpenLocks));
+            return;
+        }
+
+        hasOpenLocks = GameDataAccess.HasOpenLocks;
+        var label = hasOpenLocks
+            ? UILabels.Get("ReleaseGgpkLocks")
+            : UILabels.Get("GgpkLocksReleased");
+        ReleaseGgpkButton.Content = label;
+        ReleaseGgpkButton.ToolTip = label;
+    }
+
+    private void UpdateShellStatus()
+    {
+        var game = _sessionState.Game != PoeGameKind.Unknown
+            ? _sessionState.Game
+            : _sessionState.LeagueGame;
+        var gameText = game switch
+        {
+            PoeGameKind.Poe1 => "PoE1",
+            PoeGameKind.Poe2 => "PoE2",
+            _ => UILabels.Get("ShellGameUnknown"),
+        };
+        var processText = UILabels.Get(_sessionState.IsPoeRunning
+            ? "ShellRunning"
+            : "ShellNotRunning");
+        var leagueText = _sessionState.CurrentLeague ?? UILabels.Get("ShellLeagueUnknown");
+        StatusLabel.Text = string.Format(UILabels.Get("ShellStatus"), gameText, processText, leagueText);
+    }
+
+    private ICollectionView CreateNavigationView()
+    {
+        var entries = _pluginManager.Plugins
+            .Select(plugin => new NavigationEntry(
+                GetPluginGroup(plugin),
+                GetGroupOrder(plugin),
+                plugin.Order,
+                plugin))
+            .ToList();
+
+        // Keep the POE2 section visible while its tools are temporarily unavailable.
+        entries.Add(new NavigationEntry("POE2", 2, int.MaxValue, null));
+
+        var view = new ListCollectionView(entries);
+        view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(NavigationEntry.GroupName)));
+        view.SortDescriptions.Add(new SortDescription(nameof(NavigationEntry.GroupOrder), ListSortDirection.Ascending));
+        view.SortDescriptions.Add(new SortDescription(nameof(NavigationEntry.PluginOrder), ListSortDirection.Ascending));
+        return view;
+    }
+
+    private static string GetPluginGroup(IPlugin plugin)
+        => plugin is PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin
+            ? "POE1"
+            : plugin is PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin
+                ? "POE2"
+            : "通用";
+
+    private static int GetGroupOrder(IPlugin plugin)
+        => GetPluginGroup(plugin) switch
+        {
+            "POE1" => 1,
+            "POE2" => 2,
+            _ => 0,
+        };
+
+    private sealed record NavigationEntry(
+        string GroupName,
+        int GroupOrder,
+        int PluginOrder,
+        IPlugin? Plugin)
+    {
+        public string Name => Plugin?.Name ?? string.Empty;
+        public string IconGlyph => Plugin?.IconGlyph ?? string.Empty;
+    }
+}

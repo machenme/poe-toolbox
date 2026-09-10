@@ -1,0 +1,125 @@
+name: Build PoEToolbox
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: src/PoEToolbox.App/PoEToolbox.App.csproj
+  TEST_PROJECT: tests/PoEToolbox.Tests/PoEToolbox.Tests.csproj
+  RUNTIME: win-x64
+  PUBLISH_DIR: artifacts/publish
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw "Invalid version in version.json: $version"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $expected = "v${{ steps.version.outputs.version }}"
+          if ('${{ github.ref_name }}' -ne $expected) {
+            throw "Release tag '${{ github.ref_name }}' does not match version.json ($expected). Update version.json before creating the tag."
+          }
+
+      - name: Restore
+        run: |
+          dotnet restore $env:PROJECT --runtime $env:RUNTIME
+          dotnet restore $env:TEST_PROJECT
+
+      - name: Test
+        run: dotnet test $env:TEST_PROJECT --configuration Release --no-restore
+
+      - name: Publish
+        run: >-
+          dotnet publish $env:PROJECT
+          --configuration Release
+          --runtime $env:RUNTIME
+          --self-contained false
+          --no-restore
+          --output $env:PUBLISH_DIR
+          /p:Version=${{ steps.version.outputs.version }}
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:PUBLISH_DIR 'PoEToolbox.exe'
+          if (-not (Test-Path $exe)) {
+            throw "Published executable was not found: $exe"
+          }
+          Get-Item $exe | Select-Object FullName, Length
+
+      - name: Create release archive
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $archive = "PoEToolbox-v$version-win-x64.zip"
+          Compress-Archive -Path "$env:PUBLISH_DIR/*" -DestinationPath $archive -Force
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+        id: archive
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PoEToolbox-win-x64
+          path: ${{ env.PUBLISH_DIR }}
+          if-no-files-found: error
+
+      - name: Upload release archive
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PoEToolbox-release
+          path: ${{ steps.archive.outputs.archive }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release archive
+        uses: actions/download-artifact@v4
+        with:
+          name: PoEToolbox-release
+          path: release
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/PoEToolbox-*.zip
+          generate_release_notes: true

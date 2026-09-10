@@ -1,0 +1,62 @@
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+!oo2core.dll
+
+# Publish output
+publish/
+release/
+
+# External packages, extracted game data and local test artifacts
+POE-TRADE-TRANSLATOR/
+.scratch/
+temp/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# OS
+Thumbs.db
+.DS_Store
+
+# poe.ninja fetched data (re-fetchable)
+work/poe_ninja/
+
+# Pipeline work directory (intermediate files)
+work/baseitemtypes*.json
+work/names.csv
+work/translate.csv
+work/物价表.csv
+
+# Backups (large binary files)
+work/backups/
+work/cache/
+
+# Config (local, per-user)
+work/config.json
+
+# Game files (DO NOT COMMIT)
+Content.ggpk
+*.ggpk
+
+# Docs (not tracked)
+docs/
+AUDIT_PRD.md
+AUDIT_SPEC.md
+TODO.md
+tests/**/bin/
+tests/**/obj/
+Directory.Build.props
+
+
+# Mise
+.python-version

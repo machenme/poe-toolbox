@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\LibBundledGGPK3\LibBundledGGPK3.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\NameDictionaries\*.json" />
+    <EmbeddedResource Include="Assets\Translation\*.json" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseSystemDrawing>true</UseSystemDrawing>
+  </PropertyGroup>
+
+</Project>

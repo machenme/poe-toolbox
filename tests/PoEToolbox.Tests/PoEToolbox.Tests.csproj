@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/PoEToolbox.Core/PoEToolbox.Core.csproj" />
+    <ProjectReference Include="../../src/PoEToolbox.Plugins.DataBrowser/PoEToolbox.Plugins.DataBrowser.csproj" />
+    <ProjectReference Include="../../src/PoEToolbox.Plugins.BagCleaner/PoEToolbox.Plugins.BagCleaner.csproj" />
+    <ProjectReference Include="../../src/PoEToolbox.Plugins.PoeCnPatch/PoEToolbox.Plugins.PoeCnPatch.csproj" />
+    <ProjectReference Include="../../src/PoEToolbox.Shared/PoEToolbox.Shared.csproj" />
+  </ItemGroup>
+</Project>

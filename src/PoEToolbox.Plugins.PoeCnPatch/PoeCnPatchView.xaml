@@ -1,0 +1,153 @@
+<UserControl x:Class="PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource WindowBgBrush}">
+    <Grid Margin="0,8,0,8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="360"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock Text="PoB 项目目录" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="TreeTabPathBox" Height="32"
+                                     ToolTip="选择 PoB 项目目录；会自动查找 TreeTab.lua"
+                                     TextChanged="TargetPathBox_TextChanged"/>
+                            <Button Grid.Column="2" Content="选择目录" Style="{StaticResource SecondaryButton}"
+                                    Width="88" Click="Browse_Click"/>
+                        </Grid>
+                        <TextBlock x:Name="PathStatus" Style="{StaticResource SmallText}"
+                                   TextWrapping="Wrap" Margin="0,7,0,0"/>
+                        <TextBlock Text="PoB版本：POE1" Style="{StaticResource SmallText}" Margin="0,10,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock Text="赛季" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
+                        <UniformGrid Columns="4" Margin="0,0,0,10">
+                            <RadioButton Content="S30" Tag="S30" GroupName="Season"
+                                         IsChecked="True" Click="SeasonPreset_Click"/>
+                            <RadioButton Content="S31" Tag="S31" GroupName="Season"
+                                         Click="SeasonPreset_Click"/>
+                            <RadioButton Content="S32" Tag="S32" GroupName="Season"
+                                         Click="SeasonPreset_Click"/>
+                            <RadioButton Content="S33" Tag="S33" GroupName="Season"
+                                         Click="SeasonPreset_Click"/>
+                        </UniformGrid>
+                        <TextBlock Text="自定义赛季（S30 或 30）" Style="{StaticResource SmallText}" Margin="0,0,0,5"/>
+                        <TextBox x:Name="SeasonBox" Text="S30" Height="32"
+                                 TextChanged="SeasonBox_TextChanged"/>
+                        <TextBlock x:Name="SeasonStatus" Style="{StaticResource SmallText}"
+                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock Text="执行" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
+                        <Button x:Name="ApplyButton" Content="应用国服补丁"
+                                Style="{StaticResource PrimaryButton}" Height="44"
+                                Click="Apply_Click"/>
+                        <Button x:Name="RestoreButton" Content="还原国际服"
+                                Style="{StaticResource SecondaryButton}" Height="36" Margin="0,8,0,0"
+                                IsEnabled="False" Click="Restore_Click"/>
+                        <TextBlock Text="应用前会为发生变化的文件生成 .bak 备份。"
+                                   Style="{StaticResource SmallText}" TextWrapping="Wrap"
+                                   Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <Grid Margin="0,12,0,0">
+                    <Button Content="POB下载" Style="{StaticResource SecondaryButton}"
+                            Height="40" Click="DownloadPob1_Click"
+                            ToolTip="下载最新 Path of Building"/>
+                </Grid>
+            </StackPanel>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="16">
+                    <StackPanel>
+                        <TextBlock Text="国服交易补丁" Style="{StaticResource TitleText}"/>
+                        <TextBlock Text="将交易站地址切换到 poe.game.qq.com，并写入所选国服赛季。"
+                                   Style="{StaticResource NormalText}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="当前赛季" Style="{StaticResource SmallText}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="PreviewSeason" Grid.Column="1" Text="S30"
+                                   Style="{StaticResource TitleText}" Margin="18,0,0,0"/>
+                        <TextBlock x:Name="PreviewUrl" Grid.Column="1"
+                                   Style="{StaticResource SmallText}" Margin="18,30,0,0"
+                                   Text="https://poe.game.qq.com/trade/search/S30/..."
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="16">
+                    <StackPanel>
+                        <TextBlock Text="将处理的文件" Style="{StaticResource SectionText}" Margin="0,0,0,10"/>
+                        <ItemsControl x:Name="TargetFiles">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="22"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="•" Foreground="{DynamicResource AccentBrush}" FontSize="18"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding}" Style="{StaticResource NormalText}"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Margin="0,18,0,0" Padding="10"
+                                Background="{DynamicResource SurfaceBrush}">
+                            <TextBlock Text="TreeTab.lua 会使用 URL 编码后的赛季段；例如 S30 会写入为 S30赛季。"
+                                       Style="{StaticResource SmallText}" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="3" Style="{StaticResource CardBorder}" Padding="12" Margin="0,0,0,0">
+                    <TextBlock x:Name="ResultText" Text="等待选择文件。" Style="{StaticResource SmallText}"
+                               TextWrapping="Wrap"/>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="1" Margin="0,8,0,0" Padding="8,5"
+                Background="{DynamicResource SurfaceBrush}" CornerRadius="4">
+            <TextBlock x:Name="StatusText" Text="就绪" Style="{StaticResource SmallText}"/>
+        </Border>
+    </Grid>
+</UserControl>

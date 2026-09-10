@@ -1,0 +1,278 @@
+<UserControl x:Class="PoEToolbox.Plugins.PriceTagger.PriceTaggerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="0,8,0,8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="380"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ── Left Panel: GGPK / League / Options / Apply ── -->
+            <StackPanel Grid.Column="0">
+
+                <!-- Card: GGPK -->
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="LblGGPK" Text="游戏数据文件" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
+                        <TextBlock x:Name="GgpkPathHint" Margin="0,0,0,6"
+                                   Style="{StaticResource SmallText}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="GgpkPathBox" Height="32"/>
+                            <Button Grid.Column="2" x:Name="BrowseBtn" Content="Browse"
+                                    Style="{StaticResource SecondaryButton}" Width="66"
+                                    Click="BrowseGgpk_Click"/>
+                        </Grid>
+                        <TextBlock x:Name="GgpkStatus" Margin="0,5,0,0"
+                                   Style="{StaticResource SmallText}"
+                                   Foreground="{DynamicResource SuccessBrush}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="GgpkAutoHint" Margin="0,3,0,0"
+                                   Style="{StaticResource SmallText}" Cursor="Hand"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   Text="🔍 Auto-detect PoE installation"
+                                   MouseLeftButtonDown="AutoDetectGgpk_Click"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="GgpkModStatus" Margin="0,4,0,0"
+                                   Style="{StaticResource SmallText}"
+                                   Foreground="{DynamicResource WarningBrush}"
+                                   Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card: League -->
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="LblLeague" Text="League" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="LeagueCombo"
+                                      IsEditable="True"
+                                      IsTextSearchEnabled="False"
+                                      SelectionChanged="LeagueCombo_SelectionChanged"
+                                      LostKeyboardFocus="LeagueCombo_LostKeyboardFocus"/>
+                            <Button Grid.Column="2" x:Name="DetectBtn" Content="检测当前联盟"
+                                    Style="{StaticResource SecondaryButton}" MinWidth="96"
+                                    Click="DetectLeague_Click"/>
+                        </Grid>
+                        <TextBlock x:Name="LeagueGameHint" Margin="0,5,0,0"
+                                   Style="{StaticResource SmallText}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card: Options -->
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="LblOptions" Text="Options" Style="{StaticResource SectionText}" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="DryRunBox" Content="Dry Run" IsChecked="False" Visibility="Collapsed"/>
+                        <CheckBox x:Name="VerboseBox" Content="Verbose" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card: Actions -->
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <CheckBox x:Name="ForceUpdateBox" Content="Force Update"
+                                  IsChecked="False" Margin="0,0,0,8"/>
+                        <Button x:Name="ApplyBtn" Content="Apply Price Tags"
+                                Style="{StaticResource PrimaryButton}"
+                                Height="48" FontSize="15"
+                                Click="ApplyPrices_Click"/>
+                        <TextBlock x:Name="EstimateText" Margin="0,8,0,0"
+                                   TextAlignment="Center"
+                                   Style="{StaticResource SmallText}"
+                                   Text="Est. ~30s per category"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card: Utilities -->
+                <Border Style="{StaticResource CardBorder}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="UiModBtn" Content="应用永久繁体中文"
+                                Style="{StaticResource SecondaryButton}"
+                                Height="36" FontSize="12"
+                                Click="UiMod_Click"/>
+                        <Button x:Name="RestoreBtn" Grid.Column="2"
+                                Content="还原游戏数据"
+                                Style="{StaticResource SecondaryButton}"
+                                Height="36" FontSize="12"
+                                Foreground="{DynamicResource ErrorBrush}"
+                                Click="Restore_Click"/>
+                    </Grid>
+                </Border>
+
+            </StackPanel>
+
+            <!-- ── Right Panel: Categories + Output ── -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="1.25*"/>
+                    <RowDefinition Height="12"/>
+                    <RowDefinition Height="1.75*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Card: Categories (top, 2.5 parts) -->
+                <Border Grid.Row="0" Style="{StaticResource CardBorder}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
+                            <TextBlock x:Name="LblCategories" Text="Categories"
+                                       Style="{StaticResource SectionText}"/>
+                            <TextBlock x:Name="LblCategoryHint" Text=""
+                                       Style="{StaticResource SmallText}"
+                                       VerticalAlignment="Center" Margin="6,0,0,0"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <Button x:Name="AllBtn" Content="All" Click="SelectAll_Click"
+                                    Style="{StaticResource SecondaryButton}"
+                                    MinWidth="44" Height="28" FontSize="12" Padding="8,0"
+                                    Margin="10,0,2,0"/>
+                            <Button x:Name="NoneBtn" Content="None" Click="SelectNone_Click"
+                                    Style="{StaticResource SecondaryButton}"
+                                    MinWidth="60" Height="28" FontSize="12" Padding="8,0"
+                                    Margin="2,0,0,0"/>
+                        </StackPanel>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="CategoryItems">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Card: Output (bottom, 1.5 parts) -->
+                <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Margin="4,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="LblOutput" Text="Output"
+                                       Style="{StaticResource SectionText}" VerticalAlignment="Center"/>
+                            <CheckBox x:Name="AutoScrollBox" Grid.Column="2"
+                                      Content="Auto-scroll" IsChecked="True"
+                                      FontSize="11" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <Button x:Name="SaveLogBtn" Grid.Column="3"
+                                    Content="Save Log" Click="SaveLog_Click"
+                                    Style="{StaticResource SecondaryButton}"
+                                    MinWidth="50" Height="22" FontSize="10"
+                                    Padding="8,0" Margin="0,0,4,0"/>
+                            <Button x:Name="ClearOutputBtn" Grid.Column="4"
+                                    Content="Clear" Click="ClearOutput_Click"
+                                    Style="{StaticResource SecondaryButton}"
+                                    MinWidth="38" Height="22" FontSize="10"
+                                    Padding="6,0"/>
+                        </Grid>
+
+                        <Grid Grid.Row="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock x:Name="OutputPlaceholder"
+                                       Text="No output yet.&#x0a;Select categories and click Apply Price Tags."
+                                       Style="{StaticResource NormalText}"
+                                       Foreground="{DynamicResource PlaceholderBrush}"
+                                       TextAlignment="Center" VerticalAlignment="Center"/>
+                            <RichTextBox x:Name="OutputBox" IsReadOnly="True"
+                                         Background="Transparent" BorderThickness="0"
+                                         FontFamily="Consolas" FontSize="12"
+                                         VerticalScrollBarVisibility="Auto">
+                                <RichTextBox.Resources>
+                                    <Style TargetType="Paragraph">
+                                        <Setter Property="Margin" Value="0,0"/>
+                                        <Setter Property="LineHeight" Value="18"/>
+                                    </Style>
+                                </RichTextBox.Resources>
+                            </RichTextBox>
+
+                            <!-- Statistics inline -->
+                            <Border Grid.Row="1" Margin="0,6,0,0" Padding="0,4,0,0"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="0,1,0,0">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock x:Name="LblStatProcessed" Text="Processed" Style="{StaticResource SmallText}" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="StatProcessed" Text="0" FontSize="13" FontWeight="SemiBold"
+                                               Margin="0,0,18,0" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock x:Name="LblStatUpdated" Text="Updated" Style="{StaticResource SmallText}" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="StatUpdated" Text="0" FontSize="13" FontWeight="SemiBold"
+                                               Margin="0,0,18,0" Foreground="{DynamicResource SuccessBrush}"/>
+                                    <TextBlock x:Name="LblStatSkipped" Text="Skipped" Style="{StaticResource SmallText}" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="StatSkipped" Text="0" FontSize="13" FontWeight="SemiBold"
+                                               Margin="0,0,18,0" Foreground="{DynamicResource WarningBrush}"/>
+                                    <TextBlock x:Name="LblStatDuration" Text="Duration" Style="{StaticResource SmallText}" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="StatDuration" Text="--" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+        <!-- Status bar -->
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                    Padding="12,4" Margin="0,8,0,0">
+                <Grid>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="StatusLabel" Text="Ready"
+                                   Style="{StaticResource SmallText}"/>
+                        <TextBlock x:Name="StatusCategory" Text=""
+                                   Foreground="{DynamicResource AccentBrush}" FontSize="12"
+                                   Margin="16,0,0,0"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <TextBlock x:Name="StatusTime" Text=""
+                                   Style="{StaticResource SmallText}" Margin="0,0,12,0"/>
+                        <ProgressBar x:Name="ProgressBar" Width="100" Height="4"
+                                     Minimum="0" Maximum="100" Visibility="Collapsed"/>
+                        <TextBlock x:Name="ProgressPct" Text="" FontSize="12"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Margin="6,0,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+</UserControl>
