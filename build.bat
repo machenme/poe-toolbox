@@ -10,7 +10,7 @@ if errorlevel 1 (
 )
 
 echo Publishing PoEToolbox...
-dotnet publish "src\PoEToolbox.App\PoEToolbox.App.csproj" -c Release -r win-x64 --self-contained false -o "publish"
+dotnet publish "src\PoEToolbox.App\PoEToolbox.App.csproj" -c Release -r win-x64 --self-contained false -o "publish" -p:DebugSymbols=false -p:DebugType=None -p:GenerateDocumentationFile=false
 if errorlevel 1 (
     goto :failed
 )

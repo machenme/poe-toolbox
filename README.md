@@ -1,4 +1,4 @@
-# PoE Toolbox v0.1.6
+# PoE Toolbox
 
 Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游戏数据浏览、地图标签修改、POE2 字体配置与 PoB 国服交易补丁。物价数据来自 [poe.ninja](https://poe.ninja)，物品名称写入使用本地游戏客户端数据。
 
@@ -24,7 +24,7 @@ Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游�
 PoEToolbox.exe
 ```
 
-当前发布采用单文件、framework-dependent 方式。运行电脑需要安装 .NET 10 Windows Desktop Runtime。
+当前发布采用单文件、framework-dependent 方式。运行电脑需要安装 .NET 10 Windows Desktop Runtime。首次使用需要的 `oo2core.dll` 会自动释放到 `%LocalAppData%\PoEToolbox\native\`，不会写入程序目录。
 
 ## 物价标注
 
@@ -68,7 +68,7 @@ dotnet restore src\PoEToolbox.App\PoEToolbox.App.csproj
 dotnet publish src\PoEToolbox.App\PoEToolbox.App.csproj -c Release -r win-x64 --self-contained false -o publish
 ```
 
-产物为 `publish\PoEToolbox.exe`。项目已包含 Bundles2 解压所需的 `oo2core.dll` 运行库及所有嵌入资源。
+产物为 `publish\PoEToolbox.exe`。项目已将 Bundles2 解压所需的 `oo2core.dll` 运行库及所有嵌入资源打包进单文件；运行时会将 `oo2core.dll` 释放到 `%LocalAppData%\PoEToolbox\native\`。
 
 提交前可运行回归测试：
 

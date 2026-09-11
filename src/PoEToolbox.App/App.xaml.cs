@@ -1,5 +1,7 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using LibBundle3;
 using PoEToolbox.Shared;
 using LibDat2;
 
@@ -17,7 +19,7 @@ public partial class App : Application
             args.Handled = true;
         };
 
-        ExtractEmbeddedDll("oo2core.dll");
+        ConfigureOodleNativeLibrary();
 
         try
         {
@@ -43,22 +45,36 @@ public partial class App : Application
         main.Show();
     }
 
-    private static void ExtractEmbeddedDll(string filename)
+    private static void ConfigureOodleNativeLibrary()
     {
-        var dest = Path.Combine(AppContext.BaseDirectory, filename);
-        if (File.Exists(dest)) return;
+        var dllPath = ExtractEmbeddedDll("oo2core.dll");
+        NativeLibrary.SetDllImportResolver(typeof(Oodle).Assembly, (libraryName, _, _) =>
+            libraryName.Equals("oo2core", StringComparison.OrdinalIgnoreCase)
+                ? NativeLibrary.Load(dllPath)
+                : IntPtr.Zero);
+    }
+
+    private static string ExtractEmbeddedDll(string filename)
+    {
+        var directory = Path.Combine(ConfigService.DataDirectory, "native");
+        Directory.CreateDirectory(directory);
+        var dest = Path.Combine(directory, filename);
+        if (File.Exists(dest)) return dest;
+
         try
         {
             var asm = typeof(App).Assembly;
             var resourceName = $"PoEToolbox.App.{filename}";
             using var stream = asm.GetManifestResourceStream(resourceName);
-            if (stream is null) return;
+            if (stream is null) throw new FileNotFoundException($"Embedded resource was not found: {resourceName}");
             using var fs = File.Create(dest);
             stream.CopyTo(fs);
+            return dest;
         }
         catch (Exception ex)
         {
             FileLogger.WriteCritical($"Failed to extract embedded native library: {filename}", ex);
+            throw;
         }
     }
 }
