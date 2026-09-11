@@ -18,13 +18,15 @@ Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游�
 
 ## 下载运行
 
-从 [Releases](https://gitee.com/osmc/poe-price-tagger/releases#release-v0.1.3) 下载并解压后，直接运行：
+从 [GitHub Releases](https://github.com/machenme/poe-toolbox/releases) 下载最新版本的 ZIP，解压后直接运行：
 
 ```text
 PoEToolbox.exe
 ```
 
 当前发布采用单文件、framework-dependent 方式。运行电脑需要安装 .NET 10 Windows Desktop Runtime。首次使用需要的 `oo2core.dll` 会自动释放到 `%LocalAppData%\PoEToolbox\native\`，不会写入程序目录。
+
+发布 ZIP 和 Actions Artifact 均只包含 `PoEToolbox.exe`。程序运行产生的配置、缓存、日志和 native 运行库会写入用户目录，不会混入发布目录。
 
 ## 物价标注
 
@@ -70,6 +72,8 @@ dotnet publish src\PoEToolbox.App\PoEToolbox.App.csproj -c Release -r win-x64 --
 
 产物为 `publish\PoEToolbox.exe`。项目已将 Bundles2 解压所需的 `oo2core.dll` 运行库及所有嵌入资源打包进单文件；运行时会将 `oo2core.dll` 释放到 `%LocalAppData%\PoEToolbox\native\`。
 
+也可以直接运行仓库根目录的 `build.bat`。脚本只生成或更新 `publish\PoEToolbox.exe`，不会清空或删除 `publish` 目录中的已有配置和用户数据。
+
 提交前可运行回归测试：
 
 ```powershell
@@ -81,8 +85,8 @@ dotnet test tests\PoEToolbox.Tests\PoEToolbox.Tests.csproj -c Release
 仓库包含 `.github/workflows/build.yml`：
 
 * Pull Request 和 `main` 分支提交会在 Windows runner 上执行测试并构建 `PoEToolbox.exe`，构建结果可在 Actions 的 Artifacts 下载。
-* 推送 `v` 开头的 tag 会自动创建 GitHub Release，并上传 `PoEToolbox-v<版本>-win-x64.zip`。
-* 也可以在 GitHub 的 **Actions → Build PoEToolbox → Run workflow** 手动构建并下载 ZIP artifact；手动运行不会创建 Release。
+* 推送 `v` 开头且与 `version.json` 版本一致的 tag，会自动创建 GitHub Release，并上传只含 `PoEToolbox.exe` 的 `PoEToolbox-win-x64.zip`。
+* 也可以在 GitHub 的 **Actions → Build PoEToolbox → Run workflow** 手动构建并下载 exe artifact；手动运行不会创建 Release。
 
 发布前先更新 `version.json`，然后提交并推送，再创建同版本 tag：
 
@@ -158,6 +162,7 @@ src/
 | `%LocalAppData%\PoEToolbox\schema\` | DAT schema 缓存 |
 | `%LocalAppData%\PoEToolbox\config.json` | 用户配置 |
 | `%LocalAppData%\PoEToolbox\logs\` | 运行日志 |
+| `%LocalAppData%\PoEToolbox\native\oo2core.dll` | Bundles2/Oodle native 运行库 |
 
 ## 鸣谢与许可证
 

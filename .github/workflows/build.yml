@@ -82,8 +82,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
-          $version = '${{ steps.version.outputs.version }}'
-          $archive = "PoEToolbox-v$version-win-x64.zip"
+          $archive = "PoEToolbox-win-x64.zip"
           Compress-Archive -Path (Join-Path $env:PUBLISH_DIR 'PoEToolbox.exe') -DestinationPath $archive -Force
           "archive=$archive" >> $env:GITHUB_OUTPUT
         id: archive
