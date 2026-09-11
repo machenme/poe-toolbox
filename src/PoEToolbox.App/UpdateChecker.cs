@@ -15,7 +15,7 @@ public sealed record UpdateCheckResult(
 
 public static class UpdateChecker
 {
-    private const string PrimaryUpdateUrl = "https://gitee.com/osmc/poe-toolbox/raw/main/version.json";
+    private const string PrimaryUpdateUrl = "https://v4.gh-proxy.org/https://github.com/machenme/poe-toolbox/blob/main/version.json";
     private const string FallbackUpdateUrl = "https://raw.githubusercontent.com/machenme/poe-toolbox/main/version.json";
     private const string LastCheckedAtKey = "Update.LastCheckedAt";
     private const string CachedResultKey = "Update.CachedResult";

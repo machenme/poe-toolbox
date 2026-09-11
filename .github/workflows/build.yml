@@ -135,19 +135,3 @@ jobs:
           files: release/PoEToolbox-*.zip
           body_path: release-notes.md
           generate_release_notes: true
-
-      - name: Sync Gitee mirror
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:GITEE_TOKEN)) {
-            Write-Host "GITEE_TOKEN secret is not set; skip Gitee mirror sync. The client update check reads version.json from Gitee first."
-            exit 0
-          }
-          $response = Invoke-WebRequest -Method Post `
-            -Uri "https://gitee.com/api/v5/repos/osmc/poe-toolbox/mirror-syncs" `
-            -Body @{ access_token = $env:GITEE_TOKEN } `
-            -UseBasicParsing
-          Write-Host "Gitee mirror sync triggered: $($response.StatusCode)"

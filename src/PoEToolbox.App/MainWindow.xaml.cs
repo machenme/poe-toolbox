@@ -12,7 +12,7 @@ namespace PoEToolbox.App;
 
 public partial class MainWindow : Window
 {
-    private const string ReleasesUrl = "https://gitee.com/osmc/poe-toolbox/releases/";
+    private const string ReleasesUrl = "https://github.com/machenme/poe-toolbox/releases/";
     private readonly PluginManager _pluginManager;
     private readonly IAppState _sessionState;
     private IPlugin? _activePlugin;
