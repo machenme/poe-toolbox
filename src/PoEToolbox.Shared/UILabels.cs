@@ -150,6 +150,7 @@ public static class UILabels
         ["CustomLeague"] = "Custom league...",
         ["LeagueGameUnknown"] = "Game not detected yet",
         ["LeagueGameFormat"] = "Current game: {0}",
+        ["LeagueManualHint"] = "Not detected — click Detect to load the league list",
         ["Estimate"] = "Est. ~30s per category",
         ["Placeholder"] = "No output yet.\nSelect categories and click Apply Price Tags.",
     };
@@ -188,6 +189,7 @@ public static class UILabels
         ["CustomLeague"] = "自訂聯盟...",
         ["LeagueGameUnknown"] = "尚未識別遊戲版本",
         ["LeagueGameFormat"] = "目前遊戲：{0}",
+        ["LeagueManualHint"] = "尚未偵測 — 點擊「偵測目前聯盟」載入聯盟清單",
         ["Estimate"] = "預估 每個分類 ~30 秒",
         ["Placeholder"] = "尚無輸出。\n勾選分類後點擊套用價格標籤。",
     };
@@ -226,6 +228,7 @@ public static class UILabels
         ["CustomLeague"] = "自定义联盟...",
         ["LeagueGameUnknown"] = "尚未识别游戏版本",
         ["LeagueGameFormat"] = "当前游戏：{0}",
+        ["LeagueManualHint"] = "尚未检测 — 点击「检测当前联盟」载入联盟列表",
         ["Estimate"] = "预估 每个分类 ~30 秒",
         ["Placeholder"] = "暂无输出。\n勾选分类后点击应用价格标签。",
     };

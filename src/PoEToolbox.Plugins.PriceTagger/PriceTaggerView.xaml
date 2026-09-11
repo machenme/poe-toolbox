@@ -75,6 +75,11 @@
                         <TextBlock x:Name="LeagueGameHint" Margin="0,5,0,0"
                                    Style="{StaticResource SmallText}"
                                    Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBlock x:Name="LeagueManualHint" Margin="0,4,0,0"
+                                   Style="{StaticResource SmallText}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   Text="点击「检测当前联盟」以载入联盟列表"/>
                     </StackPanel>
                 </Border>
 

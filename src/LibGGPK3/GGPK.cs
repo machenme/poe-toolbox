@@ -604,9 +604,12 @@ public class GGPK : IDisposable {
 
 	public virtual void Dispose() {
 		GC.SuppressFinalize(this);
-		if (baseStream is null || !baseStream.CanWrite)
+		if (baseStream is null)
 			return;
-		Flush();
+		// Flushing needs a writable stream, but closing it must not depend on that:
+		// a read-only stream would otherwise leak its file handle and buffers for good.
+		if (baseStream.CanWrite)
+			Flush();
 		if (!leaveOpen)
 			baseStream.Close();
 	}

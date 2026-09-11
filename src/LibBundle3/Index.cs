@@ -38,10 +38,10 @@ public class Index : IDisposable {
 	/// <summary>
 	/// Data for <see cref="ParsePaths"/>
 	/// </summary>
-	protected readonly byte[] directoryBundleData;
+	protected byte[] directoryBundleData;
 
 	protected BundleRecord[] _Bundles;
-	protected internal readonly DirectoryRecord[] _Directories;
+	protected internal DirectoryRecord[] _Directories;
 	protected readonly Dictionary<ulong, FileRecord> _Files;
 
 	/// <summary>
@@ -63,6 +63,33 @@ public class Index : IDisposable {
 	/// Size to limit each bundle when writing, default to 200MiB
 	/// </summary>
 	public virtual int MaxBundleSize { get; set; } = 200 * 1024 * 1024;
+
+	private string? _pinnedWriteBundlePath;
+	/// <summary>
+	/// When set, every file written by <see cref="FileRecord.Write(ReadOnlySpan{byte}, bool)"/> or
+	/// <see cref="AddFile"/> goes into the custom bundle with this path
+	/// (<see cref="BundleRecord.Path"/> without ".bundle.bin"), created on demand,
+	/// instead of being spread over several custom bundles when <see cref="MaxBundleSize"/> is reached.
+	/// </summary>
+	/// <remarks>
+	/// Must start with "<c>LibGGPK3/</c>" (<see cref="CUSTOM_BUNDLE_BASE_PATH"/>), because only such bundles
+	/// are tracked as custom bundles. The bundle is still flushed to disk when it exceeds
+	/// <see cref="MaxBundleSize"/>, so memory usage stays bounded while all changes keep landing in the same file.
+	/// <para>Use <see cref="DefaultWriteBundlePath"/> to pin all changes to a single, predictable bundle.</para>
+	/// </remarks>
+	/// <exception cref="ArgumentException">The value doesn't start with "<c>LibGGPK3/</c>"</exception>
+	public virtual string? PinnedWriteBundlePath {
+		get => _pinnedWriteBundlePath;
+		set {
+			if (value is { Length: > 0 }) {
+				if (!value.StartsWith(CUSTOM_BUNDLE_BASE_PATH, StringComparison.Ordinal))
+					throw new ArgumentException($"Pinned write bundle path must start with '{CUSTOM_BUNDLE_BASE_PATH}': " + value, nameof(value));
+				if (value.EndsWith(".bundle.bin", StringComparison.OrdinalIgnoreCase))
+					throw new ArgumentException("Pinned write bundle path must not include the '.bundle.bin' extension: " + value, nameof(value));
+			}
+			_pinnedWriteBundlePath = value;
+		}
+	}
 
 	protected DirectoryNode? _Root;
 
@@ -670,6 +697,11 @@ public class Index : IDisposable {
 	/// </summary>
 	private const string CUSTOM_BUNDLE_BASE_PATH = "LibGGPK3/";
 	/// <summary>
+	/// Path of the default custom bundle. Assign it to <see cref="PinnedWriteBundlePath"/> to keep
+	/// every change in one single, predictable bundle file <c>LibGGPK3/0.bundle.bin</c>.
+	/// </summary>
+	public const string DefaultWriteBundlePath = CUSTOM_BUNDLE_BASE_PATH + "0";
+	/// <summary>
 	/// Get an available bundle with size &lt; <see cref="MaxBundleSize"/>) to write under "Bundles2" with name start with <see cref="CUSTOM_BUNDLE_BASE_PATH"/>.
 	/// Or create one if not found.
 	/// Note that the returned bundle may contain existing data (with size: <paramref name="originalSize"/>) that should not be overwritten.
@@ -689,6 +721,24 @@ public class Index : IDisposable {
 				if (f is null)
 					return 0;
 				return f.Offset + f.Size;
+			}
+
+			if (_pinnedWriteBundlePath is { Length: > 0 } pinned) {
+				// All changes must land in one predictable bundle: never create LibGGPK3/1, 2, 3, ...
+				// Flushing at MaxBundleSize still happens, but the write target stays the same bundle.
+				var record = CustomBundles.Find(br => br._Path == pinned);
+				if (record is null) {
+					var created = CreateBundle(pinned);
+					CustomBundles.Add(created.Record!);
+					originalSize = GetSize(created.Record!);
+					return created;
+				}
+				if (!record.TryGetBundle(out var pinnedBundle, out var exception)) {
+					exception?.ThrowKeepStackTrace();
+					throw new FileNotFoundException("Failed to get bundle: " + record.Path);
+				}
+				originalSize = GetSize(record);
+				return pinnedBundle;
 			}
 
 			Bundle? b = null;
@@ -736,6 +786,168 @@ public class Index : IDisposable {
 			baseBundle.UncompressedSize += br.RecordLength; // Hack to prevent MemoryStream from reallocating when saving
 			return b;
 		}
+	}
+
+	/// <summary>
+	/// Ensure there's a bundle being written and return it along with the buffer of its content.
+	/// Shared by <see cref="FileRecord.Write(ReadOnlySpan{byte}, bool)"/> and <see cref="AddFile"/>.
+	/// </summary>
+	/// <param name="bundle">The bundle being written</param>
+	/// <param name="stream">Buffer of the content being written, already containing the original data of <paramref name="bundle"/></param>
+	/// <param name="extraCapacity">Hint of the size of the content to be appended</param>
+	/// <remarks>Caller must hold the lock of this instance.</remarks>
+	internal void EnsureWriteBundle(out Bundle bundle, out MemoryStream stream, int extraCapacity = 0) {
+		var b = _BundleToWrite;
+		var ms = _BundleStreamToWrite;
+		if (b is null) {
+			_BundleToWrite = b = GetBundleToWrite(out var originalSize);
+			if (!WR_BundleStreamToWrite.TryGetTarget(out ms)) {
+				_BundleStreamToWrite = ms = new(originalSize + extraCapacity);
+				WR_BundleStreamToWrite.SetTarget(ms);
+			} else
+				_BundleStreamToWrite = ms;
+			ms.Write(b.ReadWithoutCache(0, originalSize)); // Read original data of bundle
+		}
+		bundle = b!;
+		stream = ms!;
+	}
+
+	/// <summary>
+	/// Save the bundle being written when it grows beyond <see cref="MaxBundleSize"/> and start a new one.
+	/// </summary>
+	/// <remarks>Caller must hold the lock of this instance.</remarks>
+	internal void FlushWriteBundle(Bundle bundle, MemoryStream stream) {
+		if (stream.Length < MaxBundleSize)
+			return;
+		bundle.Save(new(stream.GetBuffer(), 0, (int)stream.Length));
+		bundle.Dispose();
+		_BundleToWrite = null;
+		stream.SetLength(0);
+		_BundleStreamToWrite = null;
+	}
+
+	/// <summary>
+	/// Add a brand-new file to this index at <paramref name="path"/> with <paramref name="content"/>.
+	/// </summary>
+	/// <param name="path">
+	/// Full path of the new file using forward slashes '/'.
+	/// It will be lowercased because paths in Path of Exile are case-insensitive.
+	/// </param>
+	/// <param name="content">Content of the new file</param>
+	/// <param name="saveIndex">Whether to call <see cref="Save"/> automatically after adding</param>
+	/// <returns>The <see cref="FileRecord"/> created for the new file</returns>
+	/// <remarks>
+	/// The content is written to a bundle created by this library (see <see cref="GetBundleToWrite"/>),
+	/// so no existing file (including the one you may copy from) is modified.
+	/// <para>A path entry is also appended to the directory table of the index, so that
+	/// <see cref="FileRecord.Path"/> of the new file can still be resolved by <see cref="ParsePaths"/> after reopening.</para>
+	/// </remarks>
+	/// <exception cref="ArgumentException"><paramref name="path"/> is not a valid relative path</exception>
+	/// <exception cref="InvalidOperationException">A file with the same <see cref="FileRecord.PathHash"/> already exists</exception>
+	public virtual FileRecord AddFile(scoped ReadOnlySpan<char> path, scoped ReadOnlySpan<byte> content, bool saveIndex = false) {
+		FileRecord file;
+		lock (this) {
+			EnsureNotDisposed();
+			var fullPath = NormalizeNewFilePath(path);
+			var hash = NameHash(fullPath);
+			if (_Files.ContainsKey(hash))
+				throw new InvalidOperationException("A file with the same path hash already exists in the index: " + fullPath);
+
+			EnsureWriteBundle(out var bundle, out var ms, content.Length);
+			file = new FileRecord(hash, bundle.Record!, (int)ms.Length, content.Length) { Path = fullPath };
+			ms.Write(content);
+			_Files.Add(hash, file);
+			bundle.Record!._Files.Add(file);
+			AppendPathEntry(fullPath);
+			FlushWriteBundle(bundle, ms);
+			_Root = null; // The cached tree (if any) doesn't contain the new file yet
+		}
+		if (saveIndex)
+			Save();
+		return file;
+	}
+
+	/// <summary>
+	/// Copy an existing file of this index to a new <paramref name="destPath"/> with an independent content,
+	/// so that editing the copy affects neither the original file nor the other files referring to it.
+	/// </summary>
+	/// <param name="sourcePath">Path of the existing file to copy</param>
+	/// <param name="destPath">Path of the new file, see <see cref="AddFile(ReadOnlySpan{char}, ReadOnlySpan{byte}, bool)"/></param>
+	/// <param name="saveIndex">Whether to call <see cref="Save"/> automatically after copying</param>
+	/// <returns>The <see cref="FileRecord"/> created for the new file</returns>
+	/// <exception cref="FileNotFoundException"><paramref name="sourcePath"/> is not found in this index</exception>
+	/// <inheritdoc cref="AddFile(ReadOnlySpan{char}, ReadOnlySpan{byte}, bool)"/>
+	public virtual FileRecord CopyFile(scoped ReadOnlySpan<char> sourcePath, scoped ReadOnlySpan<char> destPath, bool saveIndex = false) {
+		EnsureNotDisposed();
+		if (!TryGetFile(sourcePath, out var source) || source is null)
+			throw new FileNotFoundException("Could not find file in Index: " + sourcePath.ToString(), sourcePath.ToString());
+		return AddFile(destPath, source.Read().Span, saveIndex);
+	}
+
+	/// <summary>
+	/// Validate and normalize the path of a file to be added.
+	/// </summary>
+	/// <returns>The lowercased path, which is what Path of Exile uses and what <see cref="NameHash(ReadOnlySpan{byte})"/> expects</returns>
+	protected virtual string NormalizeNewFilePath(scoped ReadOnlySpan<char> path) {
+		if (path.IsEmpty)
+			throw new ArgumentException("Path of the new file must not be empty.", nameof(path));
+		if (path[0] == '/' || path[^1] == '/')
+			throw new ArgumentException("Path of the new file must be relative and must not start or end with '/': " + path.ToString(), nameof(path));
+		foreach (var c in path)
+			if (c is '\\' or ':' or '\0')
+				throw new ArgumentException("Path of the new file must use '/' as separator and must not contain invalid characters: " + path.ToString(), nameof(path));
+		return path.ToString().ToLowerInvariant();
+	}
+
+	/// <summary>
+	/// Append a path entry of a newly added file to the directory table of this index,
+	/// so that <see cref="ParsePaths"/> can still resolve <see cref="FileRecord.Path"/> for it after reopening.
+	/// </summary>
+	/// <param name="lowercasedPath"><see cref="FileRecord.Path"/> of the new file, already lowercased</param>
+	/// <remarks>Caller must hold the lock of this instance.</remarks>
+	protected virtual void AppendPathEntry(scoped ReadOnlySpan<char> lowercasedPath) {
+		// Entry layout (little-endian ints): 0, 0, 1, <lowercased path in UTF8>, '\0'
+		// The first 0 toggles Base on, the second toggles Base off, then index 1 (which is 0 after the -1)
+		// is outside of the (empty) prefix table, so ParsePaths treats the following string as a full path.
+		var pathBytes = Encoding.UTF8.GetBytes(lowercasedPath.ToString());
+		var entry = new byte[(sizeof(int) * 3) + pathBytes.Length + 1]; // entry[^1] stays 0 as the terminator
+		var entrySpan = entry.AsSpan();
+		BitConverter.TryWriteBytes(entrySpan, 0);
+		BitConverter.TryWriteBytes(entrySpan[sizeof(int)..], 0);
+		BitConverter.TryWriteBytes(entrySpan[(sizeof(int) * 2)..], 1);
+		pathBytes.AsSpan().CopyTo(entrySpan[(sizeof(int) * 3)..]);
+
+		byte[] directory;
+		using (var directoryBundle = new Bundle(new MemoryStream(directoryBundleData), false))
+			directory = directoryBundle.ReadWithoutCache();
+
+		var combined = GC.AllocateUninitializedArray<byte>(directory.Length + entry.Length);
+		directory.CopyTo(combined, 0);
+		entry.CopyTo(combined, directory.Length);
+
+		using (var ms = new MemoryStream()) {
+			using (var bundle = new Bundle(ms, (BundleRecord?)null))
+				bundle.Save(combined);
+			directoryBundleData = ms.ToArray();
+		}
+
+		var slash = lowercasedPath.LastIndexOf('/');
+		var directoryPath = slash > 0 ? lowercasedPath[..slash] : ReadOnlySpan<char>.Empty;
+
+		// RecursiveSize is the span of the directory's whole subtree inside the directory data.
+		// Every record of a real index has a non-zero value (a leaf has RecursiveSize == Size),
+		// and the client's parser mis-reads the table when it is 0.
+		var record = new DirectoryRecord(NameHash(directoryPath), directory.Length, entry.Length, entry.Length);
+		Array.Resize(ref _Directories, _Directories.Length + 1);
+		_Directories[^1] = record;
+
+		// The entry is appended at the very end of the directory data, so the root's span must grow to cover it.
+		var rootHash = NameHash(ReadOnlySpan<char>.Empty);
+		for (var i = 0; i < _Directories.Length - 1; i++)
+			if (_Directories[i].PathHash == rootHash) {
+				_Directories[i].RecursiveSize += entry.Length;
+				break;
+			}
 	}
 
 	#region NameHashing
@@ -911,6 +1123,20 @@ public class Index : IDisposable {
 			WR_BundleStreamToWrite.SetTarget(null!);
 			baseBundle.Dispose();
 			_Root = null;
+
+			// Drop the big managed blobs as well, not just the underlying stream.
+			// Every FileRecord reaches back to this Index through BundleRecord.Index, so a single
+			// record left alive by a caller (a UI selection, a cached view model, ...) keeps the whole
+			// index graph reachable and nothing gets collected. Clearing here makes a disposed index
+			// an empty shell no matter who still holds a reference to one of its records.
+			_Files.Clear();
+			_Files.TrimExcess();
+			foreach (var bundle in _Bundles)
+				bundle._Files.Clear();
+			_Bundles = [];
+			_Directories = [];
+			directoryBundleData = [];
+			CustomBundles.Clear();
 		}
 	}
 

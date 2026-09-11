@@ -13,4 +13,8 @@
     <ProjectReference Include="..\LibBundledGGPK3\LibBundledGGPK3.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PoEToolbox.Tests" />
+  </ItemGroup>
+
 </Project>

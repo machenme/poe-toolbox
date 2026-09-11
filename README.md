@@ -6,9 +6,9 @@ Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游�
 
 | 功能 | 支持范围 | 说明 |
 |------|----------|------|
-| **物价标注** | PoE1 / PoE2 | 自动识别客户端版本；从 poe.ninja 获取行情，在繁中基础物品名后追加价格标签 |
+| **物价标注** | PoE1 / PoE2 | 点击“检测当前联盟”后识别客户端版本并从 poe.ninja 获取行情，在繁中基础物品名后追加价格标签 |
 | **联盟选择** | PoE1 / PoE2 | 加载两代联盟列表，支持自定义联盟名；写入前校验联盟与客户端版本一致 |
-| **数据浏览** | PoE1 / PoE2 | 浏览、搜索、编辑和提取 `Content.ggpk` 或 Bundles2 `_.index.bin` 内的数据；支持文本文件查找、批量替换、批量保存和路径复制 |
+| **数据浏览** | PoE1 / PoE2 | 浏览、搜索、编辑和提取 `Content.ggpk` 或 Bundles2 `_.index.bin` 内的数据；支持文本文件查找、批量替换、批量保存、路径复制，以及"复制为新路径"生成隔离副本 |
 | **术语翻译** | PoE1 / PoE2 | 使用内置术语资源和游戏数据进行术语翻译，支持后台执行与取消 |
 | **地图标签** | PoE1 / PoE2 | 独立通用工具；PoE1 修改 `mapnumbers1..16.dds`，PoE2 修改 `endgamemap1..15.dds`，支持字体、字号和偏移 |
 | **POE2 字体配置** | PoE2 | 修改 `metadata/ui/uisettings.xml` 与 `uisettings.traditional chinese.xml`；支持系统字体、字号倍率和实时预览，可恢复原始配置 |
@@ -31,7 +31,7 @@ PoEToolbox.exe
 ## 物价标注
 
 1. 选择游戏客户端数据文件：PoE1 为 `Content.ggpk`，PoE2 为 `Bundles2\_.index.bin`。
-2. 工具自动识别客户端版本，并加载对应的 PoE1 或 PoE2 分类。
+2. 点击“检测当前联盟”识别客户端版本，并加载对应的 PoE1 或 PoE2 分类；打开页面时不会自动读取游戏数据。
 3. 从下拉列表选择联盟，或输入自定义联盟名。工具会自动判断该联盟属于 PoE1 还是 PoE2。
 4. 选择分类后应用价格标签。首次使用或勾选强制更新时会请求 poe.ninja。
 5. 建议先使用预览模式；正式写入前可勾选备份。多分类操作只打开客户端、备份和写入一次。
@@ -54,8 +54,9 @@ PoE1 和 PoE2 的基础物品中英名称词典已内置在发布文件中。客
 3. 点击“暂存修改”后，修改仍保留在内存中；顶部“保存全部修改”会一次性写入所有暂存文件。
 4. 保存前会创建原始索引备份并写入操作日志；“查看改动”可查看本次文件变化，“撤销全部”可放弃尚未保存的修改。
 5. 编辑器的 `A−` / `A+` 按钮可以调整字体大小，设置会自动记住。
+6. 需要修改被多处复用的资源时（例如某个被多个技能引用的特效文件），右键选择“复制为新路径（隔离副本）”，先复制出专用副本，再编辑副本并改写引用，原始文件保持不变。
 
-保存修改会写入新的 Bundle，不直接覆盖原始 Bundle；备份和日志位置见下方“本地数据”。
+保存修改会写入新的 Bundle，不直接覆盖原始 Bundle。所有改动统一写入单一自定义 Bundle `LibGGPK3/0.bundle.bin`（超过 200 MB 也继续写入同一个文件，不会分裂出 `LibGGPK3/1`、`LibGGPK3/2` …）。备份和日志位置见下方“本地数据”。
 
 ## 术语翻译
 
@@ -126,6 +127,9 @@ dotnet run --project src\PoEToolbox.Cli -- read <game-data> <path>
 dotnet run --project src\PoEToolbox.Cli -- extract <game-data> [table] [language]
 dotnet run --project src\PoEToolbox.Cli -- build-name-dictionary <game-data> <output.json>
 dotnet run --project src\PoEToolbox.Cli -- extract-all <source> <output-dir> [poe1|poe2]
+
+# 把索引中的文件复制为一份独立副本（写入新 Bundle，原文件与其他引用者不变）
+dotnet run --project src\PoEToolbox.Cli -- copy-file <game-data> <源路径> <目标路径>
 ```
 
 运行 `dotnet run --project src\PoEToolbox.Cli -- help` 查看完整命令列表。
@@ -157,6 +161,7 @@ src/
 |------|------|
 | `work/poe_ninja/<game>/<league>/` | poe.ninja 行情缓存，按游戏和联盟隔离 |
 | `<游戏数据同目录>/backup/` | 每个客户端各自保存的 `baseline.index.bin` 与 `journal.jsonl` |
+| `<游戏数据同目录>/Bundles2/LibGGPK3/0.bundle.bin` | 工具箱写入的所有改动所在的自定义 Bundle（不会覆盖原始 Bundle） |
 | `<游戏数据同目录>/backup/poe2-fonts/` | POE2 字体配置首次应用前的两个原始 XML |
 | `%LocalAppData%\PoEToolbox\databrowser-cache\` | 数据浏览器树缓存 |
 | `%LocalAppData%\PoEToolbox\schema\` | DAT schema 缓存 |

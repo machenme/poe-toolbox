@@ -79,31 +79,33 @@ public static class CategoryPriceTagger
     /// </summary>
     public static Dictionary<string, string> BuildEmbeddedNameDictionary(string gameDataPath)
     {
-        using var gd = GameDataAccess.Open(gameDataPath, readOnly: true);
-        var tcKey = gd.IsPoe2Client ? PoE2_TcPath : PoE1_TcPath;
-        var enKey = gd.IsPoe2Client ? PoE2_EnPath : PoE1_EnPath;
-
-        if (!gd.Index.TryGetFile(tcKey, out var tcFr))
-            throw new FileNotFoundException($"Not found: {tcKey}");
-        if (!gd.Index.TryGetFile(enKey, out var enFr))
-            throw new FileNotFoundException($"Not found: {enKey}");
-
-        var (tcIs64, tcVf) = Datc64File.DetectFromExtension(tcKey);
-        var tcFile = Datc64File.FromBytes(tcFr.Read().ToArray(), "BaseItemTypes", tcIs64, tcVf);
-        var (enIs64, enVf) = Datc64File.DetectFromExtension(enKey);
-        var enFile = Datc64File.FromBytes(enFr.Read().ToArray(), "BaseItemTypes", enIs64, enVf);
-
-        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < Math.Min(tcFile.Rows.Count, enFile.Rows.Count); i++)
+        return GameDataLoader.Use(gameDataPath, GameDataMode.Read, gd =>
         {
-            var englishName = enFile.Rows[i].GetValueOrDefault("Name") as string ?? string.Empty;
-            var chineseName = CleanName(tcFile.Rows[i].GetValueOrDefault("Name") as string ?? string.Empty);
-            var slug = Slugify(englishName);
-            if (slug.Length > 0 && chineseName.Length > 0)
-                names.TryAdd(slug, chineseName);
-        }
+            var tcKey = gd.IsPoe2Client ? PoE2_TcPath : PoE1_TcPath;
+            var enKey = gd.IsPoe2Client ? PoE2_EnPath : PoE1_EnPath;
 
-        return names;
+            if (!gd.Index.TryGetFile(tcKey, out var tcFr))
+                throw new FileNotFoundException($"Not found: {tcKey}");
+            if (!gd.Index.TryGetFile(enKey, out var enFr))
+                throw new FileNotFoundException($"Not found: {enKey}");
+
+            var (tcIs64, tcVf) = Datc64File.DetectFromExtension(tcKey);
+            var tcFile = Datc64File.FromBytes(tcFr.Read().ToArray(), "BaseItemTypes", tcIs64, tcVf);
+            var (enIs64, enVf) = Datc64File.DetectFromExtension(enKey);
+            var enFile = Datc64File.FromBytes(enFr.Read().ToArray(), "BaseItemTypes", enIs64, enVf);
+
+            var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < Math.Min(tcFile.Rows.Count, enFile.Rows.Count); i++)
+            {
+                var englishName = enFile.Rows[i].GetValueOrDefault("Name") as string ?? string.Empty;
+                var chineseName = CleanName(tcFile.Rows[i].GetValueOrDefault("Name") as string ?? string.Empty);
+                var slug = Slugify(englishName);
+                if (slug.Length > 0 && chineseName.Length > 0)
+                    names.TryAdd(slug, chineseName);
+            }
+
+            return names;
+        });
     }
 
     private static IReadOnlyDictionary<string, string> LoadEmbeddedNameDictionary(string fileName)
@@ -175,175 +177,177 @@ public static class CategoryPriceTagger
             return results;
 
         progress?.Report("[1] Opening game data...");
-        using var gd = GameDataAccess.Open(ggpkPath);
-        progress?.Report($"    Opened ({(gd.IsBundles2 ? "Bundles2" : "GGPK")}).");
-
-        var isPoe2 = gd.IsPoe2Client;
-        var tcKey = isPoe2 ? PoE2_TcPath : PoE1_TcPath;
-        var enKey = isPoe2 ? PoE2_EnPath : PoE1_EnPath;
-        if (!gd.Index.TryGetFile(tcKey, out var tcFr))
-            throw new FileNotFoundException($"Not found: {tcKey}");
-        if (!gd.Index.TryGetFile(enKey, out var enFr))
-            throw new FileNotFoundException($"Not found: {enKey}");
-
-        progress?.Report("[2] Reading BaseItemTypes...");
-        var origBytes = tcFr.Read().ToArray();
-        var (tcIs64, tcVf) = Datc64File.DetectFromExtension(tcKey);
-        var tcFile = Datc64File.FromBytes(origBytes, "BaseItemTypes", tcIs64, tcVf);
-        var names = isPoe2 ? Poe2Names.Value : Poe1Names.Value;
-        var rowIndices = GetClientRowIndices(isPoe2, enKey, enFr.Read().ToArray());
-        progress?.Report($"    {tcFile.Count} rows parsed; embedded {(isPoe2 ? "PoE2" : "PoE1")} dictionary loaded.");
-
-        var modifiedRows = new HashSet<int>();
-        foreach (var (category, exchange) in exchanges)
+        return GameDataLoader.Use(ggpkPath, GameDataMode.ReadWrite, gd =>
         {
-            var lookup = BuildRuntimeLookup(rowIndices, tcFile, names, exchange.Prices.Keys);
-            var tagged = 0;
-            var matched = 0;
-            var skipped = 0;
-            var primaryIsDivine = exchange.PrimaryCurrency.Equals("divine", StringComparison.OrdinalIgnoreCase);
+            progress?.Report($"    Opened ({(gd.IsBundles2 ? "Bundles2" : "GGPK")}).");
 
-            foreach (var (slug, price) in exchange.Prices)
+            var isPoe2 = gd.IsPoe2Client;
+            var tcKey = isPoe2 ? PoE2_TcPath : PoE1_TcPath;
+            var enKey = isPoe2 ? PoE2_EnPath : PoE1_EnPath;
+            if (!gd.Index.TryGetFile(tcKey, out var tcFr))
+                throw new FileNotFoundException($"Not found: {tcKey}");
+            if (!gd.Index.TryGetFile(enKey, out var enFr))
+                throw new FileNotFoundException($"Not found: {enKey}");
+
+            progress?.Report("[2] Reading BaseItemTypes...");
+            var origBytes = tcFr.Read().ToArray();
+            var (tcIs64, tcVf) = Datc64File.DetectFromExtension(tcKey);
+            var tcFile = Datc64File.FromBytes(origBytes, "BaseItemTypes", tcIs64, tcVf);
+            var names = isPoe2 ? Poe2Names.Value : Poe1Names.Value;
+            var rowIndices = GetClientRowIndices(isPoe2, enKey, enFr.Read().ToArray());
+            progress?.Report($"    {tcFile.Count} rows parsed; embedded {(isPoe2 ? "PoE2" : "PoE1")} dictionary loaded.");
+
+            var modifiedRows = new HashSet<int>();
+            foreach (var (category, exchange) in exchanges)
             {
-                var key = NormalizePriceItemId(slug);
-                if (!lookup.TryGetValue(key, out var entry))
-                    continue;
+                var lookup = BuildRuntimeLookup(rowIndices, tcFile, names, exchange.Prices.Keys);
+                var tagged = 0;
+                var matched = 0;
+                var skipped = 0;
+                var primaryIsDivine = exchange.PrimaryCurrency.Equals("divine", StringComparison.OrdinalIgnoreCase);
 
-                matched++;
-                if (PriceExceptions.Contains(entry.CleanName) || !modifiedRows.Add(entry.RowIndex))
+                foreach (var (slug, price) in exchange.Prices)
                 {
-                    skipped++;
-                    continue;
-                }
+                    var key = NormalizePriceItemId(slug);
+                    if (!lookup.TryGetValue(key, out var entry))
+                        continue;
 
-                string tag;
-                if (primaryIsDivine)
-                {
-                    if (price >= 1.0)
+                    matched++;
+                    if (PriceExceptions.Contains(entry.CleanName) || !modifiedRows.Add(entry.RowIndex))
                     {
-                        tag = $" [ {Math.Round(price, 1):F1}d ]";
+                        skipped++;
+                        continue;
+                    }
+
+                    string tag;
+                    if (primaryIsDivine)
+                    {
+                        if (price >= 1.0)
+                        {
+                            tag = $" [ {Math.Round(price, 1):F1}d ]";
+                        }
+                        else
+                        {
+                            var secondaryValue = price * exchange.SecondaryPerPrimary;
+                            if (secondaryValue < 1.0)
+                            {
+                                skipped++;
+                                modifiedRows.Remove(entry.RowIndex);
+                                continue;
+                            }
+                            tag = $" [ {Math.Round(secondaryValue, 1):F1}e ]";
+                        }
                     }
                     else
                     {
-                        var secondaryValue = price * exchange.SecondaryPerPrimary;
-                        if (secondaryValue < 1.0)
+                        if (price < 1.0)
                         {
                             skipped++;
                             modifiedRows.Remove(entry.RowIndex);
                             continue;
                         }
-                        tag = $" [ {Math.Round(secondaryValue, 1):F1}e ]";
+
+                        var divineValue = price * exchange.SecondaryPerPrimary;
+                        tag = divineValue >= 1.0
+                            ? $" [ {Math.Round(divineValue, 1):F1}d ]"
+                            : $" [ {Math.Round(price, 1):F1}c ]";
                     }
-                }
-                else
-                {
-                    if (price < 1.0)
+
+                    if ($"{entry.CleanName}{tag}".Length > 100)
                     {
                         skipped++;
                         modifiedRows.Remove(entry.RowIndex);
                         continue;
                     }
 
-                    var divineValue = price * exchange.SecondaryPerPrimary;
-                    tag = divineValue >= 1.0
-                        ? $" [ {Math.Round(divineValue, 1):F1}d ]"
-                        : $" [ {Math.Round(price, 1):F1}c ]";
+                    tcFile.Rows[entry.RowIndex]["Name"] = $"{entry.CleanName}{tag}";
+                    tagged++;
+                    if (tagged <= 10)
+                        progress?.Report($"  {entry.CleanName}{tag}");
                 }
 
-                if ($"{entry.CleanName}{tag}".Length > 100)
-                {
-                    skipped++;
-                    modifiedRows.Remove(entry.RowIndex);
-                    continue;
-                }
-
-                tcFile.Rows[entry.RowIndex]["Name"] = $"{entry.CleanName}{tag}";
-                tagged++;
-                if (tagged <= 10)
-                    progress?.Report($"  {entry.CleanName}{tag}");
+                if (tagged > 10)
+                    progress?.Report($"  ... and {tagged - 10} more");
+                results[category] = new TagResult(matched, tagged, skipped);
+                progress?.Report($"  {category}: matched {matched}, tagged {tagged}, skipped {skipped}");
             }
 
-            if (tagged > 10)
-                progress?.Report($"  ... and {tagged - 10} more");
-            results[category] = new TagResult(matched, tagged, skipped);
-            progress?.Report($"  {category}: matched {matched}, tagged {tagged}, skipped {skipped}");
-        }
-
-        var totalTagged = results.Values.Sum(result => result.Tagged);
-        if (totalTagged == 0)
-        {
-            progress?.Report("    Nothing to write.");
-            return results;
-        }
-
-        if (dryRun)
-        {
-            progress?.Report("[3] DRY RUN — no changes written.");
-            return results;
-        }
-
-        progress?.Report("[3] Encoding...");
-        var bin = tcFile.ToBytes();
-        try
-        {
-            var verify = Datc64File.FromBytes(bin, "BaseItemTypes", tcIs64, tcVf);
-            if (verify.Count != tcFile.Count)
+            var totalTagged = results.Values.Sum(result => result.Tagged);
+            if (totalTagged == 0)
             {
-                progress?.Report($"    WARNING: row count mismatch ({verify.Count} vs {tcFile.Count}) — skipping write.");
-                return results.ToDictionary(pair => pair.Key, pair => pair.Value with { Tagged = 0 });
+                progress?.Report("    Nothing to write.");
+                return results;
             }
-            progress?.Report("    Round-trip OK.");
-        }
-        catch (Exception ex)
-        {
-            progress?.Report($"    WARNING: round-trip failed ({ex.Message}) — skipping write.");
-            return results.ToDictionary(pair => pair.Key, pair => pair.Value with { Tagged = 0 });
-        }
 
-        progress?.Report("    Writing back...");
-        var backup = IndexBackupService.Begin(gd);
-        try
-        {
-            tcFr.Write(bin);
-            gd.Save();
+            if (dryRun)
+            {
+                progress?.Report("[3] DRY RUN — no changes written.");
+                return results;
+            }
 
-            // Re-open the modified payload through the same parser before reporting success.
-            var savedBytes = gd.ReadFile(tcKey)
-                ?? throw new InvalidDataException($"Modified file disappeared: {tcKey}");
-            var saved = Datc64File.FromBytes(savedBytes, "BaseItemTypes", tcIs64, tcVf);
-            if (saved.Count != tcFile.Count)
-                throw new InvalidDataException($"Saved row count mismatch ({saved.Count} vs {tcFile.Count}).");
-
+            progress?.Report("[3] Encoding...");
+            var bin = tcFile.ToBytes();
             try
             {
-                IndexBackupService.Complete(gd, backup, "price-tag", new Dictionary<string, string>
+                var verify = Datc64File.FromBytes(bin, "BaseItemTypes", tcIs64, tcVf);
+                if (verify.Count != tcFile.Count)
                 {
-                    ["game"] = isPoe2 ? "poe2" : "poe1",
-                    ["categories"] = string.Join(",", exchanges.Keys),
-                });
+                    progress?.Report($"    WARNING: row count mismatch ({verify.Count} vs {tcFile.Count}) — skipping write.");
+                    return results.ToDictionary(pair => pair.Key, pair => pair.Value with { Tagged = 0 });
+                }
+                progress?.Report("    Round-trip OK.");
             }
             catch (Exception ex)
             {
-                // The data mutation succeeded; expose journal failure without pretending the write failed.
-                progress?.Report($"    WARNING: journal write failed ({ex.Message}).");
+                progress?.Report($"    WARNING: round-trip failed ({ex.Message}) — skipping write.");
+                return results.ToDictionary(pair => pair.Key, pair => pair.Value with { Tagged = 0 });
             }
-        }
-        catch
-        {
+
+            progress?.Report("    Writing back...");
+            var backup = IndexBackupService.Begin(gd);
             try
             {
-                tcFr.Write(origBytes);
+                tcFr.Write(bin);
                 gd.Save();
-                progress?.Report("    Write failed; original BaseItemTypes content was restored.");
+
+                // Re-open the modified payload through the same parser before reporting success.
+                var savedBytes = gd.ReadFile(tcKey)
+                    ?? throw new InvalidDataException($"Modified file disappeared: {tcKey}");
+                var saved = Datc64File.FromBytes(savedBytes, "BaseItemTypes", tcIs64, tcVf);
+                if (saved.Count != tcFile.Count)
+                    throw new InvalidDataException($"Saved row count mismatch ({saved.Count} vs {tcFile.Count}).");
+
+                try
+                {
+                    IndexBackupService.Complete(gd, backup, "price-tag", new Dictionary<string, string>
+                    {
+                        ["game"] = isPoe2 ? "poe2" : "poe1",
+                        ["categories"] = string.Join(",", exchanges.Keys),
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // The data mutation succeeded; expose journal failure without pretending the write failed.
+                    progress?.Report($"    WARNING: journal write failed ({ex.Message}).");
+                }
             }
-            catch (Exception restoreEx)
+            catch
             {
-                progress?.Report($"    CRITICAL: write failed and restore also failed ({restoreEx.Message}).");
+                try
+                {
+                    tcFr.Write(origBytes);
+                    gd.Save();
+                    progress?.Report("    Write failed; original BaseItemTypes content was restored.");
+                }
+                catch (Exception restoreEx)
+                {
+                    progress?.Report($"    CRITICAL: write failed and restore also failed ({restoreEx.Message}).");
+                }
+                throw;
             }
-            throw;
-        }
-        progress?.Report("    Done.");
-        return results;
+            progress?.Report("    Done.");
+            return results;
+        });
     }
 
     // ═══ Parse ═════════════════════════════════════════════════

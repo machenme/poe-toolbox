@@ -68,10 +68,16 @@ public partial class DataBrowserView : UserControl
         _selectedFile = null;
         _allFileItems.Clear();
 
+        // A FileItemViewModel/TreeItemViewModel holds a FileRecord, which reaches back to the whole
+        // Index through BundleRecord.Index. Any one of them left behind keeps the entire index graph
+        // alive, so every cached reference must go, including the ones parked on the controls.
+        FileList.SelectedItem = null;
+        FileList.Tag = null;
         DirTree.ItemsSource = null;
         FileList.ItemsSource = null;
         PathLabel.Text = keepReopenPath ? _reopenPath ?? string.Empty : string.Empty;
         FileCountLabel.Text = string.Empty;
+        SearchStatusText.Text = string.Empty;
         FileListPlaceholder.Text = keepReopenPath
             ? "索引已释放，点击“重新打开”以继续浏览"
             : "打开游戏数据文件开始浏览";
@@ -79,6 +85,7 @@ public partial class DataBrowserView : UserControl
         ClearPreview();
         SetBusy(false, "已释放游戏数据文件占用", false);
         UpdateFileLockButton();
+        MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
     }
 
     // ── Open ────────────────────────────────────────────
@@ -129,7 +136,7 @@ public partial class DataBrowserView : UserControl
         {
             SetBusy(true, "正在打开...", true);
             ClearPreview();
-            opened = await Task.Run(() => GameDataAccess.OpenReadOnlyMapped(path), cts.Token);
+            opened = await Task.Run(() => GameDataAccess.OpenReadOnlyMapped(GameDataLoader.ResolvePath(path)), cts.Token);
             cts.Token.ThrowIfCancellationRequested();
             var skippedFileCount = opened.Index.Files.Values.Count(file => string.IsNullOrEmpty(file.Path));
             var browsableFileCount = opened.Index.Files.Count - skippedFileCount;
@@ -515,7 +522,17 @@ public partial class DataBrowserView : UserControl
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { StatusText.Text = "保存失败"; MessageBox.Show($"保存失败：\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { if (ReferenceEquals(_operationCts, cts)) _operationCts = null; cts.Dispose(); SetBusy(false, StatusText.Text, false); }
-        OpenPath(gameDataPath);
+        PromptReopen();
+    }
+
+    /// <summary>
+    /// Writing to the game data has to release the index first, and reopening a large data source
+    /// costs a full parse, so leave it to the user instead of doing it automatically.
+    /// </summary>
+    private void PromptReopen()
+    {
+        if (!StatusText.Text.Contains("重新打开", StringComparison.Ordinal))
+            StatusText.Text += "，点击“重新打开”可继续浏览";
     }
 
     private void ViewChanges_Click(object sender, RoutedEventArgs e)
@@ -854,6 +871,18 @@ public partial class DataBrowserView : UserControl
             CopyFilePath(item.FullPath);
     }
 
+    private void CopyAsNewPath_Click(object sender, RoutedEventArgs e)
+    {
+        if (FileList.SelectedItem is FileItemViewModel item)
+            CopyAsNewPath(item.FullPath, item.Name);
+    }
+
+    private void TreeCopyAsNewPath_Click(object sender, RoutedEventArgs e)
+    {
+        if (DirTree.SelectedItem is TreeItemViewModel item && !item.IsDirectory && item.FileRecord is not null)
+            CopyAsNewPath(item.FileRecord.Path, item.Name);
+    }
+
     private void ExtractDir_Click(object sender, RoutedEventArgs e)
     {
         if (FileList.Tag is TreeItemViewModel item && item.IsDirectory)
@@ -960,7 +989,82 @@ public partial class DataBrowserView : UserControl
             SetBusy(false, status, false);
         }
 
-        OpenPath(gameDataPath);
+        PromptReopen();
+    }
+
+    /// <summary>
+    /// Copies an indexed file to a new virtual path so it can be edited in isolation,
+    /// without affecting the original file nor the other files referring to it.
+    /// </summary>
+    private async void CopyAsNewPath(string sourcePath, string sourceName)
+    {
+        if (_gd is null)
+        {
+            MessageBox.Show("请先打开游戏数据文件。", "无法复制", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var separator = sourcePath.LastIndexOf('/');
+        var directory = separator > 0 ? sourcePath[..(separator + 1)] : string.Empty;
+        var suggested = Path.GetFileNameWithoutExtension(sourceName) + "_copy" + Path.GetExtension(sourceName);
+
+        var destination = NewPathDialog.Prompt(
+            Window.GetWindow(this),
+            "复制为新路径",
+            $"将下列文件复制为一份独立副本：\n\n{sourcePath}\n\n请输入新文件的完整路径（使用 / 分隔，扩展名需与源文件一致）：",
+            directory + suggested);
+        if (string.IsNullOrWhiteSpace(destination)) return;
+
+        destination = destination.Replace('\\', '/').Trim();
+        var confirmation = MessageBox.Show(
+            $"将复制索引中的文件到新路径：\n\n{sourcePath}\n→ {destination}\n\n"
+            + "副本内容独立，原始文件以及其他引用它的技能不会受影响。\n"
+            + "操作会写入新的 Bundle 并更新索引，首次写入前会创建原始索引备份。是否继续？",
+            "确认复制为新路径", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (confirmation != MessageBoxResult.OK) return;
+
+        var gameDataPath = _gd.GameDataPath;
+
+        ReleaseFileLocks(keepReopenPath: true);
+        var cts = new CancellationTokenSource();
+        _operationCts = cts;
+        SetBusy(true, "正在复制为新路径...", true);
+        ProgressBar.IsIndeterminate = true;
+
+        try
+        {
+            var result = await Task.Run(
+                () => ReplaceService.CopyFileAs(gameDataPath, sourcePath, destination, cts.Token),
+                cts.Token);
+            StatusText.Text = $"已复制为新路径：{result.DestinationVirtualPath}";
+            MessageBox.Show(
+                $"已复制：{result.SourceVirtualPath}\n"
+                + $"→ {result.DestinationVirtualPath}\n"
+                + $"大小：{FormatSize(result.Size)}\n"
+                + $"新 Bundle：{result.BundlePath}\n"
+                + $"原始索引备份：{result.BaselinePath}\n\n"
+                + "现在可以编辑副本，并把引用原始文件的资源改指向副本。",
+                "复制完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "已取消复制";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "复制失败";
+            MessageBox.Show($"复制失败：\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            var status = StatusText.Text;
+            if (ReferenceEquals(_operationCts, cts))
+                _operationCts = null;
+            cts.Dispose();
+            SetBusy(false, status, false);
+        }
+
+        PromptReopen();
     }
 
     private void ExtractAsJson(FileRecord file, string sourcePath, string defaultName)

@@ -53,35 +53,37 @@ public static class Poe2FontService
         ValidateOptions(options);
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var gameData = GameDataAccess.Open(gameDataPath);
-        if (!gameData.IsPoe2Client)
-            throw new InvalidOperationException("当前游戏数据不是 POE2 客户端，已停止字体配置。 ");
-        var targets = GetTargets(gameData);
-        var backup = EnsureBaseline(gameData.GameDataPath, targets.Base.Read().ToArray(), targets.Traditional.Read().ToArray());
-        var baseBytes = File.ReadAllBytes(backup.BasePath);
-        var generatedBase = GenerateBaseXml(baseBytes, options);
-        var generatedTraditional = GenerateTraditionalXml();
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var indexBackup = IndexBackupService.Begin(gameData);
-        targets.Base.Write(generatedBase);
-        targets.Traditional.Write(generatedTraditional);
-        gameData.Save();
-        IndexBackupService.Complete(gameData, indexBackup, "poe2-font", new Dictionary<string, string>
+        return GameDataLoader.Use(gameDataPath, GameDataMode.ReadWrite, gameData =>
         {
-            ["typeface"] = options.Typeface,
-            ["sizeScalePercent"] = options.SizeScalePercent.ToString("0.##", CultureInfo.InvariantCulture),
-            ["baseVirtualPath"] = BaseVirtualPath,
-            ["traditionalVirtualPath"] = TraditionalVirtualPath,
-        });
+            if (!gameData.IsPoe2Client)
+                throw new InvalidOperationException("当前游戏数据不是 POE2 客户端，已停止字体配置。 ");
+            var targets = GetTargets(gameData);
+            var backup = EnsureBaseline(gameData.GameDataPath, targets.Base.Read().ToArray(), targets.Traditional.Read().ToArray());
+            var baseBytes = File.ReadAllBytes(backup.BasePath);
+            var generatedBase = GenerateBaseXml(baseBytes, options);
+            var generatedTraditional = GenerateTraditionalXml();
 
-        return new Poe2FontResult(
-            gameData.GameDataPath,
-            options.Typeface,
-            options.SizeScalePercent,
-            generatedBase.Length,
-            generatedTraditional.Length,
-            backup.DirectoryPath);
+            cancellationToken.ThrowIfCancellationRequested();
+            var indexBackup = IndexBackupService.Begin(gameData);
+            targets.Base.Write(generatedBase);
+            targets.Traditional.Write(generatedTraditional);
+            gameData.Save();
+            IndexBackupService.Complete(gameData, indexBackup, "poe2-font", new Dictionary<string, string>
+            {
+                ["typeface"] = options.Typeface,
+                ["sizeScalePercent"] = options.SizeScalePercent.ToString("0.##", CultureInfo.InvariantCulture),
+                ["baseVirtualPath"] = BaseVirtualPath,
+                ["traditionalVirtualPath"] = TraditionalVirtualPath,
+            });
+
+            return new Poe2FontResult(
+                gameData.GameDataPath,
+                options.Typeface,
+                options.SizeScalePercent,
+                generatedBase.Length,
+                generatedTraditional.Length,
+                backup.DirectoryPath);
+        });
     }
 
     public static Poe2FontRestoreResult Restore(
@@ -93,27 +95,29 @@ public static class Poe2FontService
         if (!File.Exists(backup.BasePath) || !File.Exists(backup.TraditionalPath))
             throw new FileNotFoundException("尚未找到字体功能创建的原始文件备份。", backup.DirectoryPath);
 
-        using var gameData = GameDataAccess.Open(gameDataPath);
-        if (!gameData.IsPoe2Client)
-            throw new InvalidOperationException("当前游戏数据不是 POE2 客户端，已停止恢复字体。 ");
-        var targets = GetTargets(gameData);
-        var baseBytes = File.ReadAllBytes(backup.BasePath);
-        var traditionalBytes = File.ReadAllBytes(backup.TraditionalPath);
-        var indexBackup = IndexBackupService.Begin(gameData);
-        targets.Base.Write(baseBytes);
-        targets.Traditional.Write(traditionalBytes);
-        gameData.Save();
-        IndexBackupService.Complete(gameData, indexBackup, "poe2-font-restore", new Dictionary<string, string>
+        return GameDataLoader.Use(gameDataPath, GameDataMode.ReadWrite, gameData =>
         {
-            ["baseVirtualPath"] = BaseVirtualPath,
-            ["traditionalVirtualPath"] = TraditionalVirtualPath,
-        });
+            if (!gameData.IsPoe2Client)
+                throw new InvalidOperationException("当前游戏数据不是 POE2 客户端，已停止恢复字体。 ");
+            var targets = GetTargets(gameData);
+            var baseBytes = File.ReadAllBytes(backup.BasePath);
+            var traditionalBytes = File.ReadAllBytes(backup.TraditionalPath);
+            var indexBackup = IndexBackupService.Begin(gameData);
+            targets.Base.Write(baseBytes);
+            targets.Traditional.Write(traditionalBytes);
+            gameData.Save();
+            IndexBackupService.Complete(gameData, indexBackup, "poe2-font-restore", new Dictionary<string, string>
+            {
+                ["baseVirtualPath"] = BaseVirtualPath,
+                ["traditionalVirtualPath"] = TraditionalVirtualPath,
+            });
 
-        return new Poe2FontRestoreResult(
-            gameData.GameDataPath,
-            baseBytes.Length,
-            traditionalBytes.Length,
-            backup.DirectoryPath);
+            return new Poe2FontRestoreResult(
+                gameData.GameDataPath,
+                baseBytes.Length,
+                traditionalBytes.Length,
+                backup.DirectoryPath);
+        });
     }
 
     public static bool HasBaseline(string gameDataPath)

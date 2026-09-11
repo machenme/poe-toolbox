@@ -1,5 +1,8 @@
+using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
+using System.Threading;
+using System.Threading.Tasks;
 using LibBundle3;
 using LibBundledGGPK3;
 
@@ -13,9 +16,11 @@ namespace PoEToolbox.Shared;
 public sealed class GameDataAccess : IDisposable
 {
     private static int _openInstanceCount;
+    private static long _openSequence;
     private bool _isDirectIndex;
     private bool _registeredOpen;
     private bool _disposed;
+    private bool _pinWrites;
     private BundledGGPK? _ggpk;
     private LibBundle3.Index? _index;
     private MemoryMappedFile? _mappedIndex;
@@ -28,6 +33,22 @@ public sealed class GameDataAccess : IDisposable
     public static event Action<bool>? LocksChanged;
 
     public static bool HasOpenLocks => Volatile.Read(ref _openInstanceCount) > 0;
+
+    /// <summary>
+    /// Builds the guard to hand to <see cref="MemoryReclaimer.Reclaim(Func{bool})"/> after releasing
+    /// game data: stop reclaiming while another module still holds data open, so it does not get a
+    /// heavy blocking collection in the middle of its work.
+    /// </summary>
+    /// <remarks>
+    /// A data source opened after this call does not count as somebody else working — that is the
+    /// caller reopening (switching files), and the memory that has to go belongs to the file that was
+    /// just released. The new index is strongly referenced, so the collection cannot touch it.
+    /// </remarks>
+    public static Func<bool> CreateAbortCheck()
+    {
+        var openedAtRelease = Volatile.Read(ref _openSequence);
+        return () => HasOpenLocks && Volatile.Read(ref _openSequence) == openedAtRelease;
+    }
 
     /// <summary>The underlying Index, regardless of format.</summary>
     public LibBundle3.Index Index => _index ?? _ggpk?.Index
@@ -63,39 +84,52 @@ public sealed class GameDataAccess : IDisposable
 
     private static GameDataAccess OpenCore(string path, bool readOnly, bool memoryMapBundles2Index)
     {
+        var resolved = ResolvePath(path);
         var gd = new GameDataAccess();
-        path = System.IO.Path.GetFullPath(path);
+        gd._pinWrites = !readOnly;
 
-        if (System.IO.File.Exists(path))
+        if (resolved.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase))
         {
-            if (path.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase))
-            {
-                gd.OpenGgpk(path);
-                gd._gameDataPath = path;
-                return gd.MarkOpened();
-            }
-            if (path.EndsWith("_.index.bin", StringComparison.OrdinalIgnoreCase))
-            {
-                gd.OpenBundles2Index(path, readOnly, memoryMapBundles2Index);
-                return gd.MarkOpened();
-            }
+            gd.OpenGgpk(resolved);
+            gd._gameDataPath = resolved;
+            return gd.MarkOpened();
         }
 
-        if (System.IO.Directory.Exists(path))
+        gd.OpenBundles2Index(resolved, readOnly, memoryMapBundles2Index);
+        return gd.MarkOpened();
+    }
+
+    /// <summary>
+    /// Resolves a user-supplied path to the game data file itself: an explicit Content.ggpk or
+    /// _.index.bin, or a directory holding one of them. Returns the fully qualified file path.
+    /// </summary>
+    /// <remarks>
+    /// Kept as the single home for this rule so callers that only need the path (and not a handle)
+    /// cannot drift away from what <see cref="Open"/> actually accepts.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The path is null or blank.</exception>
+    /// <exception cref="FileNotFoundException">Nothing usable is at the path.</exception>
+    public static string ResolvePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Game data path is empty.", nameof(path));
+
+        var full = System.IO.Path.GetFullPath(path);
+
+        if (System.IO.File.Exists(full)
+            && (full.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase)
+                || full.EndsWith("_.index.bin", StringComparison.OrdinalIgnoreCase)))
+            return full;
+
+        if (System.IO.Directory.Exists(full))
         {
-            var ggpk = System.IO.Path.Combine(path, "Content.ggpk");
+            var ggpk = System.IO.Path.Combine(full, "Content.ggpk");
             if (System.IO.File.Exists(ggpk))
-            {
-                gd.OpenGgpk(ggpk);
-                gd._gameDataPath = ggpk;
-                return gd.MarkOpened();
-            }
-            var idx = System.IO.Path.Combine(path, "Bundles2", "_.index.bin");
+                return ggpk;
+
+            var idx = System.IO.Path.Combine(full, "Bundles2", "_.index.bin");
             if (System.IO.File.Exists(idx))
-            {
-                gd.OpenBundles2Index(idx, readOnly, memoryMapBundles2Index);
-                return gd.MarkOpened();
-            }
+                return idx;
         }
 
         throw new System.IO.FileNotFoundException($"Cannot find game data at: {path}");
@@ -120,7 +154,13 @@ public sealed class GameDataAccess : IDisposable
 
     private GameDataAccess MarkOpened()
     {
+        // Every modification made by the toolbox must land in our own single custom bundle
+        // (LibGGPK3/0.bundle.bin), never split into LibGGPK3/1, 2, 3, ... when it grows past MaxBundleSize.
+        if (_pinWrites)
+            PinAllWritesToSingleBundle();
+
         _registeredOpen = true;
+        Interlocked.Increment(ref _openSequence);
         if (Interlocked.Increment(ref _openInstanceCount) == 1)
             LocksChanged?.Invoke(true);
         return this;
@@ -181,10 +221,55 @@ public sealed class GameDataAccess : IDisposable
         return null;
     }
 
+    /// <summary>Whether a file path exists in the index.</summary>
+    public bool FileExists(string path) => Index.TryGetFile(path, out _);
+
+    /// <summary>
+    /// Copy an existing indexed file to <paramref name="destPath"/> with an independent content,
+    /// so that editing the copy affects neither the original nor the other files referring to it.
+    /// Call <see cref="Save"/> (or use this method, which saves automatically) to persist.
+    /// </summary>
+    /// <exception cref="System.IO.FileNotFoundException"><paramref name="sourcePath"/> is not found</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="destPath"/> already exists</exception>
+    public LibBundle3.Records.FileRecord CopyFileAs(string sourcePath, string destPath)
+    {
+        var file = Index.CopyFile(sourcePath, destPath);
+        Save();
+        return file;
+    }
+
+    /// <summary>
+    /// Add a brand-new file at <paramref name="path"/> and persist the index.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"><paramref name="path"/> already exists</exception>
+    public LibBundle3.Records.FileRecord AddFile(string path, byte[] content)
+    {
+        var file = Index.AddFile(path, content);
+        Save();
+        return file;
+    }
+
     // ── Save ───────────────────────────────────────────
 
     /// <summary>Persist all changes.</summary>
     public void Save() => Index.Save();
+
+    /// <summary>
+    /// When set, all writes go into this single custom bundle instead of being spread over several ones.
+    /// See <see cref="LibBundle3.Index.PinnedWriteBundlePath"/>.
+    /// </summary>
+    public string? PinnedWriteBundlePath
+    {
+        get => Index.PinnedWriteBundlePath;
+        set => Index.PinnedWriteBundlePath = value;
+    }
+
+    /// <summary>
+    /// Pins every write to the single bundle <c>LibGGPK3/0.bundle.bin</c>, so that a mod stays one
+    /// predictable file instead of being split into LibGGPK3/1, 2, 3, ... when it grows large.
+    /// </summary>
+    public void PinAllWritesToSingleBundle()
+        => Index.PinnedWriteBundlePath = LibBundle3.Index.DefaultWriteBundlePath;
 
     // ── Backup / Restore ───────────────────────────────
 
@@ -233,6 +318,8 @@ public sealed class GameDataAccess : IDisposable
             _index = new LibBundle3.Index(_indexPath!, parsePaths: false,
                 bundleFactory: new DriveBundleFactory(bundleDir));
             _index.ParsePaths();
+            if (_pinWrites)
+                PinAllWritesToSingleBundle();
         }
         else
         {

@@ -57,6 +57,7 @@
                             <MenuItem Header="替换文件" Click="TreeReplaceFile_Click"/>
                             <MenuItem Header="提取为 JSON" Click="TreeExtractJson_Click"/>
                             <MenuItem Header="复制文件路径" Click="TreeCopyFilePath_Click"/>
+                            <MenuItem Header="复制为新路径（隔离副本）" Click="TreeCopyAsNewPath_Click"/>
                             <MenuItem Header="提取文件夹" Click="TreeExtractDir_Click"/>
                         </ContextMenu>
                     </TreeView.ContextMenu>
@@ -129,6 +130,7 @@
                                     <MenuItem Header="替换文件" Click="ReplaceFile_Click"/>
                                     <MenuItem Header="提取为 JSON" Click="ExtractJson_Click"/>
                                     <MenuItem Header="复制文件路径" Click="CopyFilePath_Click"/>
+                                    <MenuItem Header="复制为新路径（隔离副本）" Click="CopyAsNewPath_Click"/>
                                     <MenuItem Header="提取文件夹" Click="ExtractDir_Click"/>
                                 </ContextMenu>
                             </ListView.ContextMenu>

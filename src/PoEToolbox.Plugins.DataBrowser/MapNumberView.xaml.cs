@@ -29,6 +29,7 @@ public partial class MapNumberView : UserControl
         _gameData = null;
         ShowFilePicker();
         SetBusy(false, "已释放游戏数据文件占用", false);
+        MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
     }
 
     private void OpenFileButton_Click(object sender, RoutedEventArgs e)
@@ -58,7 +59,7 @@ public partial class MapNumberView : UserControl
         try
         {
             SetBusy(true, "正在打开 GGPK...", true);
-            opened = await Task.Run(() => GameDataAccess.Open(path, readOnly: false), cts.Token);
+            opened = await Task.Run(() => GameDataAccess.Open(GameDataLoader.ResolvePath(path), readOnly: false), cts.Token);
             cts.Token.ThrowIfCancellationRequested();
 
             var mapCount = opened.IsPoe2Client ? 15 : 16;

@@ -12,9 +12,88 @@ public sealed record FileReplacementResult(
     string BaselinePath,
     string BundlePath);
 
-/// <summary>Replaces an existing indexed file and persists its bundle/index changes.</summary>
+public sealed record FileCopyResult(
+    string SourceVirtualPath,
+    string DestinationVirtualPath,
+    int Size,
+    string BaselinePath,
+    string BundlePath);
+
+/// <summary>Replaces or copies an existing indexed file and persists its bundle/index changes.</summary>
 public static class ReplaceService
 {
+    /// <summary>
+    /// Copies an existing indexed file to a new path with an independent content.
+    /// The original file is left untouched, so other files referring to it are not affected.
+    /// </summary>
+    public static FileCopyResult CopyFileAs(
+        string gameDataPath,
+        string sourceVirtualPath,
+        string destinationVirtualPath,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateCopy(sourceVirtualPath, destinationVirtualPath);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return GameDataLoader.Use(gameDataPath, GameDataMode.ReadWrite, gameData =>
+        {
+            if (!gameData.FileExists(sourceVirtualPath))
+                throw new FileNotFoundException("索引中未找到源文件。", sourceVirtualPath);
+            if (gameData.FileExists(destinationVirtualPath))
+                throw new InvalidOperationException("目标路径已存在，无法复制：" + destinationVirtualPath);
+
+            // Do not check cancellation after the copy: a partially written in-memory index
+            // must always be saved together with its redirected bundle record.
+            var backup = IndexBackupService.Begin(gameData);
+            var created = gameData.CopyFileAs(sourceVirtualPath, destinationVirtualPath);
+            IndexBackupService.Complete(gameData, backup, "copy-file", new Dictionary<string, string>
+            {
+                ["sourcePath"] = sourceVirtualPath,
+                ["destinationPath"] = destinationVirtualPath,
+                ["size"] = created.Size.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            });
+
+            return new FileCopyResult(
+                sourceVirtualPath,
+                destinationVirtualPath,
+                created.Size,
+                backup.BaselinePath,
+                created.BundleRecord.Path);
+        });
+    }
+
+    private static void ValidateCopy(string sourceVirtualPath, string destinationVirtualPath)
+    {
+        if (string.IsNullOrWhiteSpace(sourceVirtualPath))
+            throw new ArgumentException("源文件路径不能为空。", nameof(sourceVirtualPath));
+        if (string.IsNullOrWhiteSpace(destinationVirtualPath))
+            throw new ArgumentException("目标文件路径不能为空。", nameof(destinationVirtualPath));
+
+        var destination = destinationVirtualPath.Replace('\\', '/').Trim();
+        if (destination.StartsWith('/') || destination.EndsWith('/') || destination.Contains("//") || destination.Contains(':'))
+            throw new ArgumentException(
+                "目标路径必须是使用 / 分隔的相对路径。",
+                nameof(destinationVirtualPath));
+
+        if (string.Equals(
+                sourceVirtualPath.Replace('\\', '/').TrimEnd('/'),
+                destination,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("目标路径不能与源文件路径相同。", nameof(destinationVirtualPath));
+        }
+
+        if (!string.Equals(
+                Path.GetExtension(sourceVirtualPath),
+                Path.GetExtension(destination),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "目标文件扩展名必须与源文件一致。",
+                nameof(destinationVirtualPath));
+        }
+    }
+
     public static FileReplacementResult Replace(
         string gameDataPath,
         string virtualPath,
@@ -25,30 +104,32 @@ public static class ReplaceService
         cancellationToken.ThrowIfCancellationRequested();
 
         var replacementSize = checked((int)new FileInfo(replacementPath).Length);
-        using var gameData = GameDataAccess.Open(gameDataPath);
-        if (!gameData.TryGetFile(virtualPath, out var target) || target is null)
-            throw new FileNotFoundException("索引中未找到目标文件。", virtualPath);
-
-        // Do not check cancellation after Write: a partially written in-memory index
-        // must always be saved together with its redirected bundle record.
-        var backup = IndexBackupService.Begin(gameData);
-        target.Write(destination => CopyReplacement(replacementPath, destination), replacementSize);
-        gameData.Save();
-        IndexBackupService.Complete(gameData, backup, "replace-file", new Dictionary<string, string>
+        return GameDataLoader.Use(gameDataPath, GameDataMode.ReadWrite, gameData =>
         {
-            ["virtualPath"] = virtualPath,
-            ["replacementPath"] = Path.GetFullPath(replacementPath),
-            ["size"] = replacementSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            if (!gameData.TryGetFile(virtualPath, out var target) || target is null)
+                throw new FileNotFoundException("索引中未找到目标文件。", virtualPath);
+
+            // Do not check cancellation after Write: a partially written in-memory index
+            // must always be saved together with its redirected bundle record.
+            var backup = IndexBackupService.Begin(gameData);
+            target.Write(destination => CopyReplacement(replacementPath, destination), replacementSize);
+            gameData.Save();
+            IndexBackupService.Complete(gameData, backup, "replace-file", new Dictionary<string, string>
+            {
+                ["virtualPath"] = virtualPath,
+                ["replacementPath"] = Path.GetFullPath(replacementPath),
+                ["size"] = replacementSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            });
+
+            if (target.Size != replacementSize)
+                throw new InvalidDataException("替换后文件长度校验失败: " + virtualPath);
+
+            return new FileReplacementResult(
+                virtualPath,
+                replacementSize,
+                backup.BaselinePath,
+                target.BundleRecord.Path);
         });
-
-        if (target.Size != replacementSize)
-            throw new InvalidDataException("替换后文件长度校验失败: " + virtualPath);
-
-        return new FileReplacementResult(
-            virtualPath,
-            replacementSize,
-            backup.BaselinePath,
-            target.BundleRecord.Path);
     }
 
     /// <summary>Replaces an indexed text file while preserving its detected encoding and BOM.</summary>
@@ -71,47 +152,51 @@ public static class ReplaceService
         preamble.CopyTo(replacement, 0);
         body.CopyTo(replacement, preamble.Length);
 
-        using var gameData = GameDataAccess.Open(gameDataPath);
-        if (!gameData.TryGetFile(virtualPath, out var target) || target is null)
-            throw new FileNotFoundException("索引中未找到目标文件。", virtualPath);
-
-        var backup = IndexBackupService.Begin(gameData);
-        target.Write(replacement);
-        gameData.Save();
-        IndexBackupService.Complete(gameData, backup, "edit-file", new Dictionary<string, string>
+        return GameDataLoader.Use(gameDataPath, GameDataMode.ReadWrite, gameData =>
         {
-            ["virtualPath"] = virtualPath,
-            ["encoding"] = encoding.WebName,
-            ["size"] = replacement.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        });
+            if (!gameData.TryGetFile(virtualPath, out var target) || target is null)
+                throw new FileNotFoundException("索引中未找到目标文件。", virtualPath);
 
-        return new FileReplacementResult(
-            virtualPath,
-            replacement.Length,
-            backup.BaselinePath,
-            target.BundleRecord.Path);
+            var backup = IndexBackupService.Begin(gameData);
+            target.Write(replacement);
+            gameData.Save();
+            IndexBackupService.Complete(gameData, backup, "edit-file", new Dictionary<string, string>
+            {
+                ["virtualPath"] = virtualPath,
+                ["encoding"] = encoding.WebName,
+                ["size"] = replacement.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            });
+
+            return new FileReplacementResult(
+                virtualPath,
+                replacement.Length,
+                backup.BaselinePath,
+                target.BundleRecord.Path);
+        });
     }
 
     public static void ReplaceTexts(string gameDataPath, IReadOnlyList<PendingTextEdit> edits, CancellationToken cancellationToken = default)
     {
         if (edits.Count == 0) return;
-        using var gameData = GameDataAccess.Open(gameDataPath);
-        var backup = IndexBackupService.Begin(gameData);
-        foreach (var edit in edits)
+        GameDataLoader.Use(gameDataPath, GameDataMode.ReadWrite, gameData =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!gameData.TryGetFile(edit.VirtualPath, out var target) || target is null)
-                throw new FileNotFoundException("索引中未找到目标文件。", edit.VirtualPath);
-            var body = edit.Encoding.GetBytes(edit.EditedText);
-            var preamble = edit.Encoding.GetPreamble();
-            var bytes = new byte[preamble.Length + body.Length];
-            preamble.CopyTo(bytes, 0); body.CopyTo(bytes, preamble.Length);
-            target.Write(bytes);
-        }
-        gameData.Save();
-        IndexBackupService.Complete(gameData, backup, "edit-files", new Dictionary<string, string>
-        {
-            ["files"] = string.Join(";", edits.Select(e => e.VirtualPath)),
+            var backup = IndexBackupService.Begin(gameData);
+            foreach (var edit in edits)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!gameData.TryGetFile(edit.VirtualPath, out var target) || target is null)
+                    throw new FileNotFoundException("索引中未找到目标文件。", edit.VirtualPath);
+                var body = edit.Encoding.GetBytes(edit.EditedText);
+                var preamble = edit.Encoding.GetPreamble();
+                var bytes = new byte[preamble.Length + body.Length];
+                preamble.CopyTo(bytes, 0); body.CopyTo(bytes, preamble.Length);
+                target.Write(bytes);
+            }
+            gameData.Save();
+            IndexBackupService.Complete(gameData, backup, "edit-files", new Dictionary<string, string>
+            {
+                ["files"] = string.Join(";", edits.Select(e => e.VirtualPath)),
+            });
         });
     }
 

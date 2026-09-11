@@ -31,7 +31,7 @@ public class FileRecord {
 	/// <remarks>
 	/// This will be <see langword="null"/> if the <see cref="Index.ParsePaths"/> has never been called.
 	/// </remarks>
-	public virtual string Path { get; protected internal set; /* For Index.ParsePaths */}
+	public virtual string Path { get; protected internal set; /* For Index.ParsePaths */ }
 
 #pragma warning disable CS8618
 	protected internal FileRecord(ulong pathHash, BundleRecord bundleRecord, int offset, int size) {
@@ -97,26 +97,10 @@ public class FileRecord {
 	public virtual void Write(scoped ReadOnlySpan<byte> newContent, bool saveIndex = false) {
 		var index = BundleRecord.Index;
 		lock (index) {
-			var b = index._BundleToWrite;
-			var ms = index._BundleStreamToWrite;
-			if (b is null) {
-				index._BundleToWrite = b = index.GetBundleToWrite(out var originalSize);
-				if (!index.WR_BundleStreamToWrite.TryGetTarget(out index._BundleStreamToWrite))
-					index._BundleStreamToWrite = new(originalSize + newContent.Length);
-				ms = index._BundleStreamToWrite;
-				ms.Write(index._BundleToWrite.ReadWithoutCache(0, originalSize)); // Read original data of bundle
-			}
-
-			Redirect(b.Record!, (int)ms!.Length, newContent.Length);
+			index.EnsureWriteBundle(out var b, out var ms, newContent.Length);
+			Redirect(b.Record!, (int)ms.Length, newContent.Length);
 			ms.Write(newContent);
-
-			if (ms.Length >= index.MaxBundleSize) {
-				b.Save(new(ms.GetBuffer(), 0, (int)ms.Length));
-				b.Dispose();
-				index._BundleToWrite = null;
-				ms.SetLength(0);
-				index._BundleStreamToWrite = null;
-			}
+			index.FlushWriteBundle(b, ms);
 		}
 		if (saveIndex)
 			index.Save();
@@ -134,32 +118,12 @@ public class FileRecord {
 #endif
 		var index = BundleRecord.Index;
 		lock (index) {
-			var b = index._BundleToWrite;
-			var ms = index._BundleStreamToWrite;
-			if (b is null) {
-				index._BundleToWrite = b = index.GetBundleToWrite(out var originalSize);
-				if (!index.WR_BundleStreamToWrite.TryGetTarget(out index._BundleStreamToWrite)) {
-					index._BundleStreamToWrite = new(originalSize + newSize);
-					index.WR_BundleStreamToWrite.SetTarget(index._BundleStreamToWrite);
-				}
-				ms = index._BundleStreamToWrite;
-				ms.Write(index._BundleToWrite.ReadWithoutCache(0, originalSize)); // Read original data of bundle
-			}
-
-			{
-				var ibw = ms!.AsIBufferWriter();
-				writer(ibw.GetSpan(newSize)[..newSize]);
-				Redirect(b.Record!, (int)ms!.Length, newSize);
-				ibw.Advance(newSize);
-			}
-
-			if (ms.Length >= index.MaxBundleSize) {
-				b.Save(new(ms.GetBuffer(), 0, (int)ms.Length));
-				b.Dispose();
-				index._BundleToWrite = null;
-				ms.SetLength(0);
-				index._BundleStreamToWrite = null;
-			}
+			index.EnsureWriteBundle(out var b, out var ms, newSize);
+			var ibw = ms.AsIBufferWriter();
+			writer(ibw.GetSpan(newSize)[..newSize]);
+			Redirect(b.Record!, (int)ms.Length, newSize);
+			ibw.Advance(newSize);
+			index.FlushWriteBundle(b, ms);
 		}
 		if (saveIndex)
 			index.Save();

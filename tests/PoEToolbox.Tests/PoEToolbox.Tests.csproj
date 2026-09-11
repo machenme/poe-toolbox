@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\..\oo2core.dll" Link="oo2core.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/PoEToolbox.Core/PoEToolbox.Core.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.DataBrowser/PoEToolbox.Plugins.DataBrowser.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.BagCleaner/PoEToolbox.Plugins.BagCleaner.csproj" />

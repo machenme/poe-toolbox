@@ -2,6 +2,7 @@ using System.Windows.Controls;
 using PoEToolbox.Shared;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls.Primitives;
@@ -34,6 +35,8 @@ public partial class PriceTaggerView : UserControl
     private readonly IEventBus _eventBus;
 
     private bool _langSwapped;
+    private bool _applying;
+    private int _scanningClient;
     private int _totalProcessed, _totalUpdated, _totalSkipped;
     private readonly Stopwatch _timer = new();
     private PriceTaggerConfig _ptConfig = null!;
@@ -49,19 +52,27 @@ public partial class PriceTaggerView : UserControl
         InitCategories();
         InitLeagueCombo();
         ApplyLocalization();
-        Loaded += async (_, _) =>
+        // Manual only: opening the game data file or hitting poe.ninja never
+        // happens automatically — the user must click "Detect current league".
+        // (Keeps plugin startup light; GGPK indexing costs a lot of memory.)
+        Loaded += (_, _) =>
         {
             RestoreCachedGgpkPath();
-            await DetectCurrentClientGameAsync();
-            await LoadLeaguesAsync();
+            RestoreCachedLeague();
         };
     }
 
-    private static readonly TimeSpan LeagueCacheTtl = TimeSpan.FromMinutes(15);
+    // Last used league is only used to pre-fill the box; it never triggers
+    // a network request or a game data read.
+    private static readonly TimeSpan LeagueCacheTtl = TimeSpan.FromHours(12);
 
     private sealed record LeagueChoice(PoeNinjaFetcher.PoeGame Game, string League);
 
-    private async Task LoadLeaguesAsync(bool selectCurrentLeague = false)
+    /// <summary>
+    /// Fetch the league lists and select the current league.
+    /// Only called from the Detect button — never automatically on load.
+    /// </summary>
+    private async Task DetectAndLoadLeaguesAsync()
     {
         var poe1Task = PoeNinjaFetcher.GetLeaguesAsync(PoeNinjaFetcher.PoeGame.Poe1);
         var poe2Task = PoeNinjaFetcher.GetLeaguesAsync(PoeNinjaFetcher.PoeGame.Poe2);
@@ -72,36 +83,73 @@ public partial class PriceTaggerView : UserControl
         PopulateLeagueCombo(poe1Leagues, poe2Leagues);
 
         var preferredGame = _clientGame ?? _activeGame;
-
-        if (selectCurrentLeague)
+        var current = (preferredGame == PoeNinjaFetcher.PoeGame.Poe1 ? poe1Leagues : poe2Leagues)
+            .FirstOrDefault();
+        if (current is not null)
         {
-            var current = (preferredGame == PoeNinjaFetcher.PoeGame.Poe1 ? poe1Leagues : poe2Leagues)
-                .FirstOrDefault();
-            if (current is not null)
-            {
-                var choice = new LeagueChoice(preferredGame, current.Id);
-                ApplyLeague(choice);
-                CacheLeague(choice);
-            }
-            return;
-        }
-
-        if (TryGetCachedLeague(out var cachedLeague) && IsCompatibleWithClient(cachedLeague))
-        {
-            SetActiveGame(cachedLeague.Game);
-            ApplyLeague(cachedLeague);
-            return;
-        }
-
-        var defaultLeague = (preferredGame == PoeNinjaFetcher.PoeGame.Poe1
-            ? poe1Leagues
-            : poe2Leagues).FirstOrDefault();
-        if (defaultLeague is not null)
-        {
-            var choice = new LeagueChoice(preferredGame, defaultLeague.Id);
+            var choice = new LeagueChoice(preferredGame, current.Id);
             ApplyLeague(choice);
             CacheLeague(choice);
         }
+
+        if (poe1Leagues.Count > 0 || poe2Leagues.Count > 0)
+            LeagueManualHint.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Pre-fill the league box with the league the user used last time.
+    /// No network call, no game data access.
+    /// </summary>
+    private void RestoreCachedLeague()
+    {
+        if (!TryGetCachedLeague(out var cachedLeague) || !IsCompatibleWithClient(cachedLeague))
+            return;
+
+        // Register it so the combo does not drop the selection on focus loss
+        // before the league list has been fetched.
+        _leagueGames[cachedLeague.League] = cachedLeague.Game;
+        SetActiveGame(cachedLeague.Game);
+        ApplyLeague(cachedLeague);
+    }
+
+    // ═══ Idle release ══════════════════════════════════════════
+
+    /// <summary>True while a detect / client scan / apply job is still running.</summary>
+    public bool IsBusy => _detectingLeague || _applying || Volatile.Read(ref _scanningClient) > 0;
+
+    /// <summary>
+    /// Drop everything the detect and apply steps produced: league list, detected
+    /// client version, log text, statistics. Called by the plugin 5s after the user
+    /// leaves this module; the view is thrown away right afterwards, so this only
+    /// has to break the references that would otherwise keep that data alive.
+    /// </summary>
+    public void ReleaseMemory()
+    {
+        _selectedLeague = null;
+        _clientGame = null;
+        _leagueGames.Clear();
+        _cachedLangStatus = null;
+        _langSwapped = false;
+        _totalProcessed = _totalUpdated = _totalSkipped = 0;
+
+        LeagueCombo.Items.Clear();
+        LeagueCombo.SelectedItem = null;
+        _customLeagueItem = null;
+        LeagueCombo.Text = UILabels.Get("LeagueHint");
+        LeagueManualHint.Visibility = Visibility.Visible;
+        UpdateLeagueGameHint();
+        UpdatePermanentTcAvailability();
+
+        OutputBox.Document.Blocks.Clear();
+        SetPlaceholder(true);
+        StatusLabel.Text = UILabels.Get("Ready");
+        StatusCategory.Text = "";
+        StatusTime.Text = "";
+        ProgressBar.Value = 0;
+        ProgressBar.Visibility = Visibility.Collapsed;
+        ProgressPct.Text = "";
+        StatProcessed.Text = StatUpdated.Text = StatSkipped.Text = "0";
+        StatDuration.Text = "--";
     }
 
     private void RestoreCachedGamePreference()
@@ -212,6 +260,7 @@ public partial class PriceTaggerView : UserControl
         LblGGPK.Text = UILabels.Get("GGPK");
         GgpkPathHint.Text = UILabels.Get("GameDataHint");
         LblLeague.Text = UILabels.Get("League");
+        LeagueManualHint.Text = UILabels.Get("LeagueManualHint");
         LblCategories.Text = UILabels.Get("Categories");
         LblOptions.Text = UILabels.Get("Options");
         LblOutput.Text = UILabels.Get("Output");
@@ -292,8 +341,9 @@ public partial class PriceTaggerView : UserControl
         if (_cachedLangStatus == null)
         {
             StatusLabel.Text = isZh ? "检测语言状态..." : "Detecting language...";
-            _langSwapped = DetectLanguageMod(ggpkPath);
+            _langSwapped = await DetectLanguageModAsync(ggpkPath);
             _cachedLangStatus = _langSwapped ? "true" : "false";
+            _ptConfig.LangSwapped = _langSwapped; SavePtConfig();
             StatusLabel.Text = "Ready";
         }
 
@@ -320,49 +370,58 @@ public partial class PriceTaggerView : UserControl
 
         try
         {
-            using var gd = GameDataAccess.Open(ggpkPath);
-            var backup = IndexBackupService.Begin(gd);
-
-            if (gd.Index.TryGetFile("Art/UIImages1.txt", out var ff))
-            {
-                var fd = ff.Read().ToArray();
-                var txt = System.Text.Encoding.Unicode.GetString(fd);
-                var fr = txt.IndexOf("Common/FlagIcons/fr\"");
-                var cn = txt.IndexOf("Common/FlagIcons/zhCN\"");
-                var fc = txt.IndexOf("1.dds\" ", fr) + 7;
-                var cc = txt.IndexOf("1.dds\" ", cn) + 7;
-                if (fr > 0 && cn > fr && fc > 7 && cc > 7)
+            // Everything that touches the client runs off the UI thread. The callback reports what
+            // it changed; logging and control updates happen after the await, back on the dispatcher.
+            var (flagSwapped, langSwapped) = await GameDataLoader.UseAsync(
+                ggpkPath, GameDataMode.ReadWrite, (gd, _) =>
                 {
-                    var fb = fc * 2; var cb = cc * 2;
-                    var tmp = fd[fb..(fb + 26)].ToArray();
-                    Array.Copy(fd, cb, fd, fb, 26);
-                    Array.Copy(tmp, 0, fd, cb, 26);
-                    ff.Write(fd);
-                    LogSuccess("Flag swapped: fr ↔ zhCN");
-                }
-            }
+                    var backup = IndexBackupService.Begin(gd);
+                    var swappedFlag = false;
+                    var swappedLang = false;
 
-            if (gd.Index.TryGetFile("Data/Languages.dat", out var lf))
-            {
-                var dat = new DatContainer(lf.Read().ToArray(), "Languages.dat");
-                int frn = -1, tch = -1;
-                for (var i = 0; i < dat.FieldDatas.Count; ++i)
-                {
-                    var name = (string)dat.FieldDatas[i][1].Value;
-                    if (name == "French") frn = i;
-                    else if (name == "Traditional Chinese") tch = i;
-                }
-                (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
-                (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
-                lf.Write(dat.Save(false, false));
-                LogSuccess("Language swapped: French ↔ TC");
-            }
+                    if (gd.Index.TryGetFile("Art/UIImages1.txt", out var ff))
+                    {
+                        var fd = ff.Read().ToArray();
+                        var txt = System.Text.Encoding.Unicode.GetString(fd);
+                        var fr = txt.IndexOf("Common/FlagIcons/fr\"");
+                        var cn = txt.IndexOf("Common/FlagIcons/zhCN\"");
+                        var fc = txt.IndexOf("1.dds\" ", fr) + 7;
+                        var cc = txt.IndexOf("1.dds\" ", cn) + 7;
+                        if (fr > 0 && cn > fr && fc > 7 && cc > 7)
+                        {
+                            var fb = fc * 2; var cb = cc * 2;
+                            var tmp = fd[fb..(fb + 26)].ToArray();
+                            Array.Copy(fd, cb, fd, fb, 26);
+                            Array.Copy(tmp, 0, fd, cb, 26);
+                            ff.Write(fd);
+                            swappedFlag = true;
+                        }
+                    }
 
-            gd.Save();
-            IndexBackupService.Complete(gd, backup, "language-swap", new Dictionary<string, string>
-            {
-                ["restoringLanguage"] = restoring.ToString(),
-            });
+                    if (gd.Index.TryGetFile("Data/Languages.dat", out var lf))
+                    {
+                        var dat = new DatContainer(lf.Read().ToArray(), "Languages.dat");
+                        int frn = -1, tch = -1;
+                        for (var i = 0; i < dat.FieldDatas.Count; ++i)
+                        {
+                            var name = (string)dat.FieldDatas[i][1].Value;
+                            if (name == "French") frn = i;
+                            else if (name == "Traditional Chinese") tch = i;
+                        }
+                        (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
+                        (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
+                        lf.Write(dat.Save(false, false));
+                        swappedLang = true;
+                    }
+
+                    gd.Save();
+                    IndexBackupService.Complete(gd, backup, "language-swap", new Dictionary<string, string>
+                    {
+                        ["restoringLanguage"] = restoring.ToString(),
+                    });
+
+                    return Task.FromResult((swappedFlag, swappedLang));
+                });
 
             // Update state after successful swap
             _langSwapped = !restoring;
@@ -372,6 +431,8 @@ public partial class PriceTaggerView : UserControl
                 ? (isZh ? "还原语言" : "Restore Language")
                 : UILabels.Get("UiModBtn");
 
+            if (flagSwapped) LogSuccess("Flag swapped: fr ↔ zhCN");
+            if (langSwapped) LogSuccess("Language swapped: French ↔ TC");
             LogSuccess(restoring
                 ? (isZh ? "语言已还原！" : "Language restored!")
                 : (isZh ? "永久繁体中文已应用！" : "Permanent TC applied!"));
@@ -381,7 +442,7 @@ public partial class PriceTaggerView : UserControl
 
     // ═══ Restore GGPK ════════════════════════════════════════════
 
-    private void Restore_Click(object sender, RoutedEventArgs e)
+    private async void Restore_Click(object sender, RoutedEventArgs e)
     {
         var ggpkPath = GgpkPathBox.Text.Trim();
         if (!File.Exists(ggpkPath)) { LogError("Game data file not found."); return; }
@@ -398,8 +459,12 @@ public partial class PriceTaggerView : UserControl
 
         try
         {
-            using var gd = GameDataAccess.Open(ggpkPath);
-            IndexBackupService.RestoreBaseline(gd);
+            // RestoreBaseline rewrites the whole index — keep it off the UI thread.
+            await GameDataLoader.UseAsync(ggpkPath, GameDataMode.ReadWrite, (gd, _) =>
+            {
+                IndexBackupService.RestoreBaseline(gd);
+                return Task.CompletedTask;
+            });
 
             LogSuccess(isZh ? "游戏数据已还原！" : "Game data restored!");
             // Clear language mod cache after restore
@@ -513,19 +578,20 @@ public partial class PriceTaggerView : UserControl
             return;
         }
 
-        // No cache — auto-detect once on first run
-        AutoDetectGgpk();
+        // No cache — auto-detect once on first run (path only, the file itself
+        // is not opened until the user actually needs it)
+        AutoDetectGgpk(detectGame: false);
     }
 
     private void AutoDetectGgpk_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => AutoDetectGgpk();
 
-    private void AutoDetectGgpk()
+    private void AutoDetectGgpk(bool detectGame = true)
     {
         if (!string.IsNullOrWhiteSpace(GgpkPathBox.Text) && File.Exists(GgpkPathBox.Text))
             return;
 
         var path = PoeDetector.Default.DetectGameDataPath();
-        if (path is not null) { SetGgpkPath(path); return; }
+        if (path is not null) { SetGgpkPath(path, detectGame); return; }
     }
 
     private void BrowseGgpk_Click(object sender, RoutedEventArgs e)
@@ -542,7 +608,7 @@ public partial class PriceTaggerView : UserControl
         }
     }
 
-    private void SetGgpkPath(string path)
+    private void SetGgpkPath(string path, bool detectGame = true)
     {
         GgpkPathBox.Text = path;
         GgpkStatus.Text = $"✓ {path}";
@@ -550,48 +616,68 @@ public partial class PriceTaggerView : UserControl
         GgpkAutoHint.Visibility = Visibility.Collapsed;
         _ptConfig.GgpkPath = path; SavePtConfig();
         PublishGameContext(PoeGameKind.Unknown, path);
-        _ = DetectClientGameAsync(path);
+        if (detectGame)
+            _ = DetectClientGameAsync(path);
     }
 
     private async Task DetectCurrentClientGameAsync()
     {
         var ggpkPath = GgpkPathBox.Text.Trim();
-        if (File.Exists(ggpkPath))
-            await DetectClientGameAsync(ggpkPath);
+        if (!File.Exists(ggpkPath))
+        {
+            LogWarn("Game data not set — client version not detected.");
+            return;
+        }
+        await DetectClientGameAsync(ggpkPath);
     }
 
-    /// <summary>Detect language mod status (opens GGPK). Called only from UiMod.</summary>
-    private bool DetectLanguageMod(string ggpkPath)
+    /// <summary>Detect language mod status (opens game data). Called only from UiMod.</summary>
+    private async Task<bool> DetectLanguageModAsync(string ggpkPath)
     {
         try
         {
-            using var gd = GameDataAccess.Open(ggpkPath);
-            if (gd.Index.TryGetFile("Data/Languages.dat", out var langFr))
+            // Runs off the UI thread — parsing the client takes seconds.
+            return await GameDataLoader.UseAsync(ggpkPath, GameDataMode.Read, (gd, _) =>
             {
-                var dat = new DatContainer(langFr.Read().ToArray(), "Languages.dat");
-                var frId = dat.FieldDatas[1][1].Value as string;
-                _langSwapped = frId == "Traditional Chinese";
-                _ptConfig.LangSwapped = _langSwapped; SavePtConfig();
-                return _langSwapped;
-            }
+                if (gd.Index.TryGetFile("Data/Languages.dat", out var langFr))
+                {
+                    var dat = new DatContainer(langFr.Read().ToArray(), "Languages.dat");
+                    var frId = dat.FieldDatas[1][1].Value as string;
+                    return Task.FromResult(frId == "Traditional Chinese");
+                }
+                return Task.FromResult(false);
+            });
         }
-        catch { }
-        return false;
+        catch { return false; }
     }
 
     // ═══ League ════════════════════════════════════════════════
 
+    private bool _detectingLeague;
+
     private async void DetectLeague_Click(object sender, RoutedEventArgs e)
     {
+        if (_detectingLeague) return;
+        _detectingLeague = true;
+        DetectBtn.IsEnabled = false;
         StatusLabel.Text = "Detecting league...";
         try
         {
             await DetectCurrentClientGameAsync();
-            await LoadLeaguesAsync(selectCurrentLeague: true);
+            await DetectAndLoadLeaguesAsync();
             LogSuccess($"League: {LeagueCombo.Text}");
             StatusLabel.Text = "Ready";
         }
-        catch (Exception ex) { LogError($"Detect error: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            LogError($"Detect error: {ex.Message}");
+            StatusLabel.Text = "Failed";
+        }
+        finally
+        {
+            _detectingLeague = false;
+            DetectBtn.IsEnabled = true;
+        }
     }
 
     private async Task<PoeNinjaFetcher.PoeGame?> ResolveGameAsync(string league)
@@ -611,15 +697,13 @@ public partial class PriceTaggerView : UserControl
 
     private async Task<PoeNinjaFetcher.PoeGame?> DetectClientGameAsync(string gameDataPath)
     {
+        Interlocked.Increment(ref _scanningClient);
         try
         {
-            var game = await Task.Run(() =>
-            {
-                using var gameData = GameDataAccess.Open(gameDataPath, readOnly: true);
-                return gameData.IsPoe2Client
+            var game = await Task.Run(() => GameDataLoader.Use(gameDataPath, GameDataMode.Read, gameData =>
+                gameData.IsPoe2Client
                     ? PoeNinjaFetcher.PoeGame.Poe2
-                    : PoeNinjaFetcher.PoeGame.Poe1;
-            });
+                    : PoeNinjaFetcher.PoeGame.Poe1));
 
             if (!string.Equals(GgpkPathBox.Text.Trim(), gameDataPath, StringComparison.OrdinalIgnoreCase))
                 return null;
@@ -646,6 +730,10 @@ public partial class PriceTaggerView : UserControl
             if (string.Equals(GgpkPathBox.Text.Trim(), gameDataPath, StringComparison.OrdinalIgnoreCase))
                 LogError($"Unable to read client data: {ex.Message}");
             return null;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _scanningClient);
         }
     }
 
@@ -747,6 +835,7 @@ public partial class PriceTaggerView : UserControl
         StatDuration.Text = "--";
         _timer.Restart();
 
+        _applying = true;
         ApplyBtn.IsEnabled = false;
         ProgressBar.Visibility = Visibility.Visible;
         ProgressPct.Text = "0%";
@@ -787,6 +876,7 @@ public partial class PriceTaggerView : UserControl
                     : $"Price fetch did not complete; tagging was stopped: {string.Join(", ", failed)}");
                 StatusLabel.Text = "Failed";
                 StatusCategory.Text = "";
+                _applying = false;
                 ApplyBtn.IsEnabled = true;
                 ProgressBar.Visibility = Visibility.Collapsed;
                 _timer.Stop();
@@ -856,15 +946,14 @@ public partial class PriceTaggerView : UserControl
                     StatusLabel.Text = succeeded ? (dryRun ? "Dry run complete" : "Done") : "Failed";
                     StatusCategory.Text = "";
                     StatusTime.Text = $"Finished {DateTime.Now:HH:mm}";
+                    _applying = false;
                     ApplyBtn.IsEnabled = true;
                     LogInfo(new string('─', 40));
                     if (succeeded)
                         LogSuccess($"Finished — {_totalUpdated} updated, {_totalSkipped} skipped in {dur}");
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
-                    // Trim working set (release OS file cache pages from process memory)
-                    try { using var p = System.Diagnostics.Process.GetCurrentProcess(); SetProcessWorkingSetSize(p.Handle, -1, -1); } catch { }
+                    // The index that was opened for this run is closed now — hand the few hundred MB
+                    // back without blocking the UI thread on the collection itself.
+                    MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
                 });
             }
         });
@@ -950,7 +1039,4 @@ public partial class PriceTaggerView : UserControl
         OutputBox.Document.Blocks.Add(p);
         OutputBox.ScrollToEnd();
     }
-
-    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
-    private static extern bool SetProcessWorkingSetSize(IntPtr proc, int min, int max);
 }

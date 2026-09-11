@@ -34,6 +34,7 @@ try
         "dds-mapnumbers" => DdsTextReplacer.RunMapNumbers(remaining),
         "dds-remove-map-t" => DdsRegionCleaner.Run(remaining),
         "cmp" => CmdCmp(remaining),
+        "copy-file" => CmdCopyFile(remaining),
         "restore" => CmdRestore(remaining),
         "help" or "-h" or "--help" => Help(),
         _ => Unknown(command),
@@ -188,25 +189,27 @@ static int CmdModify(string[] a)
     if (a.Length < 1) { Console.Error.WriteLine("Usage: modify <Content.ggpk>"); return 1; }
     var path = a[0];
     Console.WriteLine($"Opening GGPK: {path}");
-    using var gd = GameDataAccess.Open(path);
 
-    var datc64Path = "data/traditional chinese/baseitemtypes.datc64";
-    if (gd.Index.TryGetFile(datc64Path, out var fr1))
+    return GameDataLoader.Use(path, GameDataMode.ReadWrite, gd =>
     {
-        Console.WriteLine($"Modifying {datc64Path}...");
-        var data = fr1.Read().ToArray();
-        var (is64, vf) = Datc64File.DetectFromExtension(datc64Path);
-        var file = Datc64File.FromBytes(data, "BaseItemTypes", is64, vf);
-        var oldName = file.Rows[0]["Name"];
-        file.Rows[0]["Name"] = oldName is string s && s.Length > 0 ? s + "1" : "Test1";
-        Console.WriteLine($"  Row 0: {oldName} -> {file.Rows[0]["Name"]}");
-        var backup = IndexBackupService.Begin(gd);
-        fr1.Write(file.ToBytes());
-        gd.Save();
-        IndexBackupService.Complete(gd, backup, "cli-modify");
-    }
-    Console.WriteLine("Done.");
-    return 0;
+        var datc64Path = "data/traditional chinese/baseitemtypes.datc64";
+        if (gd.Index.TryGetFile(datc64Path, out var fr1))
+        {
+            Console.WriteLine($"Modifying {datc64Path}...");
+            var data = fr1.Read().ToArray();
+            var (is64, vf) = Datc64File.DetectFromExtension(datc64Path);
+            var file = Datc64File.FromBytes(data, "BaseItemTypes", is64, vf);
+            var oldName = file.Rows[0]["Name"];
+            file.Rows[0]["Name"] = oldName is string s && s.Length > 0 ? s + "1" : "Test1";
+            Console.WriteLine($"  Row 0: {oldName} -> {file.Rows[0]["Name"]}");
+            var backup = IndexBackupService.Begin(gd);
+            fr1.Write(file.ToBytes());
+            gd.Save();
+            IndexBackupService.Complete(gd, backup, "cli-modify");
+        }
+        Console.WriteLine("Done.");
+        return 0;
+    });
 }
 
 // ═══ lang: swap French <-> TC ═══════════════════════════════
@@ -216,46 +219,48 @@ static int CmdLang(string[] a)
     var path = a[0];
 
     Console.WriteLine($"Opening GGPK: {path}");
-    using var gd = GameDataAccess.Open(path);
 
-    // Load definitions
-    var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
-    if (!File.Exists(defPath)) { Console.Error.WriteLine($"Not found: {defPath}"); return 1; }
-    DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
-
-    // Read Languages.dat
-    if (!gd.Index.TryGetFile("Data/Languages.dat", out var langFr))
-    { Console.Error.WriteLine("Languages.dat not found"); return 1; }
-    var dat = new DatContainer(langFr.Read().ToArray(), "Languages.dat");
-    Console.WriteLine($"Languages.dat: {dat.FieldDatas.Count} rows");
-
-    // Find French and TC
-    int frn = -1, tch = -1;
-    for (var i = 0; i < dat.FieldDatas.Count; ++i)
+    return GameDataLoader.Use(path, GameDataMode.ReadWrite, gd =>
     {
-        var name = (string)dat.FieldDatas[i][1].Value;
-        if (name == "French") frn = i;
-        else if (name == "Traditional Chinese") tch = i;
-    }
-    if (frn < 0 || tch < 0) { Console.Error.WriteLine("French or TC not found"); return 1; }
+        // Load definitions
+        var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
+        if (!File.Exists(defPath)) { Console.Error.WriteLine($"Not found: {defPath}"); return 1; }
+        DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
 
-    var rowFrn = dat.FieldDatas[frn];
-    var rowTch = dat.FieldDatas[tch];
-    Console.WriteLine($"  Before: French[{frn}] Id={rowFrn[1].Value}, Text={rowFrn[2].Value}");
-    Console.WriteLine($"  Before: TC[{tch}] Id={rowTch[1].Value}, Text={rowTch[2].Value}");
+        // Read Languages.dat
+        if (!gd.Index.TryGetFile("Data/Languages.dat", out var langFr))
+        { Console.Error.WriteLine("Languages.dat not found"); return 1; }
+        var dat = new DatContainer(langFr.Read().ToArray(), "Languages.dat");
+        Console.WriteLine($"Languages.dat: {dat.FieldDatas.Count} rows");
 
-    (rowTch[1], rowFrn[1]) = (rowFrn[1], rowTch[1]);
-    (rowTch[2], rowFrn[2]) = (rowFrn[2], rowTch[2]);
+        // Find French and TC
+        int frn = -1, tch = -1;
+        for (var i = 0; i < dat.FieldDatas.Count; ++i)
+        {
+            var name = (string)dat.FieldDatas[i][1].Value;
+            if (name == "French") frn = i;
+            else if (name == "Traditional Chinese") tch = i;
+        }
+        if (frn < 0 || tch < 0) { Console.Error.WriteLine("French or TC not found"); return 1; }
 
-    Console.WriteLine($"  After:  French[{frn}] Id={rowFrn[1].Value}, Text={rowFrn[2].Value}");
-    Console.WriteLine($"  After:  TC[{tch}] Id={rowTch[1].Value}, Text={rowTch[2].Value}");
+        var rowFrn = dat.FieldDatas[frn];
+        var rowTch = dat.FieldDatas[tch];
+        Console.WriteLine($"  Before: French[{frn}] Id={rowFrn[1].Value}, Text={rowFrn[2].Value}");
+        Console.WriteLine($"  Before: TC[{tch}] Id={rowTch[1].Value}, Text={rowTch[2].Value}");
 
-    var backup = IndexBackupService.Begin(gd);
-    langFr.Write(dat.Save(false, false));
-    gd.Save();
-    IndexBackupService.Complete(gd, backup, "cli-language-swap");
-    Console.WriteLine("Done! Select French to load TC content.");
-    return 0;
+        (rowTch[1], rowFrn[1]) = (rowFrn[1], rowTch[1]);
+        (rowTch[2], rowFrn[2]) = (rowFrn[2], rowTch[2]);
+
+        Console.WriteLine($"  After:  French[{frn}] Id={rowFrn[1].Value}, Text={rowFrn[2].Value}");
+        Console.WriteLine($"  After:  TC[{tch}] Id={rowTch[1].Value}, Text={rowTch[2].Value}");
+
+        var backup = IndexBackupService.Begin(gd);
+        langFr.Write(dat.Save(false, false));
+        gd.Save();
+        IndexBackupService.Complete(gd, backup, "cli-language-swap");
+        Console.WriteLine("Done! Select French to load TC content.");
+        return 0;
+    });
 }
 
 // ═══ ui: flag + lang toggle ════════════════════════════════
@@ -264,58 +269,61 @@ static int CmdUI(string[] a)
     if (a.Length < 1) { Console.Error.WriteLine("Usage: ui <Content.ggpk>"); return 1; }
     var path = a[0];
     Console.WriteLine($"UI Toggle: {path}");
-    using var gd = GameDataAccess.Open(path);
-    Console.WriteLine($"  Files: {gd.Index.Files.Count:N0}");
 
-    // Flag swap: fr <-> zhCN
-    Console.WriteLine("[1] Flag swap fr <-> zhCN...");
-    if (!gd.Index.TryGetFile("Art/UIImages1.txt", out var ff))
-    { Console.WriteLine("  UIImages1.txt not found!"); return 1; }
-    var fd = ff.Read().ToArray();
-    var txt = System.Text.Encoding.Unicode.GetString(fd);
-    var fr = txt.IndexOf("Common/FlagIcons/fr\"");
-    var cn = txt.IndexOf("Common/FlagIcons/zhCN\"");
-    var fc = txt.IndexOf("1.dds\" ", fr) + 7;
-    var cc = txt.IndexOf("1.dds\" ", cn) + 7;
-    if (fr > 0 && cn > fr && fc > 7 && cc > 7)
+    return GameDataLoader.Use(path, GameDataMode.ReadWrite, gd =>
     {
-        var fb = fc * 2; var cb = cc * 2;
-        var tmp = fd[fb..(fb + 26)].ToArray();
-        Array.Copy(fd, cb, fd, fb, 26);
-        Array.Copy(tmp, 0, fd, cb, 26);
-        Console.WriteLine("  Swapped");
-    }
-    var flagBackup = IndexBackupService.Begin(gd);
-    ff.Write(fd);
-    gd.Save();
-    IndexBackupService.Complete(gd, flagBackup, "cli-ui-flag-swap");
+        Console.WriteLine($"  Files: {gd.Index.Files.Count:N0}");
 
-    // Lang swap: French <-> TC
-    Console.WriteLine("[2] Lang swap French <-> TC...");
-    var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
-    if (!File.Exists(defPath)) { Console.Error.WriteLine("  DatDefinitions.json missing!"); return 1; }
-    DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
-    if (!gd.Index.TryGetFile("Data/Languages.dat", out var lf))
-    { Console.WriteLine("  Languages.dat not found!"); return 1; }
-    var dat = new DatContainer(lf.Read().ToArray(), "Languages.dat");
-    int frn = -1, tch = -1;
-    for (var i = 0; i < dat.FieldDatas.Count; ++i)
-    {
-        var nm = (string)dat.FieldDatas[i][1].Value;
-        if (nm == "French") frn = i;
-        else if (nm == "Traditional Chinese") tch = i;
-    }
-    (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
-    (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
-    Console.WriteLine($"  French[{frn}] Id={dat.FieldDatas[frn][1].Value}, Text={dat.FieldDatas[frn][2].Value}");
-    Console.WriteLine($"  TC[{tch}] Id={dat.FieldDatas[tch][1].Value}, Text={dat.FieldDatas[tch][2].Value}");
-    var languageBackup = IndexBackupService.Begin(gd);
-    lf.Write(dat.Save(false, false));
-    gd.Save();
-    IndexBackupService.Complete(gd, languageBackup, "cli-ui-language-swap");
+        // Flag swap: fr <-> zhCN
+        Console.WriteLine("[1] Flag swap fr <-> zhCN...");
+        if (!gd.Index.TryGetFile("Art/UIImages1.txt", out var ff))
+        { Console.WriteLine("  UIImages1.txt not found!"); return 1; }
+        var fd = ff.Read().ToArray();
+        var txt = System.Text.Encoding.Unicode.GetString(fd);
+        var fr = txt.IndexOf("Common/FlagIcons/fr\"");
+        var cn = txt.IndexOf("Common/FlagIcons/zhCN\"");
+        var fc = txt.IndexOf("1.dds\" ", fr) + 7;
+        var cc = txt.IndexOf("1.dds\" ", cn) + 7;
+        if (fr > 0 && cn > fr && fc > 7 && cc > 7)
+        {
+            var fb = fc * 2; var cb = cc * 2;
+            var tmp = fd[fb..(fb + 26)].ToArray();
+            Array.Copy(fd, cb, fd, fb, 26);
+            Array.Copy(tmp, 0, fd, cb, 26);
+            Console.WriteLine("  Swapped");
+        }
+        var flagBackup = IndexBackupService.Begin(gd);
+        ff.Write(fd);
+        gd.Save();
+        IndexBackupService.Complete(gd, flagBackup, "cli-ui-flag-swap");
 
-    Console.WriteLine("Done! Run again to toggle back.");
-    return 0;
+        // Lang swap: French <-> TC
+        Console.WriteLine("[2] Lang swap French <-> TC...");
+        var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
+        if (!File.Exists(defPath)) { Console.Error.WriteLine("  DatDefinitions.json missing!"); return 1; }
+        DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
+        if (!gd.Index.TryGetFile("Data/Languages.dat", out var lf))
+        { Console.WriteLine("  Languages.dat not found!"); return 1; }
+        var dat = new DatContainer(lf.Read().ToArray(), "Languages.dat");
+        int frn = -1, tch = -1;
+        for (var i = 0; i < dat.FieldDatas.Count; ++i)
+        {
+            var nm = (string)dat.FieldDatas[i][1].Value;
+            if (nm == "French") frn = i;
+            else if (nm == "Traditional Chinese") tch = i;
+        }
+        (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
+        (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
+        Console.WriteLine($"  French[{frn}] Id={dat.FieldDatas[frn][1].Value}, Text={dat.FieldDatas[frn][2].Value}");
+        Console.WriteLine($"  TC[{tch}] Id={dat.FieldDatas[tch][1].Value}, Text={dat.FieldDatas[tch][2].Value}");
+        var languageBackup = IndexBackupService.Begin(gd);
+        lf.Write(dat.Save(false, false));
+        gd.Save();
+        IndexBackupService.Complete(gd, languageBackup, "cli-ui-language-swap");
+
+        Console.WriteLine("Done! Run again to toggle back.");
+        return 0;
+    });
 }
 
 // ═══ name: item name modify ════════════════════════════════
@@ -324,25 +332,27 @@ static int CmdName(string[] a)
     if (a.Length < 1) { Console.Error.WriteLine("Usage: name <Content.ggpk>"); return 1; }
     var path = a[0];
     Console.WriteLine($"Name Modify: {path}");
-    using var gd = GameDataAccess.Open(path);
 
-    Console.WriteLine("[1] Modify name...");
-    var tcKey = "data/traditional chinese/baseitemtypes.datc64";
-    if (!gd.Index.TryGetFile(tcKey, out var nf))
-    { Console.WriteLine($"  {tcKey} not found!"); return 1; }
-    var nd = nf.Read().ToArray();
-    var (is64, vf) = Datc64File.DetectFromExtension(tcKey);
-    var dt = Datc64File.FromBytes(nd, "BaseItemTypes", is64, vf);
-    var old = dt.Rows[0]["Name"];
-    dt.Rows[0]["Name"] = old is string s && s.Length > 0 ? s + "1" : "Test1";
-    Console.WriteLine($"  {old} -> {dt.Rows[0]["Name"]}");
-    var nameBackup = IndexBackupService.Begin(gd);
-    nf.Write(dt.ToBytes());
-    gd.Save();
-    IndexBackupService.Complete(gd, nameBackup, "cli-name-modify");
+    return GameDataLoader.Use(path, GameDataMode.ReadWrite, gd =>
+    {
+        Console.WriteLine("[1] Modify name...");
+        var tcKey = "data/traditional chinese/baseitemtypes.datc64";
+        if (!gd.Index.TryGetFile(tcKey, out var nf))
+        { Console.WriteLine($"  {tcKey} not found!"); return 1; }
+        var nd = nf.Read().ToArray();
+        var (is64, vf) = Datc64File.DetectFromExtension(tcKey);
+        var dt = Datc64File.FromBytes(nd, "BaseItemTypes", is64, vf);
+        var old = dt.Rows[0]["Name"];
+        dt.Rows[0]["Name"] = old is string s && s.Length > 0 ? s + "1" : "Test1";
+        Console.WriteLine($"  {old} -> {dt.Rows[0]["Name"]}");
+        var nameBackup = IndexBackupService.Begin(gd);
+        nf.Write(dt.ToBytes());
+        gd.Save();
+        IndexBackupService.Complete(gd, nameBackup, "cli-name-modify");
 
-    Console.WriteLine("Done!");
-    return 0;
+        Console.WriteLine("Done!");
+        return 0;
+    });
 }
 
 // ═══ extract: datc64 → JSON ════════════════════════════════
@@ -365,44 +375,46 @@ static int CmdExtract(string[] a)
     Console.WriteLine($"Extracting {table} ({lang}) from {path}...");
     Console.WriteLine($"  Bundle path: {bundlePath}");
 
-    using var gameData = GameDataAccess.Open(path, readOnly: true);
-    var resolvedPath = bundlePath;
-    if (!gameData.TryGetFile(resolvedPath, out var fr))
+    return GameDataLoader.Use(path, GameDataMode.Read, gameData =>
     {
-        var fallbackPaths = lang.Equals("simplified chinese", StringComparison.OrdinalIgnoreCase)
-            ? new[] { "data/simplified chinese/baseitemtypes.datc64" }
-            : Array.Empty<string>();
-        foreach (var fallbackPath in fallbackPaths)
+        var resolvedPath = bundlePath;
+        if (!gameData.TryGetFile(resolvedPath, out var fr))
         {
-            if (!gameData.TryGetFile(fallbackPath, out fr)) continue;
-            resolvedPath = fallbackPath;
-            break;
+            var fallbackPaths = lang.Equals("simplified chinese", StringComparison.OrdinalIgnoreCase)
+                ? new[] { "data/simplified chinese/baseitemtypes.datc64" }
+                : Array.Empty<string>();
+            foreach (var fallbackPath in fallbackPaths)
+            {
+                if (!gameData.TryGetFile(fallbackPath, out fr)) continue;
+                resolvedPath = fallbackPath;
+                break;
+            }
         }
-    }
-    if (fr == null)
-    {
-        Console.Error.WriteLine($"  Not found: {bundlePath}");
-        foreach (var candidate in gameData.Index.Files.Values
-                     .Where(x => x.Path?.Contains("baseitemtypes", StringComparison.OrdinalIgnoreCase) == true)
-                     .Select(x => x.Path)
-                     .Order())
-            Console.Error.WriteLine($"  Candidate: {candidate}");
-        return 1;
-    }
-    if (!string.Equals(resolvedPath, bundlePath, StringComparison.Ordinal))
-        Console.WriteLine($"  Using fallback path: {resolvedPath}");
+        if (fr == null)
+        {
+            Console.Error.WriteLine($"  Not found: {bundlePath}");
+            foreach (var candidate in gameData.Index.Files.Values
+                         .Where(x => x.Path?.Contains("baseitemtypes", StringComparison.OrdinalIgnoreCase) == true)
+                         .Select(x => x.Path)
+                         .Order())
+                Console.Error.WriteLine($"  Candidate: {candidate}");
+            return 1;
+        }
+        if (!string.Equals(resolvedPath, bundlePath, StringComparison.Ordinal))
+            Console.WriteLine($"  Using fallback path: {resolvedPath}");
 
-    var data = fr.Read().ToArray();
-    Console.WriteLine($"  Read: {data.Length:N0} bytes");
+        var data = fr.Read().ToArray();
+        Console.WriteLine($"  Read: {data.Length:N0} bytes");
 
-    var (is64, vf) = Datc64File.DetectFromExtension(resolvedPath);
-    var dt = Datc64File.FromBytes(data, table, is64, vf);
-    Console.WriteLine($"  Parsed: {dt.Count} rows, {dt.Columns.Count} columns");
+        var (is64, vf) = Datc64File.DetectFromExtension(resolvedPath);
+        var dt = Datc64File.FromBytes(data, table, is64, vf);
+        Console.WriteLine($"  Parsed: {dt.Count} rows, {dt.Columns.Count} columns");
 
-    dt.ToJson(outPath);
-    Console.WriteLine($"  Saved: {outPath} ({new FileInfo(outPath).Length:N0} bytes)");
-    Console.WriteLine("Done!");
-    return 0;
+        dt.ToJson(outPath);
+        Console.WriteLine($"  Saved: {outPath} ({new FileInfo(outPath).Length:N0} bytes)");
+        Console.WriteLine("Done!");
+        return 0;
+    });
 }
 
 // ═══ build-name-dictionary ═══════════════════════════════════
@@ -450,24 +462,19 @@ static int CmdExtractAll(string[] a)
 
     Directory.CreateDirectory(outputRoot);
 
-    GameDataAccess? gameData = null;
-    try
-    {
-        gameData = GameDataAccess.Open(source, readOnly: true);
-    }
-    catch (FileNotFoundException) when (Directory.Exists(source))
-    {
-        // The source may be a plain directory containing extracted datc64 files.
-    }
-
     var total = 0;
     var succeeded = 0;
     var failed = 0;
+    var readFromGameData = false;
 
     try
     {
-        if (gameData is not null)
+        (total, succeeded, failed) = GameDataLoader.Use(source, GameDataMode.Read, gameData =>
         {
+            var done = 0;
+            var ok = 0;
+            var bad = 0;
+
             var records = gameData.Index.Files.Values
                 .Where(file => IsDatc64Path(file.Path))
                 .OrderBy(file => file.Path, StringComparer.OrdinalIgnoreCase)
@@ -476,7 +483,7 @@ static int CmdExtractAll(string[] a)
             Console.WriteLine($"Found {records.Count:N0} datc64 files in game data.");
             foreach (var file in records)
             {
-                total++;
+                done++;
                 if (ExportDatc64(
                         file.Path!,
                         file.Read().ToArray(),
@@ -485,54 +492,58 @@ static int CmdExtractAll(string[] a)
                         gameOverride,
                         out var error))
                 {
-                    succeeded++;
+                    ok++;
                 }
                 else
                 {
-                    failed++;
+                    bad++;
                     Console.Error.WriteLine($"  FAILED {file.Path}: {error}");
                 }
             }
-        }
-        else
-        {
-            if (!Directory.Exists(source))
-            {
-                Console.Error.WriteLine($"Source not found or unsupported: {source}");
-                return 1;
-            }
 
-            var files = Directory.EnumerateFiles(source, "*.*", SearchOption.AllDirectories)
-                .Where(IsDatc64Path)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            Console.WriteLine($"Found {files.Count:N0} datc64 files in directory.");
-            foreach (var file in files)
-            {
-                total++;
-                var relativePath = Path.GetRelativePath(source, file);
-                if (ExportDatc64(
-                        file,
-                        File.ReadAllBytes(file),
-                        relativePath,
-                        outputRoot,
-                        gameOverride,
-                        out var error))
-                {
-                    succeeded++;
-                }
-                else
-                {
-                    failed++;
-                    Console.Error.WriteLine($"  FAILED {relativePath}: {error}");
-                }
-            }
-        }
+            return (done, ok, bad);
+        });
+        readFromGameData = true;
     }
-    finally
+    catch (FileNotFoundException) when (Directory.Exists(source))
     {
-        gameData?.Dispose();
+        // The source may be a plain directory containing extracted datc64 files.
+    }
+
+    if (!readFromGameData)
+    {
+        if (!Directory.Exists(source))
+        {
+            Console.Error.WriteLine($"Source not found or unsupported: {source}");
+            return 1;
+        }
+
+        var files = Directory.EnumerateFiles(source, "*.*", SearchOption.AllDirectories)
+            .Where(IsDatc64Path)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Console.WriteLine($"Found {files.Count:N0} datc64 files in directory.");
+        foreach (var file in files)
+        {
+            total++;
+            var relativePath = Path.GetRelativePath(source, file);
+            if (ExportDatc64(
+                    file,
+                    File.ReadAllBytes(file),
+                    relativePath,
+                    outputRoot,
+                    gameOverride,
+                    out var error))
+            {
+                succeeded++;
+            }
+            else
+            {
+                failed++;
+                Console.Error.WriteLine($"  FAILED {relativePath}: {error}");
+            }
+        }
     }
 
     Console.WriteLine($"Done. Total: {total:N0}, exported: {succeeded:N0}, failed: {failed:N0}");
@@ -595,84 +606,87 @@ static int CmdPatch(string[] a)
     var path = a[0];
 
     Console.WriteLine($"Opening: {path}");
-    using var gd = GameDataAccess.Open(path);
-    Console.WriteLine($"Files: {gd.Index.Files.Count:N0}");
 
-    Console.WriteLine($"Index: {gd.Index.Files.Count:N0} files, {gd.Index.Bundles.Length:N0} bundles");
-
-    // ── 1. Flag swap: fr <-> zhCN ──
-    Console.WriteLine("\n[1] Flag swap fr <-> zhCN...");
-    if (!gd.Index.TryGetFile("Art/UIImages1.txt", out var flagFile))
-    { Console.WriteLine("  UIImages1.txt not found!"); return 1; }
-    var flagData = flagFile.Read().ToArray();
-    var text = System.Text.Encoding.Unicode.GetString(flagData);
-
-    // 1x: swap coords
-    var fr1x = text.IndexOf("Common/FlagIcons/fr\"");
-    var cn1x = text.IndexOf("Common/FlagIcons/zhCN\"");
-    var fc = text.IndexOf("1.dds\" ", fr1x) + 7;
-    var cc = text.IndexOf("1.dds\" ", cn1x) + 7;
-    if (fr1x > 0 && cn1x > fr1x && fc > 7 && cc > 7)
+    return GameDataLoader.Use(path, GameDataMode.ReadWrite, gd =>
     {
-        var fb = fc * 2; var cb = cc * 2;
-        var tmp = flagData[fb..(fb + 26)].ToArray();
-        Array.Copy(flagData, cb, flagData, fb, 26);
-        Array.Copy(tmp, 0, flagData, cb, 26);
-        Console.WriteLine("  1x coords swapped");
-    }
-    var patchFlagBackup = IndexBackupService.Begin(gd);
-    flagFile.Write(flagData);
-    gd.Save(); // Flush bundle so next write can read it
-    IndexBackupService.Complete(gd, patchFlagBackup, "cli-patch-flag-swap");
+        Console.WriteLine($"Files: {gd.Index.Files.Count:N0}");
 
-    // ── 2. Lang swap: French <-> TC ──
-    Console.WriteLine("[2] Lang swap French <-> TC...");
-    var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
-    if (!File.Exists(defPath)) { Console.Error.WriteLine("  DatDefinitions.json missing!"); return 1; }
-    DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
+        Console.WriteLine($"Index: {gd.Index.Files.Count:N0} files, {gd.Index.Bundles.Length:N0} bundles");
 
-    if (!gd.Index.TryGetFile("Data/Languages.dat", out var langFile))
-    { Console.WriteLine("  Languages.dat not found!"); return 1; }
-    var dat = new DatContainer(langFile.Read().ToArray(), "Languages.dat");
-    int frn = -1, tch = -1;
-    for (var i = 0; i < dat.FieldDatas.Count; ++i)
-    {
-        var name = (string)dat.FieldDatas[i][1].Value;
-        if (name == "French") frn = i;
-        else if (name == "Traditional Chinese") tch = i;
-    }
-    if (frn < 0 || tch < 0) { Console.WriteLine("  French or TC not found!"); return 1; }
-    // Swap Id[1] and Text[2] only (PoeChinese3 approach)
-    (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
-    (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
-    Console.WriteLine($"  French[{frn}] Id={dat.FieldDatas[frn][1].Value}, Text={dat.FieldDatas[frn][2].Value}");
-    Console.WriteLine($"  TC[{tch}] Id={dat.FieldDatas[tch][1].Value}, Text={dat.FieldDatas[tch][2].Value}");
-    Console.WriteLine("  => In game menu, select the option showing TC text (繁體中文)");
-    var patchLanguageBackup = IndexBackupService.Begin(gd);
-    langFile.Write(dat.Save(false, false));
-    gd.Save(); // Flush bundle
-    IndexBackupService.Complete(gd, patchLanguageBackup, "cli-patch-language-swap");
+        // ── 1. Flag swap: fr <-> zhCN ──
+        Console.WriteLine("\n[1] Flag swap fr <-> zhCN...");
+        if (!gd.Index.TryGetFile("Art/UIImages1.txt", out var flagFile))
+        { Console.WriteLine("  UIImages1.txt not found!"); return 1; }
+        var flagData = flagFile.Read().ToArray();
+        var text = System.Text.Encoding.Unicode.GetString(flagData);
 
-    // ── 3. Name modify: 磨刀石 -> 磨刀石1 ──
-    Console.WriteLine("[3] Modify name...");
-    var tcKey = "data/traditional chinese/baseitemtypes.datc64";
-    if (!gd.Index.TryGetFile(tcKey, out var nameFile))
-    { Console.WriteLine($"  {tcKey} not found!"); return 1; }
-    var nameData = nameFile.Read().ToArray();
-    var (is64, vf) = Datc64File.DetectFromExtension(tcKey);
-    var dtFile = Datc64File.FromBytes(nameData, "BaseItemTypes", is64, vf);
-    var oldName = dtFile.Rows[0]["Name"];
-    dtFile.Rows[0]["Name"] = oldName is string s && s.Length > 0 ? s + "1" : "Test1";
-    Console.WriteLine($"  {oldName} -> {dtFile.Rows[0]["Name"]}");
-    var patchNameBackup = IndexBackupService.Begin(gd);
-    nameFile.Write(dtFile.ToBytes());
+        // 1x: swap coords
+        var fr1x = text.IndexOf("Common/FlagIcons/fr\"");
+        var cn1x = text.IndexOf("Common/FlagIcons/zhCN\"");
+        var fc = text.IndexOf("1.dds\" ", fr1x) + 7;
+        var cc = text.IndexOf("1.dds\" ", cn1x) + 7;
+        if (fr1x > 0 && cn1x > fr1x && fc > 7 && cc > 7)
+        {
+            var fb = fc * 2; var cb = cc * 2;
+            var tmp = flagData[fb..(fb + 26)].ToArray();
+            Array.Copy(flagData, cb, flagData, fb, 26);
+            Array.Copy(tmp, 0, flagData, cb, 26);
+            Console.WriteLine("  1x coords swapped");
+        }
+        var patchFlagBackup = IndexBackupService.Begin(gd);
+        flagFile.Write(flagData);
+        gd.Save(); // Flush bundle so next write can read it
+        IndexBackupService.Complete(gd, patchFlagBackup, "cli-patch-flag-swap");
 
-    // ── Save ──
-    Console.WriteLine("[4] Saving...");
-    gd.Save();
-    IndexBackupService.Complete(gd, patchNameBackup, "cli-patch-name-modify");
-    Console.WriteLine("Done! Flag + Lang applied.");
-    return 0;
+        // ── 2. Lang swap: French <-> TC ──
+        Console.WriteLine("[2] Lang swap French <-> TC...");
+        var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
+        if (!File.Exists(defPath)) { Console.Error.WriteLine("  DatDefinitions.json missing!"); return 1; }
+        DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
+
+        if (!gd.Index.TryGetFile("Data/Languages.dat", out var langFile))
+        { Console.WriteLine("  Languages.dat not found!"); return 1; }
+        var dat = new DatContainer(langFile.Read().ToArray(), "Languages.dat");
+        int frn = -1, tch = -1;
+        for (var i = 0; i < dat.FieldDatas.Count; ++i)
+        {
+            var name = (string)dat.FieldDatas[i][1].Value;
+            if (name == "French") frn = i;
+            else if (name == "Traditional Chinese") tch = i;
+        }
+        if (frn < 0 || tch < 0) { Console.WriteLine("  French or TC not found!"); return 1; }
+        // Swap Id[1] and Text[2] only (PoeChinese3 approach)
+        (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
+        (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
+        Console.WriteLine($"  French[{frn}] Id={dat.FieldDatas[frn][1].Value}, Text={dat.FieldDatas[frn][2].Value}");
+        Console.WriteLine($"  TC[{tch}] Id={dat.FieldDatas[tch][1].Value}, Text={dat.FieldDatas[tch][2].Value}");
+        Console.WriteLine("  => In game menu, select the option showing TC text (繁體中文)");
+        var patchLanguageBackup = IndexBackupService.Begin(gd);
+        langFile.Write(dat.Save(false, false));
+        gd.Save(); // Flush bundle
+        IndexBackupService.Complete(gd, patchLanguageBackup, "cli-patch-language-swap");
+
+        // ── 3. Name modify: 磨刀石 -> 磨刀石1 ──
+        Console.WriteLine("[3] Modify name...");
+        var tcKey = "data/traditional chinese/baseitemtypes.datc64";
+        if (!gd.Index.TryGetFile(tcKey, out var nameFile))
+        { Console.WriteLine($"  {tcKey} not found!"); return 1; }
+        var nameData = nameFile.Read().ToArray();
+        var (is64, vf) = Datc64File.DetectFromExtension(tcKey);
+        var dtFile = Datc64File.FromBytes(nameData, "BaseItemTypes", is64, vf);
+        var oldName = dtFile.Rows[0]["Name"];
+        dtFile.Rows[0]["Name"] = oldName is string s && s.Length > 0 ? s + "1" : "Test1";
+        Console.WriteLine($"  {oldName} -> {dtFile.Rows[0]["Name"]}");
+        var patchNameBackup = IndexBackupService.Begin(gd);
+        nameFile.Write(dtFile.ToBytes());
+
+        // ── Save ──
+        Console.WriteLine("[4] Saving...");
+        gd.Save();
+        IndexBackupService.Complete(gd, patchNameBackup, "cli-patch-name-modify");
+        Console.WriteLine("Done! Flag + Lang applied.");
+        return 0;
+    });
 }
 
 // ═══ restore: restore from backup ══════════════════════════
@@ -680,11 +694,56 @@ static int CmdRestore(string[] a)
 {
     if (a.Length != 1) { Console.WriteLine("Usage: restore <Content.ggpk|_.index.bin>"); return 1; }
 
-    using var gd = GameDataAccess.Open(a[0]);
-    Console.WriteLine($"Restoring baseline -> {gd.GameDataPath}");
-    IndexBackupService.RestoreBaseline(gd);
-    Console.WriteLine("Restored.");
-    return 0;
+    return GameDataLoader.Use(a[0], GameDataMode.ReadWrite, gd =>
+    {
+        Console.WriteLine($"Restoring baseline -> {gd.GameDataPath}");
+        IndexBackupService.RestoreBaseline(gd);
+        Console.WriteLine("Restored.");
+        return 0;
+    });
+}
+
+// ═══ copy-file: copy an indexed file to a new path ═════════
+static int CmdCopyFile(string[] a)
+{
+    if (a.Length != 3)
+    {
+        Console.Error.WriteLine("Usage: copy-file <game-data> <source-path> <destination-path>");
+        return 1;
+    }
+
+    var sourcePath = a[1].Replace('\\', '/');
+    var destinationPath = a[2].Replace('\\', '/');
+
+    return GameDataLoader.Use(a[0], GameDataMode.ReadWrite, gd =>
+    {
+        if (!gd.FileExists(sourcePath))
+        {
+            Console.Error.WriteLine($"Source file not found in index: {sourcePath}");
+            return 1;
+        }
+        if (gd.FileExists(destinationPath))
+        {
+            Console.Error.WriteLine($"Destination already exists in index: {destinationPath}");
+            return 1;
+        }
+
+        var backup = IndexBackupService.Begin(gd);
+        var created = gd.CopyFileAs(sourcePath, destinationPath);
+        IndexBackupService.Complete(gd, backup, "cli-copy-file", new Dictionary<string, string>
+        {
+            ["sourcePath"] = sourcePath,
+            ["destinationPath"] = destinationPath,
+            ["size"] = created.Size.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        });
+
+        Console.WriteLine($"[OK] Copied {sourcePath}");
+        Console.WriteLine($"     -> {destinationPath} ({created.Size:N0} bytes)");
+        Console.WriteLine($"     bundle: {created.BundleRecord.Path}");
+        Console.WriteLine($"     baseline: {backup.BaselinePath}");
+        Console.WriteLine("     The original file is unchanged.");
+        return 0;
+    });
 }
 
 
@@ -781,6 +840,7 @@ static void PrintUsage()
     Console.WriteLine("  dds-mapnumbers <in> <out> [font-size] Write centered 1-16 with white/yellow/red colors");
     Console.WriteLine("  dds-remove-map-t <in> <out> [first] [last] Remove T from mapnumber DDS files");
     Console.WriteLine("  cmp <file>     Round-trip encoder test");
+    Console.WriteLine("  copy-file <game-data> <src-path> <dest-path> Copy a file to a new path (isolated)");
     Console.WriteLine("  restore <game-data> Restore the original baseline index");
 }
 static int Help() { PrintUsage(); return 0; }
