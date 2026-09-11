@@ -15,7 +15,8 @@ public sealed record UpdateCheckResult(
 
 public static class UpdateChecker
 {
-    private const string UpdateUrl = "https://gitee.com/osmc/poe-toolbox/raw/main/version.json";
+    private const string PrimaryUpdateUrl = "https://gitee.com/osmc/poe-toolbox/raw/main/version.json";
+    private const string FallbackUpdateUrl = "https://raw.githubusercontent.com/machenme/poe-toolbox/main/version.json";
     private const string LastCheckedAtKey = "Update.LastCheckedAt";
     private const string CachedResultKey = "Update.CachedResult";
     private const string SkippedVersionKey = "Update.SkippedVersion";
@@ -63,9 +64,7 @@ public static class UpdateChecker
 
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var json = await http.GetStringAsync(UpdateUrl).ConfigureAwait(false);
-            var update = JsonSerializer.Deserialize<UpdateInfo>(json, JsonOptions);
+            var update = await FetchUpdateInfoAsync().ConfigureAwait(false);
             var currentVersion = GetCurrentVersion();
             var latestVersion = ParseVersion(update?.Version);
             var hasUpdate = HasUpdate(currentVersion, latestVersion);
@@ -86,6 +85,24 @@ public static class UpdateChecker
             FileLogger.WriteCritical("Failed to check for updates.", ex);
             return GetCachedResult();
         }
+    }
+
+    private static async Task<UpdateInfo?> FetchUpdateInfoAsync()
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+
+        try
+        {
+            var json = await http.GetStringAsync(PrimaryUpdateUrl).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<UpdateInfo>(json, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            FileLogger.WriteCritical("Failed to fetch primary update source, trying fallback.", ex);
+        }
+
+        var fallbackJson = await http.GetStringAsync(FallbackUpdateUrl).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<UpdateInfo>(fallbackJson, JsonOptions);
     }
 
     public static void ClearCachedResult()
