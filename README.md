@@ -85,7 +85,7 @@ dotnet test tests\PoEToolbox.Tests\PoEToolbox.Tests.csproj -c Release
 仓库包含 `.github/workflows/build.yml`：
 
 * Pull Request 和 `main` 分支提交会在 Windows runner 上执行测试并构建 `PoEToolbox.exe`，构建结果可在 Actions 的 Artifacts 下载。
-* 推送 `v` 开头且与 `version.json` 版本一致的 tag，会自动创建 GitHub Release，并上传只含 `PoEToolbox.exe` 的 `PoEToolbox-win-x64.zip`。
+* 推送 `v` 开头且与 `version.json` 版本一致的 tag，会自动创建 GitHub Release，并上传只含 `PoEToolbox.exe` 的 `PoEToolbox-win-x64.zip`；Release 正文自动取自 `version.json` 的 `notes` 字段。
 * 也可以在 GitHub 的 **Actions → Build PoEToolbox → Run workflow** 手动构建并下载 exe artifact；手动运行不会创建 Release。
 
 发布前先更新 `version.json`，然后提交并推送，再创建同版本 tag：
