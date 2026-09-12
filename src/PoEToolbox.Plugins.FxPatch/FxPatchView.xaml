@@ -62,7 +62,7 @@
                     <TextBlock Text="操作" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
                     <Button x:Name="StatusButton" Content="查看补丁状态"
                             Style="{StaticResource SecondaryButton}" Height="38" Click="Status_Click"/>
-                    <Button x:Name="ApplyButton" Content="应用补丁（幂等，自动备份）"
+                    <Button x:Name="ApplyButton" Content="应用补丁（自动备份，重复执行安全）"
                             Style="{StaticResource PrimaryButton}" Height="44" Margin="0,8,0,0" Click="Apply_Click"/>
                     <Button x:Name="RevertButton" Content="还原补丁"
                             Style="{StaticResource SecondaryButton}" Height="38" Margin="0,8,0,0" Click="Revert_Click"/>
@@ -81,7 +81,7 @@
             <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="16">
                 <StackPanel>
                     <TextBlock Text="特效补丁管理" Style="{StaticResource TitleText}"/>
-                    <TextBlock Text="指令式补丁引擎：补丁 = 一份描述文件（几 KB），引擎就地修改索引，幂等可还原、与官方更新及其他补丁叠加共存。写入统一落在游戏索引同目录 PATCHED\ 的独立 bundle 中。"
+                    <TextBlock Text="指令式补丁引擎：补丁 = 一份描述文件（几 KB），引擎就地修改索引，重复执行不会出错、随时可还原，与官方更新及其他补丁叠加共存。写入统一落在游戏索引同目录 PATCHED\ 的独立 bundle 中。"
                                Style="{StaticResource NormalText}" Margin="0,5,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
