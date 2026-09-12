@@ -1,11 +1,13 @@
 using PoEToolbox.Sdk;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Interop;
 using System.ComponentModel;
 using System.Windows.Data;
 using System.Diagnostics;
 using System.IO;
+using System.Windows.Media;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.App;
@@ -53,6 +55,9 @@ public partial class MainWindow : Window
 
         ApplyVersionState(UpdateChecker.GetCachedResult());
         _ = LoadUpdateStateAsync();
+
+        // Mirror the file log (all modules' operations) into the global log dock.
+        FileLogger.EntryLogged += OnFileLogEntry;
     }
 
     private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -63,6 +68,7 @@ public partial class MainWindow : Window
         _activePlugin = plugin;
         try
         {
+            FileLogger.App.Info($"Plugin activated: {plugin.Name}");
             PluginContent.Content = plugin.CreateView();
             _activePlugin.OnActivated();
         }
@@ -112,6 +118,7 @@ public partial class MainWindow : Window
     {
         _pluginManager.EventBus.Publish(new ReleaseGameDataLocksRequested());
         OnGameDataLocksChanged(GameDataAccess.HasOpenLocks);
+        FileLogger.App.Info("User requested release of game data locks.");
         StatusLabel.Text = UILabels.Get("GgpkLocksReleased");
     }
 
@@ -247,6 +254,7 @@ public partial class MainWindow : Window
             _pluginManager.EventBus.Unsubscribe<GameContextChanged>(OnGameContextChanged);
             _pluginManager.EventBus.Unsubscribe<LeagueChanged>(OnLeagueChanged);
             GameDataAccess.LocksChanged -= OnGameDataLocksChanged;
+            FileLogger.EntryLogged -= OnFileLogEntry;
             _pluginManager.Shutdown();
         }
         catch (Exception ex)
@@ -348,5 +356,81 @@ public partial class MainWindow : Window
     {
         public string Name => Plugin?.Name ?? string.Empty;
         public string IconGlyph => Plugin?.IconGlyph ?? string.Empty;
+    }
+
+    // ═══ Global log dock ═══════════════════════════════════
+    private void GlobalLogToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var show = GlobalLogPanel.Visibility != Visibility.Visible;
+        GlobalLogPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        GlobalLogToggle.Content = show ? "▤ 收起日志" : "▤ 输出日志";
+        if (show) GlobalLogBox.ScrollToEnd();
+    }
+
+    private void HideGlobalLogButton_Click(object sender, RoutedEventArgs e)
+    {
+        GlobalLogPanel.Visibility = Visibility.Collapsed;
+        GlobalLogToggle.Content = "▤ 输出日志";
+    }
+
+    private void ClearGlobalLogButton_Click(object sender, RoutedEventArgs e)
+        => GlobalLogBox.Document.Blocks.Clear();
+
+    private void OnFileLogEntry(LogLevel level, string message, Exception? ex)
+    {
+        if (GlobalLogBox is null) return; // may fire before XAML is ready
+
+        void Append()
+        {
+            try
+            {
+                var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 2) };
+                var run = new Run($"[{DateTime.Now:HH:mm:ss.fff}] [{level}] {message}");
+                ApplyLogLevelStyle(run, level);
+                paragraph.Inlines.Add(run);
+                if (ex is not null)
+                {
+                    var exRun = new Run("  ⟶ " + ex.Message) { FontStyle = FontStyles.Italic };
+                    ApplyLogLevelStyle(exRun, level);
+                    paragraph.Inlines.Add(exRun);
+                }
+                GlobalLogBox.Document.Blocks.Add(paragraph);
+                while (GlobalLogBox.Document.Blocks.Count > 800)
+                    GlobalLogBox.Document.Blocks.Remove(GlobalLogBox.Document.Blocks.FirstBlock);
+                if (GlobalLogPanel.Visibility == Visibility.Visible)
+                    GlobalLogBox.ScrollToEnd();
+            }
+            catch
+            {
+                // The dispatcher may be shutting down.
+            }
+        }
+
+        if (!Dispatcher.CheckAccess())
+        {
+            try { Dispatcher.BeginInvoke(Append); } catch { }
+            return;
+        }
+        Append();
+    }
+
+    private static void ApplyLogLevelStyle(Run run, LogLevel level)
+    {
+        switch (level)
+        {
+            case LogLevel.Error:
+                run.SetResourceReference(TextElement.ForegroundProperty, "ErrorBrush");
+                run.FontWeight = FontWeights.Bold;
+                break;
+            case LogLevel.Warn:
+                run.SetResourceReference(TextElement.ForegroundProperty, "WarningBrush");
+                break;
+            case LogLevel.Debug:
+                run.SetResourceReference(TextElement.ForegroundProperty, "PlaceholderBrush");
+                break;
+            default:
+                run.SetResourceReference(TextElement.ForegroundProperty, "TextPrimaryBrush");
+                break;
+        }
     }
 }

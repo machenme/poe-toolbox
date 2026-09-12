@@ -225,14 +225,26 @@ public sealed class LibBundle3AddFileTests : IDisposable
     }
 
     [Fact]
-    public void PinnedWriteBundle_RejectsPathsOutsideTheCustomBundleArea()
+    public void PinnedWriteBundle_AllowsSafeSubdirectories_AndRejectsUnsafePaths()
     {
         var indexPath = BuildSeedIndex();
 
         using var index = new Index(indexPath, parsePaths: true);
-        Assert.Throws<ArgumentException>(() => { index.PinnedWriteBundlePath = "Seed/0"; });
+
+        // Safe relative subdirectory paths are allowed (per-patch bundles like PATCHED/<name>).
+        index.PinnedWriteBundlePath = "PATCHED/OilGrenade";
+        Assert.Equal("PATCHED/OilGrenade", index.PinnedWriteBundlePath);
+        index.PinnedWriteBundlePath = Index.DefaultWriteBundlePath;
+        Assert.Equal(Index.DefaultWriteBundlePath, index.PinnedWriteBundlePath);
+
+        // Unsafe paths are rejected: absolute, escaping, no subdirectory, or raw file extension.
+        Assert.Throws<ArgumentException>(() => { index.PinnedWriteBundlePath = "/Patch/0"; });
+        Assert.Throws<ArgumentException>(() => { index.PinnedWriteBundlePath = "../evil"; });
+        Assert.Throws<ArgumentException>(() => { index.PinnedWriteBundlePath = "0"; });
         Assert.Throws<ArgumentException>(() => { index.PinnedWriteBundlePath = "LibGGPK3/0.bundle.bin"; });
-        Assert.Null(index.PinnedWriteBundlePath);
+
+        // Rejected assignments must not clobber the previously accepted value.
+        Assert.Equal(Index.DefaultWriteBundlePath, index.PinnedWriteBundlePath);
     }
 
     [Fact]

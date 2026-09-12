@@ -9,7 +9,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>PoEToolbox.App</RootNamespace>
     <AssemblyName>PoEToolbox</AssemblyName>
-    <Version>0.1.6</Version>
+    <Version>0.1.8</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -26,6 +26,7 @@
     <ProjectReference Include="..\PoEToolbox.Plugins.Voyager\PoEToolbox.Plugins.Voyager.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.PoeCnPatch\PoEToolbox.Plugins.PoeCnPatch.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.Poe2Font\PoEToolbox.Plugins.Poe2Font.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Plugins.FxPatch\PoEToolbox.Plugins.FxPatch.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.TermTranslator\PoEToolbox.Plugins.TermTranslator.csproj" />
   </ItemGroup>
 

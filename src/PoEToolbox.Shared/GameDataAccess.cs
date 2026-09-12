@@ -79,24 +79,37 @@ public sealed class GameDataAccess : IDisposable
     /// Opens a data source for browsing only. A direct Bundles2 index is mapped
     /// read-only so the browser does not need a writable file handle.
     /// </summary>
-    public static GameDataAccess OpenReadOnlyMapped(string path)
-        => OpenCore(path, readOnly: true, memoryMapBundles2Index: true);
+    /// <param name="bundleDirectory">
+    /// Optional override for where bundle files live. Defaults to the index's own directory.
+    /// Needed when the index is a snapshot copy (e.g. a backup) whose bundles remain in the game's Bundles2 directory.
+    /// </param>
+    public static GameDataAccess OpenReadOnlyMapped(string path, string? bundleDirectory = null)
+        => OpenCore(path, readOnly: true, memoryMapBundles2Index: true, bundleDirectory);
 
-    private static GameDataAccess OpenCore(string path, bool readOnly, bool memoryMapBundles2Index)
+    private static GameDataAccess OpenCore(string path, bool readOnly, bool memoryMapBundles2Index, string? bundleDirectory = null)
     {
         var resolved = ResolvePath(path);
+        FileLogger.App.Info($"Opening game data: {resolved} ({(readOnly ? "read-only" : "read-write")})");
         var gd = new GameDataAccess();
         gd._pinWrites = !readOnly;
 
-        if (resolved.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            gd.OpenGgpk(resolved);
-            gd._gameDataPath = resolved;
+            if (resolved.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase))
+            {
+                gd.OpenGgpk(resolved);
+                gd._gameDataPath = resolved;
+                return gd.MarkOpened();
+            }
+
+            gd.OpenBundles2Index(resolved, readOnly, memoryMapBundles2Index, bundleDirectory);
             return gd.MarkOpened();
         }
-
-        gd.OpenBundles2Index(resolved, readOnly, memoryMapBundles2Index);
-        return gd.MarkOpened();
+        catch (Exception ex)
+        {
+            FileLogger.App.Error($"Failed to open game data: {resolved}", ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -118,7 +131,7 @@ public sealed class GameDataAccess : IDisposable
 
         if (System.IO.File.Exists(full)
             && (full.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase)
-                || full.EndsWith("_.index.bin", StringComparison.OrdinalIgnoreCase)))
+                || full.EndsWith(".index.bin", StringComparison.OrdinalIgnoreCase)))
             return full;
 
         if (System.IO.Directory.Exists(full))
@@ -163,12 +176,13 @@ public sealed class GameDataAccess : IDisposable
         Interlocked.Increment(ref _openSequence);
         if (Interlocked.Increment(ref _openInstanceCount) == 1)
             LocksChanged?.Invoke(true);
+        FileLogger.App.Info($"Game data opened: {_gameDataPath} ({(_isDirectIndex ? "Bundles2 index" : "GGPK")}, open instances: {_openInstanceCount})");
         return this;
     }
 
-    private void OpenBundles2Index(string indexPath, bool readOnly, bool memoryMapIndex)
+    private void OpenBundles2Index(string indexPath, bool readOnly, bool memoryMapIndex, string? bundleDirectory = null)
     {
-        var bundleDir = System.IO.Path.GetDirectoryName(indexPath)!;
+        var bundleDir = bundleDirectory ?? System.IO.Path.GetDirectoryName(indexPath)!;
         var bundleFactory = new DriveBundleFactory(bundleDir, readOnly);
 
         if (memoryMapIndex)
@@ -233,6 +247,7 @@ public sealed class GameDataAccess : IDisposable
     /// <exception cref="InvalidOperationException"><paramref name="destPath"/> already exists</exception>
     public LibBundle3.Records.FileRecord CopyFileAs(string sourcePath, string destPath)
     {
+        FileLogger.App.Info($"CopyFileAs: {sourcePath} -> {destPath}");
         var file = Index.CopyFile(sourcePath, destPath);
         Save();
         return file;
@@ -244,6 +259,7 @@ public sealed class GameDataAccess : IDisposable
     /// <exception cref="InvalidOperationException"><paramref name="path"/> already exists</exception>
     public LibBundle3.Records.FileRecord AddFile(string path, byte[] content)
     {
+        FileLogger.App.Info($"AddFile: {path} ({content.Length} bytes)");
         var file = Index.AddFile(path, content);
         Save();
         return file;
@@ -295,6 +311,7 @@ public sealed class GameDataAccess : IDisposable
     /// <summary>Write raw index bytes (for restore/replace).</summary>
     public void WriteIndexBytes(byte[] data)
     {
+        FileLogger.App.Info($"Index replaced externally: {_gameDataPath} ({data.Length} bytes)");
         if (_isDirectIndex)
         {
             // Close existing handle before overwriting
@@ -343,6 +360,9 @@ public sealed class GameDataAccess : IDisposable
         _mappedIndex = null;
 
         if (_registeredOpen && Interlocked.Decrement(ref _openInstanceCount) == 0)
+        {
             LocksChanged?.Invoke(false);
+            FileLogger.App.Info("Game data locks released (no open instances).");
+        }
     }
 }

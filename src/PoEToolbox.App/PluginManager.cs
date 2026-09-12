@@ -31,6 +31,7 @@ public class PluginManager
         Register(new PoEToolbox.Plugins.TermTranslator.TermTranslatorPlugin());
         Register(new PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin());
         Register(new PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin());
+        Register(new PoEToolbox.Plugins.FxPatch.FxPatchPlugin());
         // Voyager is temporarily hidden from the navigation without removing the plugin code.
     }
 

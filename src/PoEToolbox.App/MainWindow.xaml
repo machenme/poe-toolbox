@@ -9,6 +9,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="64"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="32"/>
         </Grid.RowDefinitions>
 
@@ -185,12 +186,57 @@
             <ContentControl x:Name="PluginContent" Grid.Column="2"/>
         </Grid>
 
+        <!-- ═══ Global log dock (collapsed by default) ═══════════ -->
+        <Border x:Name="GlobalLogPanel" Grid.Row="2" Height="220"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Visibility="Collapsed">
+            <Grid Margin="12,6,12,6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid>
+                    <TextBlock Text="全局输出日志（全部模块的操作流水，与文件日志同源）"
+                               Style="{StaticResource SmallText}" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="ClearGlobalLogButton" Content="清空" Click="ClearGlobalLogButton_Click"
+                                Style="{StaticResource SecondaryButton}" Height="24" Padding="10,0"
+                                FontSize="11" VerticalAlignment="Center"/>
+                        <Button x:Name="HideGlobalLogButton" Content="收起" Click="HideGlobalLogButton_Click"
+                                Style="{StaticResource SecondaryButton}" Height="24" Padding="10,0"
+                                FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+                <RichTextBox x:Name="GlobalLogBox" Grid.Row="1" IsReadOnly="True"
+                             Margin="0,6,0,0" FontFamily="Consolas" FontSize="12"
+                             Background="{DynamicResource InputBgBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1" Padding="8,4"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto">
+                    <FlowDocument PagePadding="0">
+                        <Paragraph Margin="0"/>
+                    </FlowDocument>
+                </RichTextBox>
+            </Grid>
+        </Border>
+
         <!-- ═══ Status Bar (32px) ════════════════════════════════ -->
-        <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" Padding="12,0">
+        <Border Grid.Row="3" Background="{DynamicResource SurfaceBrush}" Padding="12,0">
             <Grid>
                 <TextBlock x:Name="StatusLabel" Text="Ready"
                            Style="{StaticResource SmallText}"
                            VerticalAlignment="Center"/>
+                <Button x:Name="GlobalLogToggle" Click="GlobalLogToggle_Click"
+                        Content="▤ 输出日志"
+                        Style="{StaticResource SecondaryButton}"
+                        Height="24" Padding="10,0" FontSize="11"
+                        HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Cursor="Hand"
+                        ToolTip="展开/收起全局输出日志（全部模块的操作流水）"/>
             </Grid>
         </Border>
 

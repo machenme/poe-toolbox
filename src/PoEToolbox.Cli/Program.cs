@@ -36,6 +36,8 @@ try
         "cmp" => CmdCmp(remaining),
         "copy-file" => CmdCopyFile(remaining),
         "restore" => CmdRestore(remaining),
+        "fx-oilmod" => FxPatchEngine.Run(remaining, builtInPatch: true),
+        "fx-patch" => FxPatchEngine.Run(remaining, builtInPatch: false),
         "help" or "-h" or "--help" => Help(),
         _ => Unknown(command),
     };
@@ -842,6 +844,8 @@ static void PrintUsage()
     Console.WriteLine("  cmp <file>     Round-trip encoder test");
     Console.WriteLine("  copy-file <game-data> <src-path> <dest-path> Copy a file to a new path (isolated)");
     Console.WriteLine("  restore <game-data> Restore the original baseline index");
+    Console.WriteLine("  fx-oilmod <game-data> <status|apply|revert> 黏油榴弹特效+地面燃烧特效补丁（内置补丁，PATCHED 独立 bundle）");
+    Console.WriteLine("  fx-patch <game-data> <patch.json> <status|apply|revert> 通用补丁引擎（执行 .patch.json 描述）");
 }
 static int Help() { PrintUsage(); return 0; }
 static int Unknown(string cmd) { Console.Error.WriteLine($"Unknown: {cmd}"); PrintUsage(); return 1; }

@@ -5,20 +5,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <RootNamespace>PoEToolbox.Shared</RootNamespace>
+    <RootNamespace>PoEToolbox.Plugins.FxPatch</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Sdk\PoEToolbox.Sdk.csproj" />
-    <ProjectReference Include="..\LibBundledGGPK3\LibBundledGGPK3.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="PoEToolbox.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Patches\**\*.patch.json" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
   </ItemGroup>
 
 </Project>

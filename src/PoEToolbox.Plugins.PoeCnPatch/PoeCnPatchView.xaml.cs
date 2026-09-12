@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
+using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.PoeCnPatch;
 
@@ -132,9 +133,10 @@ public partial class PoeCnPatchView : UserControl
         try
         {
             var result = PatchService.Apply(targetPath, _selectedGame, season);
-            StatusText.Text = result.ChangedFiles.Count == 0
+            UiStatus.Set(StatusText, result.ChangedFiles.Count == 0
                 ? $"文件已经是 {result.League} 配置。"
-                : $"补丁完成：已切换到 {result.League}。";
+                : $"✅ 补丁完成：已切换到 {result.League}。", UiStatus.Kind.Success);
+            FileLogger.App.Info($"PoeCnPatch applied: game={_selectedGame}, league={result.League}, changed={result.ChangedFiles.Count}.");
             ResultText.Text = result.ChangedFiles.Count == 0
                 ? "没有需要修改的内容。"
                 : $"已生成备份：{string.Join(", ", result.BackupFiles.Select(Path.GetFileName))}";
@@ -142,7 +144,8 @@ public partial class PoeCnPatchView : UserControl
         }
         catch (Exception ex)
         {
-            StatusText.Text = "补丁失败。";
+            UiStatus.Set(StatusText, "❌ 补丁失败。", UiStatus.Kind.Error);
+            FileLogger.App.Error("PoeCnPatch apply failed.", ex);
             ResultText.Text = ex.Message;
             MessageBox.Show(ex.Message, "补丁失败", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -166,9 +169,10 @@ public partial class PoeCnPatchView : UserControl
         try
         {
             var result = PatchService.Restore(targetPath, _selectedGame);
-            StatusText.Text = result.RestoredFiles.Count == 0
+            UiStatus.Set(StatusText, result.RestoredFiles.Count == 0
                 ? "文件已经是国际服状态。"
-                : "已恢复国际服设置。";
+                : "✅ 已恢复国际服设置。", UiStatus.Kind.Success);
+            FileLogger.App.Info($"PoeCnPatch restored: restored={result.RestoredFiles.Count}.");
             ResultText.Text = result.RestoredFiles.Count == 0
                 ? "没有需要恢复的内容。"
                 : result.UsedBackups
@@ -178,7 +182,8 @@ public partial class PoeCnPatchView : UserControl
         }
         catch (Exception ex)
         {
-            StatusText.Text = "还原失败。";
+            UiStatus.Set(StatusText, "❌ 还原失败。", UiStatus.Kind.Error);
+            FileLogger.App.Error("PoeCnPatch restore failed.", ex);
             ResultText.Text = ex.Message;
             MessageBox.Show(ex.Message, "还原失败", MessageBoxButton.OK, MessageBoxImage.Error);
         }

@@ -29,6 +29,7 @@ public static class IndexBackupService
         var beforeHash = Hash(indexBytes);
         var baselinePath = Path.Combine(backupDirectory, BaselineFileName);
         var createdBaseline = EnsureBaseline(baselinePath, indexBytes);
+        FileLogger.App.Info($"Backup session started: {backupDirectory} (baseline {(createdBaseline ? "created" : "already existed")}, hash {beforeHash[..12]})");
 
         return new IndexBackupSession(backupDirectory, baselinePath, beforeHash, createdBaseline);
     }
@@ -56,6 +57,7 @@ public static class IndexBackupService
             journalPath,
             JsonSerializer.Serialize(entry) + Environment.NewLine,
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        FileLogger.App.Info($"Mutation complete: {operation} ({session.BeforeHash[..12]} -> {afterHash[..12]})");
     }
 
     /// <summary>Restores the original index. The game launcher repairs version mismatches on its next update.</summary>
@@ -71,6 +73,7 @@ public static class IndexBackupService
             Hash(gameData.ReadIndexBytes()),
             CreatedBaseline: false);
 
+        FileLogger.App.Info($"Restoring baseline index from {baselinePath}");
         gameData.WriteIndexBytes(File.ReadAllBytes(baselinePath));
         Complete(gameData, session, "restore-baseline");
     }

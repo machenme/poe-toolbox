@@ -79,7 +79,7 @@ public partial class TermTranslatorView : UserControl
                 return;
 
             RenderTranslation(result);
-            SetStatus($"完成：已保护 {result.ProtectedTermCount} 个 PoE 术语，使用 {result.ChunkCount} 个翻译片段。", "SuccessBrush");
+            SetStatus($"✅ 完成：已保护 {result.ProtectedTermCount} 个 PoE 术语，使用 {result.ChunkCount} 个翻译片段。", "SuccessBrush");
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -89,7 +89,7 @@ public partial class TermTranslatorView : UserControl
         catch (Exception ex)
         {
             if (version == _translationVersion)
-                SetStatus($"翻译失败：{ex.Message}", "ErrorBrush");
+                SetStatus($"❌ 翻译失败：{ex.Message}", "ErrorBrush");
         }
         finally
         {
@@ -222,8 +222,14 @@ public partial class TermTranslatorView : UserControl
 
     private void SetStatus(string text, string brushKey)
     {
-        StatusText.Text = text;
-        StatusText.Foreground = FindResource(brushKey) as Brush;
+        var kind = brushKey switch
+        {
+            "SuccessBrush" => UiStatus.Kind.Success,
+            "WarningBrush" => UiStatus.Kind.Warning,
+            "ErrorBrush" => UiStatus.Kind.Error,
+            _ => UiStatus.Kind.Neutral,
+        };
+        UiStatus.Set(StatusText, text, kind);
     }
 
     private void ClearTranslation()

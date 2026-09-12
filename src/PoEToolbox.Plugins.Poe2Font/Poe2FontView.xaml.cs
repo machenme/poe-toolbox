@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Microsoft.Win32;
+using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.Poe2Font;
 
@@ -239,13 +240,16 @@ public partial class Poe2FontView : UserControl
         try
         {
             var result = await Task.Run(() => Poe2FontService.Apply(path, options));
-            ResultText.Text = $"已应用：{result.Typeface}，字号倍率 {result.SizeScalePercent:0.##}%。\n"
+            ResultText.Text = $"✅ 已应用：{result.Typeface}，字号倍率 {result.SizeScalePercent:0.##}%。\n"
                 + $"原始字体备份：{result.BaselinePath}";
-            PathStatus.Text = "字体配置已写入。启动游戏前请释放其他工具对游戏数据文件的占用。";
+            UiStatus.Set(PathStatus, "字体配置已写入。启动游戏前请释放其他工具对游戏数据文件的占用。", UiStatus.Kind.Success);
+            FileLogger.App.Info($"Poe2Font applied: typeface={result.Typeface}, scale={result.SizeScalePercent:0.##}%.");
             RestoreButton.IsEnabled = true;
         }
         catch (Exception ex)
         {
+            UiStatus.Set(PathStatus, "❌ 字体配置失败，详见错误提示。", UiStatus.Kind.Error);
+            FileLogger.App.Error("Poe2Font apply failed.", ex);
             ResultText.Text = ex.Message;
             MessageBox.Show($"字体配置失败：\n{ex.Message}", "操作失败",
                 MessageBoxButton.OK, MessageBoxImage.Error);
@@ -269,11 +273,14 @@ public partial class Poe2FontView : UserControl
         try
         {
             var result = await Task.Run(() => Poe2FontService.Restore(path));
-            ResultText.Text = $"已恢复原始字体文件。备份位置：{result.BaselinePath}";
+            ResultText.Text = $"✅ 已恢复原始字体文件。备份位置：{result.BaselinePath}";
+            FileLogger.App.Info("Poe2Font restored original fonts.");
             RestoreButton.IsEnabled = true;
         }
         catch (Exception ex)
         {
+            UiStatus.Set(PathStatus, "❌ 恢复失败，详见错误提示。", UiStatus.Kind.Error);
+            FileLogger.App.Error("Poe2Font restore failed.", ex);
             ResultText.Text = ex.Message;
             MessageBox.Show($"恢复失败：\n{ex.Message}", "操作失败",
                 MessageBoxButton.OK, MessageBoxImage.Error);

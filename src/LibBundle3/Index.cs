@@ -72,18 +72,21 @@ public class Index : IDisposable {
 	/// instead of being spread over several custom bundles when <see cref="MaxBundleSize"/> is reached.
 	/// </summary>
 	/// <remarks>
-	/// Must start with "<c>LibGGPK3/</c>" (<see cref="CUSTOM_BUNDLE_BASE_PATH"/>), because only such bundles
-	/// are tracked as custom bundles. The bundle is still flushed to disk when it exceeds
-	/// <see cref="MaxBundleSize"/>, so memory usage stays bounded while all changes keep landing in the same file.
+	/// PoEToolbox 修订：允许任意安全子目录（如 <c>PATCHED/OilGrenade_20260912</c>），不再强制 <c>LibGGPK3/</c> 前缀——
+	/// 运行时 <see cref="GetBundleToWrite"/> 会把钉扎 bundle 动态加入 CustomBundles，前缀不是必要条件。
+	/// The bundle is still flushed to disk when it exceeds <see cref="MaxBundleSize"/>, so memory usage
+	/// stays bounded while all changes keep landing in the same file.
 	/// <para>Use <see cref="DefaultWriteBundlePath"/> to pin all changes to a single, predictable bundle.</para>
 	/// </remarks>
-	/// <exception cref="ArgumentException">The value doesn't start with "<c>LibGGPK3/</c>"</exception>
+	/// <exception cref="ArgumentException">The value is not a safe relative subdirectory path</exception>
 	public virtual string? PinnedWriteBundlePath {
 		get => _pinnedWriteBundlePath;
 		set {
 			if (value is { Length: > 0 }) {
-				if (!value.StartsWith(CUSTOM_BUNDLE_BASE_PATH, StringComparison.Ordinal))
-					throw new ArgumentException($"Pinned write bundle path must start with '{CUSTOM_BUNDLE_BASE_PATH}': " + value, nameof(value));
+				if (value.StartsWith('/') || value.StartsWith('\\') || value.Contains(".."))
+					throw new ArgumentException("Pinned write bundle path must be a relative path without '..': " + value, nameof(value));
+				if (!value.Contains('/'))
+					throw new ArgumentException("Pinned write bundle path must include a subdirectory (e.g. 'LibGGPK3/0' or 'PATCHED/<name>'): " + value, nameof(value));
 				if (value.EndsWith(".bundle.bin", StringComparison.OrdinalIgnoreCase))
 					throw new ArgumentException("Pinned write bundle path must not include the '.bundle.bin' extension: " + value, nameof(value));
 			}

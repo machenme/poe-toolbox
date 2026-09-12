@@ -77,11 +77,12 @@ public partial class MapNumberView : UserControl
         }
         catch (OperationCanceledException)
         {
-            SetStatus("已取消打开");
+            SetStatus("已取消打开", UiStatus.Kind.Warning);
         }
         catch (Exception ex)
         {
-            SetStatus("打开失败");
+            SetStatus("❌ 打开失败", UiStatus.Kind.Error);
+            FileLogger.App.Error("MapNumberView failed to open game data.", ex);
             MessageBox.Show($"无法打开地图标签设置：\n{ex.Message}", "错误",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -152,7 +153,8 @@ public partial class MapNumberView : UserControl
                 cts.Token);
 
             ReleaseFileLocks();
-            SetStatus($"写入完成：{result.UpdatedFiles} 个文件");
+            SetStatus($"✅ 写入完成：{result.UpdatedFiles} 个文件", UiStatus.Kind.Success);
+            FileLogger.App.Info($"MapNumber settings applied: {result.UpdatedFiles} file(s).");
             MessageBox.Show(
                 $"已写入 {result.UpdatedFiles} 个 DDS。\n"
                 + $"字体：{fontFamily}\n"
@@ -163,11 +165,12 @@ public partial class MapNumberView : UserControl
         }
         catch (OperationCanceledException)
         {
-            SetStatus("已取消写入");
+            SetStatus("已取消写入", UiStatus.Kind.Warning);
         }
         catch (Exception ex)
         {
-            SetStatus("写入失败");
+            SetStatus("❌ 写入失败", UiStatus.Kind.Error);
+            FileLogger.App.Error("MapNumberView apply failed.", ex);
             MessageBox.Show($"写入失败：\n{ex.Message}", "错误",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -176,8 +179,9 @@ public partial class MapNumberView : UserControl
             if (ReferenceEquals(_operationCts, cts))
             {
                 var status = StatusText.Text;
+                var kind = _lastStatusKind;
                 ReleaseFileLocks();
-                SetStatus(status);
+                SetStatus(status, kind);
             }
             cts.Dispose();
         }
@@ -199,11 +203,17 @@ public partial class MapNumberView : UserControl
         CancelButton.Visibility = busy && canCancel ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void SetStatus(string status)
+    private UiStatus.Kind _lastStatusKind = UiStatus.Kind.Neutral;
+
+    private void SetStatus(string status, UiStatus.Kind kind)
     {
-        StatusText.Text = status;
+        _lastStatusKind = kind;
+        UiStatus.Set(StatusText, status, kind);
         OutputText.Text = status;
     }
+
+    private void SetStatus(string status)
+        => SetStatus(status, UiStatus.Kind.Neutral);
 
     private static byte[] LoadMapBackgroundBytes()
     {

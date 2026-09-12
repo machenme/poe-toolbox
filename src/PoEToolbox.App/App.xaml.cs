@@ -11,6 +11,7 @@ public partial class App : Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
+        FileLogger.App.Info("App starting.");
         DispatcherUnhandledException += (_, args) =>
         {
             var msg = $"Unhandled: {args.Exception.GetType().Name}: {args.Exception.Message}\n{args.Exception.StackTrace}";
@@ -43,6 +44,12 @@ public partial class App : Application
         var main = new MainWindow();
         MainWindow = main;
         main.Show();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        FileLogger.App.Info($"App exiting (code {e.ApplicationExitCode}).");
+        base.OnExit(e);
     }
 
     private static void ConfigureOodleNativeLibrary()

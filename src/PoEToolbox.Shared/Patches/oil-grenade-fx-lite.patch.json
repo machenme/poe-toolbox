@@ -1,0 +1,34 @@
+{
+  "patchId": "oil-grenade-fx-lite",
+  "bundleName": "OilGrenade",
+  "_comment": "黏油榴弹特效+地面燃烧特效补丁 v1。bundle 落在索引同目录 PATCHED/<bundleName>_<时间戳>.bin。op 类型：addfile-derived（读原件+替换生成副本）/ patchptr-byid（dat 表按 Id 定位重定向指针）/ edittext（就地文本替换）。revert 自动取反：副本保留无引用、指针回原路径、文本反向替换。",
+  "operations": [
+    {
+      "op": "addfile-derived",
+      "src": "metadata/effects/spells/grd_zones/grd_burning01.ao",
+      "dst": "metadata/effects/spells/grd_zones/grd_burning01_oil.ao",
+      "replace": [
+        { "old": "2 0 0 Linear 0.25 0 Linear", "new": "2 0 0 Linear 0.25 1 Linear", "count": 2 }
+      ]
+    },
+    {
+      "op": "patchptr-byid",
+      "table": "data/balance/miscanimated.datc64",
+      "id": "BaseOilGroundBurningEffect",
+      "originalPath": "Metadata/Effects/Spells/grd_Zones/grd_Burning01.ao",
+      "newPath": "Metadata/Effects/Spells/grd_Zones/grd_Burning01_oil.ao"
+    },
+    {
+      "op": "edittext",
+      "path": "metadata/effects/spells/crossbow_oilgrenade/oilground.ot",
+      "old": "preload_animated_object = \"Metadata/Effects/Spells/grd_Zones/grd_Burning01.ao\"",
+      "new": "preload_animated_object = \"Metadata/Effects/Spells/grd_Zones/grd_Burning01_oil.ao\""
+    },
+    {
+      "op": "edittext",
+      "path": "metadata/effects/spells/crossbow_oilgrenade/oil_burst.ao",
+      "old": "\"events\": [\n\t\t\t\t\t{\n\t\t\t\t\t\t\"type\": \"ParticleEffectEventType\",\n\t\t\t\t\t\t\"time\": 0.0,\n\t\t\t\t\t\t\"filename\": \"Metadata/Effects/Spells/crossbow_oilgrenade/FX/oilSpill.pet\",\n\t\t\t\t\t\t\"bone_group\": \"FX_line\"\n\t\t\t\t\t}\n\t\t\t\t]",
+      "new": "\"events\": []"
+    }
+  ]
+}

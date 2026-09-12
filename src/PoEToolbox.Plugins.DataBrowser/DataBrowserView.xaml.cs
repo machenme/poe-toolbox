@@ -178,9 +178,11 @@ public partial class DataBrowserView : UserControl
             DirTree.ItemsSource = _allItems;
             PathLabel.Text = path;
             FileCountLabel.Text = $"{_gd.Index.Files.Count:N0} 个文件";
-            StatusText.Text = $"已打开 ({(_gd.IsBundles2 ? "Bundles2" : "GGPK")})"
+            UiStatus.Set(StatusText,
+                $"已打开 ({(_gd.IsBundles2 ? "Bundles2" : "GGPK")})"
                 + (cachedTree is not null ? " · 缓存" : "")
-                + (skippedFileCount > 0 ? $" · 已跳过 {skippedFileCount:N0} 个无路径记录" : "");
+                + (skippedFileCount > 0 ? $" · 已跳过 {skippedFileCount:N0} 个无路径记录" : ""),
+                UiStatus.Kind.Success);
             FileListPlaceholder.Visibility = Visibility.Visible;
             FileListPlaceholder.Text = "打开游戏数据文件开始浏览";
             _allFileItems.Clear();
@@ -198,11 +200,12 @@ public partial class DataBrowserView : UserControl
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "已取消打开";
+            UiStatus.Set(StatusText, "已取消打开", UiStatus.Kind.Warning);
         }
         catch (Exception ex)
         {
-            StatusText.Text = "打开失败";
+            UiStatus.Set(StatusText, "❌ 打开失败", UiStatus.Kind.Error);
+            FileLogger.App.Error("DataBrowser failed to open game data.", ex);
             MessageBox.Show($"无法打开:\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -518,9 +521,16 @@ public partial class DataBrowserView : UserControl
         try
         {
             await Task.Run(() => ReplaceService.ReplaceTexts(gameDataPath, edits, cts.Token), cts.Token);
-            _pendingEdits.Clear(); UpdatePendingChangesUi(); StatusText.Text = $"已保存 {edits.Count} 个文件";
+            _pendingEdits.Clear(); UpdatePendingChangesUi();
+            UiStatus.Set(StatusText, $"✅ 已保存 {edits.Count} 个文件", UiStatus.Kind.Success);
+            FileLogger.App.Info($"DataBrowser saved {edits.Count} file(s) to index.");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException) { StatusText.Text = "保存失败"; MessageBox.Show($"保存失败：\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            UiStatus.Set(StatusText, "❌ 保存失败", UiStatus.Kind.Error);
+            FileLogger.App.Error("DataBrowser save-all failed.", ex);
+            MessageBox.Show($"保存失败：\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         finally { if (ReferenceEquals(_operationCts, cts)) _operationCts = null; cts.Dispose(); SetBusy(false, StatusText.Text, false); }
         PromptReopen();
     }
@@ -963,7 +973,8 @@ public partial class DataBrowserView : UserControl
             var result = await Task.Run(
                 () => ReplaceService.Replace(gameDataPath, virtualPath, dialog.FileName, cts.Token),
                 cts.Token);
-            StatusText.Text = $"替换完成：{result.VirtualPath}";
+            UiStatus.Set(StatusText, $"✅ 替换完成：{result.VirtualPath}", UiStatus.Kind.Success);
+            FileLogger.App.Info($"DataBrowser replaced file: {result.VirtualPath}.");
             MessageBox.Show(
                 $"已替换：{result.VirtualPath}\n"
                 + $"大小：{FormatSize(result.ReplacementSize)}\n"
@@ -973,11 +984,12 @@ public partial class DataBrowserView : UserControl
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "已取消替换";
+            UiStatus.Set(StatusText, "已取消替换", UiStatus.Kind.Warning);
         }
         catch (Exception ex)
         {
-            StatusText.Text = "替换失败";
+            UiStatus.Set(StatusText, "❌ 替换失败", UiStatus.Kind.Error);
+            FileLogger.App.Error($"DataBrowser replace failed: {virtualPath}.", ex);
             MessageBox.Show($"替换失败：\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -1036,7 +1048,8 @@ public partial class DataBrowserView : UserControl
             var result = await Task.Run(
                 () => ReplaceService.CopyFileAs(gameDataPath, sourcePath, destination, cts.Token),
                 cts.Token);
-            StatusText.Text = $"已复制为新路径：{result.DestinationVirtualPath}";
+            UiStatus.Set(StatusText, $"✅ 已复制为新路径：{result.DestinationVirtualPath}", UiStatus.Kind.Success);
+            FileLogger.App.Info($"DataBrowser copied file: {sourcePath} -> {result.DestinationVirtualPath}.");
             MessageBox.Show(
                 $"已复制：{result.SourceVirtualPath}\n"
                 + $"→ {result.DestinationVirtualPath}\n"
@@ -1048,11 +1061,12 @@ public partial class DataBrowserView : UserControl
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "已取消复制";
+            UiStatus.Set(StatusText, "已取消复制", UiStatus.Kind.Warning);
         }
         catch (Exception ex)
         {
-            StatusText.Text = "复制失败";
+            UiStatus.Set(StatusText, "❌ 复制失败", UiStatus.Kind.Error);
+            FileLogger.App.Error($"DataBrowser copy-as failed: {sourcePath} -> {destination}.", ex);
             MessageBox.Show($"复制失败：\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -1146,9 +1160,12 @@ public partial class DataBrowserView : UserControl
         {
             var result = await action(cts.Token);
             if (result.IsCancelled)
-                StatusText.Text = $"已取消：完成 {result.CompletedFiles:N0} 个文件";
+                UiStatus.Set(StatusText, $"已取消：完成 {result.CompletedFiles:N0} 个文件", UiStatus.Kind.Warning);
+            else if (result.FailedFiles > 0)
+                UiStatus.Set(StatusText, $"⚠️ 提取完成：成功 {result.CompletedFiles:N0}，失败 {result.FailedFiles:N0}", UiStatus.Kind.Warning);
             else
-                StatusText.Text = $"提取完成：成功 {result.CompletedFiles:N0}，失败 {result.FailedFiles:N0}";
+                UiStatus.Set(StatusText, $"✅ 提取完成：成功 {result.CompletedFiles:N0}，失败 {result.FailedFiles:N0}", UiStatus.Kind.Success);
+            FileLogger.App.Info($"DataBrowser extraction: completed={result.CompletedFiles}, failed={result.FailedFiles}, cancelled={result.IsCancelled}.");
 
             if (result.FailedFiles > 0)
             {
@@ -1159,7 +1176,8 @@ public partial class DataBrowserView : UserControl
         }
         catch (Exception ex)
         {
-            StatusText.Text = "提取失败";
+            UiStatus.Set(StatusText, "❌ 提取失败", UiStatus.Kind.Error);
+            FileLogger.App.Error("DataBrowser extraction failed.", ex);
             MessageBox.Show($"提取失败:\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally

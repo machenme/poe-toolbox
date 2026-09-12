@@ -1,6 +1,6 @@
 # PoE Toolbox
 
-Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游戏数据浏览、地图标签修改、POE2 字体配置与 PoB 国服交易补丁。物价数据来自 [poe.ninja](https://poe.ninja)，物品名称写入使用本地游戏客户端数据。
+Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游戏数据浏览、特效补丁、地图标签修改、POE2 字体配置与 PoB 国服交易补丁。物价数据来自 [poe.ninja](https://poe.ninja)，物品名称写入使用本地游戏客户端数据。
 
 ## 功能
 
@@ -9,6 +9,7 @@ Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游�
 | **物价标注** | PoE1 / PoE2 | 点击“检测当前联盟”后识别客户端版本并从 poe.ninja 获取行情，在繁中基础物品名后追加价格标签 |
 | **联盟选择** | PoE1 / PoE2 | 加载两代联盟列表，支持自定义联盟名；写入前校验联盟与客户端版本一致 |
 | **数据浏览** | PoE1 / PoE2 | 浏览、搜索、编辑和提取 `Content.ggpk` 或 Bundles2 `_.index.bin` 内的数据；支持文本文件查找、批量替换、批量保存、路径复制，以及"复制为新路径"生成隔离副本 |
+| **特效补丁** | PoE2 | 指令式补丁引擎：一个补丁 = 一份几 KB 的 JSON 描述文件；内置“黏油榴弹特效+地面燃烧特效”补丁，支持自定义补丁与索引 diff 自动生成；幂等可还原，与官方更新及其他补丁叠加共存 |
 | **术语翻译** | PoE1 / PoE2 | 使用内置术语资源和游戏数据进行术语翻译，支持后台执行与取消 |
 | **地图标签** | PoE1 / PoE2 | 独立通用工具；PoE1 修改 `mapnumbers1..16.dds`，PoE2 修改 `endgamemap1..15.dds`，支持字体、字号和偏移 |
 | **POE2 字体配置** | PoE2 | 修改 `metadata/ui/uisettings.xml` 与 `uisettings.traditional chinese.xml`；支持系统字体、字号倍率和实时预览，可恢复原始配置 |
@@ -57,6 +58,85 @@ PoE1 和 PoE2 的基础物品中英名称词典已内置在发布文件中。客
 6. 需要修改被多处复用的资源时（例如某个被多个技能引用的特效文件），右键选择“复制为新路径（隔离副本）”，先复制出专用副本，再编辑副本并改写引用，原始文件保持不变。
 
 保存修改会写入新的 Bundle，不直接覆盖原始 Bundle。所有改动统一写入单一自定义 Bundle `LibGGPK3/0.bundle.bin`（超过 200 MB 也继续写入同一个文件，不会分裂出 `LibGGPK3/1`、`LibGGPK3/2` …）。备份和日志位置见下方“本地数据”。
+
+## 特效补丁系统
+
+特效补丁是一套“指令式”的游戏数据修改系统：**一个补丁就是一份几 KB 的 `.patch.json` 描述文件**，引擎按描述就地修改游戏索引，而不是分发整个几十 MB 的索引文件。内置补丁“黏油榴弹特效+地面燃烧特效”（延长黏油榴弹地面燃烧的淡出、去掉落地油花与点燃火波）是第一个实例；可以在“特效补丁”页面操作，也可以走命令行。
+
+### 补丁如何执行
+
+以内置补丁为例，一份描述文件长这样：
+
+```json
+{
+  "patchId": "oil-grenade-fx-lite",
+  "bundleName": "OilGrenade",
+  "operations": [
+    { "op": "addfile-derived", "src": ".../grd_burning01.ao", "dst": ".../grd_burning01_oil.ao",
+      "replace": [ { "old": "2 0 0 Linear 0.25 0 Linear", "new": "2 0 0 Linear 0.25 1 Linear", "count": 2 } ] },
+    { "op": "patchptr-byid", "table": "data/balance/miscanimated.datc64",
+      "id": "BaseOilGroundBurningEffect", "originalPath": ".../grd_Burning01.ao", "newPath": ".../grd_Burning01_oil.ao" },
+    { "op": "edittext", "path": ".../oilground.ot", "old": "preload .../grd_Burning01.ao", "new": "preload .../grd_Burning01_oil.ao" }
+  ]
+}
+```
+
+执行 `apply` 时引擎做四件事：
+
+1. **备份**：首次修改前把当前索引逐字节保存为 baseline，之后每次成功修改追加一条 journal 记录。
+2. **逐条执行操作**（见下表）。每条操作先校验现状再动手：目标不存在或内容与预期不符 = 冲突，**整个补丁中止**，不做半套修改。
+3. **独立落盘**：所有写入进入游戏索引同目录 `PATCHED\<bundleName>_<时间戳>.bundle.bin`，与原版 Bundle 以及其他工具的写入位置物理隔离。
+4. **校验**：重新打开索引确认全部操作生效，否则报告失败。
+
+### 四种操作类型
+
+| op | 作用 |
+|----|------|
+| `addfile-derived` | 读取索引中的原文件，按 `replace` 规则替换内容后生成一个新路径的独立副本（原件与其他引用者不受影响） |
+| `addfile-asset` | 把补丁包内自带的成品文件内容写入指定路径；可附带原版内容供还原 |
+| `patchptr-byid` | 在 DAT 数据表内按 `Id` 定位行（不硬编码行号，客户端更新后仍能定位），把行内指向某文件路径的指针重定向到新路径 |
+| `edittext` | 在指定文本文件内做精确字符串替换（UTF-16），可指定替换次数 |
+
+### 幂等与还原
+
+每条操作有三态判定：**未应用 / 已应用 / 冲突**。
+
+- `apply` 幂等：已应用的操作自动跳过，重复执行安全。
+- `revert` 自动取反：指针指回原路径、文本反向替换；`addfile` 生成的副本保留在索引中但不再被引用，无副作用。
+- `status` 随时查看每个操作的状态。
+- 彻底还原：CLI `restore` 一键恢复最初的 baseline 索引；客户端更新本身也会还原全部修改。
+
+### 补丁生成器（diff）
+
+不想手写 JSON？在“特效补丁”页面选择**原版索引**和**修改后索引**，引擎自动 diff 两份索引（秒级，300 万文件不全量计算），生成 `patch.json` + `assets/` 到 `%LocalAppData%\PoEToolbox\patches\<补丁ID>\`。也可以把别人发布的整包索引 mod 一条命令转成本工具的补丁格式。
+
+### 分发为 zip 补丁包
+
+把生成目录整体压缩成一个 zip（`patch.json` 与 `assets/` 保持相对位置即可，无论是否多包一层文件夹都能识别），引擎可以直接读取：
+
+```powershell
+dotnet run --project src\PoEToolbox.Cli -- fx-patch <game-data> <补丁包.zip> status|apply|revert
+```
+
+UI 的“自定义补丁描述文件”同样支持选择 zip。引擎会把补丁包解压到临时目录再执行，24 小时后自动清理，不影响原 zip 文件。
+
+### 命令行
+
+```powershell
+# 内置油弹补丁：查看状态 / 应用 / 还原
+dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> status
+dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> apply
+dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> revert
+
+# 执行任意补丁描述
+dotnet run --project src\PoEToolbox.Cli -- fx-patch <game-data> <patch.json> status|apply|revert
+
+# 索引 diff 自动生成补丁
+dotnet run --project src\PoEToolbox.Cli -- fx-patch diff <原版索引> <修改后索引> -o <输出目录>
+
+# 恢复最初的 baseline 索引
+dotnet run --project src\PoEToolbox.Cli -- restore <game-data>
+```
 
 ## 术语翻译
 
@@ -130,6 +210,11 @@ dotnet run --project src\PoEToolbox.Cli -- extract-all <source> <output-dir> [po
 
 # 把索引中的文件复制为一份独立副本（写入新 Bundle，原文件与其他引用者不变）
 dotnet run --project src\PoEToolbox.Cli -- copy-file <game-data> <源路径> <目标路径>
+
+# 特效补丁引擎（详见上方“特效补丁系统”）
+dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> <status|apply|revert>
+dotnet run --project src\PoEToolbox.Cli -- fx-patch <game-data> <patch.json> <status|apply|revert>
+dotnet run --project src\PoEToolbox.Cli -- restore <game-data>
 ```
 
 运行 `dotnet run --project src\PoEToolbox.Cli -- help` 查看完整命令列表。
@@ -141,9 +226,10 @@ src/
 |- PoEToolbox.App/                 WPF 主程序与插件导航
 |- PoEToolbox.Cli/                 命令行工具
 |- PoEToolbox.Core/                物价标注、DATC64 与名称词典
-|- PoEToolbox.Shared/              配置、客户端检测和统一数据访问
+|- PoEToolbox.Shared/              配置、客户端检测、统一数据访问与特效补丁引擎
 |- PoEToolbox.Plugins.PriceTagger/ 物价标注界面
 |- PoEToolbox.Plugins.DataBrowser/ 数据浏览与地图标签插件
+|- PoEToolbox.Plugins.FxPatch/     特效补丁管理界面
 |- PoEToolbox.Plugins.Poe2Font/   POE2 字体配置与实时预览
 |- PoEToolbox.Plugins.PoeCnPatch/  PoB 国服补丁
 |- PoEToolbox.Plugins.BagCleaner/  背包清理
@@ -162,11 +248,14 @@ src/
 | `work/poe_ninja/<game>/<league>/` | poe.ninja 行情缓存，按游戏和联盟隔离 |
 | `<游戏数据同目录>/backup/` | 每个客户端各自保存的 `baseline.index.bin` 与 `journal.jsonl` |
 | `<游戏数据同目录>/Bundles2/LibGGPK3/0.bundle.bin` | 工具箱写入的所有改动所在的自定义 Bundle（不会覆盖原始 Bundle） |
+| `<游戏数据同目录>/Bundles2/PATCHED/` | 特效补丁写入的独立 Bundle，每个补丁一个文件，删除即近似卸载 |
+| `%LocalAppData%\PoEToolbox\backups\game-data\` | 特效补丁修改前的原始索引 baseline 与操作 journal |
+| `%LocalAppData%\PoEToolbox\patches\` | 补丁生成器输出的 `patch.json` 与 `assets/` |
 | `<游戏数据同目录>/backup/poe2-fonts/` | POE2 字体配置首次应用前的两个原始 XML |
 | `%LocalAppData%\PoEToolbox\databrowser-cache\` | 数据浏览器树缓存 |
 | `%LocalAppData%\PoEToolbox\schema\` | DAT schema 缓存 |
 | `%LocalAppData%\PoEToolbox\config.json` | 用户配置 |
-| `%LocalAppData%\PoEToolbox\logs\` | 运行日志 |
+| `%LocalAppData%\PoEToolbox\logs\` | 运行日志（按天一个文件，保留 7 天；主界面“输出日志”面板与其同源） |
 | `%LocalAppData%\PoEToolbox\native\oo2core.dll` | Bundles2/Oodle native 运行库 |
 
 ## 鸣谢与许可证
