@@ -49,7 +49,6 @@ Content.ggpk
 *.ggpk
 
 # Docs (not tracked)
-docs/
 PRD-*.md
 SPEC-*.md
 AUDIT_PRD.md
