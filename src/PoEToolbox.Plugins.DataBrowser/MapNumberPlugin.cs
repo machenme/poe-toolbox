@@ -19,12 +19,13 @@ public sealed class MapNumberPlugin : IPlugin
     public string IconGlyph => ""; // edit
     public int Order => 16;
 
-    public UserControl CreateView() => _view ??= new MapNumberView();
+    public UserControl CreateView() => _view ??= new MapNumberView(_eventBus);
     public void OnActivated() { }
     public void OnDeactivated() => _view?.ReleaseFileLocks();
     public void OnAppShutdown()
     {
         _view?.ReleaseFileLocks();
+        _view?.Dispose();
         _eventBus.Unsubscribe<ReleaseGameDataLocksRequested>(OnReleaseGameDataLocksRequested);
     }
 

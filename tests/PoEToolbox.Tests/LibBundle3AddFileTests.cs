@@ -129,6 +129,96 @@ public sealed class LibBundle3AddFileTests : IDisposable
     }
 
     [Fact]
+    public void DisposeWithoutSave_DoesNotPersistPendingMutation()
+    {
+        var indexPath = BuildSeedIndex();
+
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            index.AddFile(NewPath, Encoding.UTF8.GetBytes("pending"), saveIndex: false);
+        }
+
+        using var reopened = new Index(indexPath, parsePaths: true);
+        Assert.Equal(2, reopened.Files.Count);
+        Assert.False(reopened.TryGetFile(NewPath, out _));
+    }
+
+    [Fact]
+    public void PurgeCustomBundles_RemovesPatchFilesAndKeepsBaseFiles()
+    {
+        var indexPath = BuildSeedIndex();
+        var patchPath = "PATCHED/TestPatch_1";
+        var patchFile = "metadata/effects/spells/grd_zones/test_patch.ao";
+
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            index.PinnedWriteBundlePath = patchPath;
+            index.AddFile(patchFile, Encoding.UTF8.GetBytes("patch"));
+            index.Save();
+        }
+
+        var bundleFile = Path.Combine(_directory, patchPath.Replace('/', Path.DirectorySeparatorChar) + ".bundle.bin");
+        Assert.True(File.Exists(bundleFile));
+
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            var removed = index.PurgeCustomBundles("PATCHED/TestPatch_", Owned(patchFile), saveIndex: true);
+            Assert.Equal(1, removed);
+            Assert.False(index.TryGetFile(patchFile, out _));
+            Assert.True(index.TryGetFile(SeedPath, out _));
+        }
+
+        Assert.False(File.Exists(bundleFile));
+        using var reopened = new Index(indexPath, parsePaths: true);
+        Assert.Equal(2, reopened.Files.Count);
+        Assert.True(reopened.TryGetFile(SeedPath, out _));
+        Assert.True(reopened.TryGetFile(OtherSeedPath, out _));
+    }
+
+    [Fact]
+    public void PurgeCustomBundles_KeepsBaseGameFilesThatWereRedirectedIntoThePatchBundle()
+    {
+        var indexPath = BuildSeedIndex();
+        var patchBundle = "PATCHED/TestPatch_v1";
+        var seedBytes = Encoding.UTF8.GetBytes(SeedText);
+
+        // Reproduces the state a reverted patch leaves behind: editing a base-game file redirects its
+        // record into the patch bundle, so the base file's only content carrier is the patch bundle.
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            index.PinnedWriteBundlePath = patchBundle;
+            Assert.True(index.TryGetFile(SeedPath, out var seed));
+            seed!.Write(seedBytes);
+            index.AddFile(NewPath, Encoding.UTF8.GetBytes("patch copy"));
+            index.Save();
+        }
+
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            Assert.True(index.TryGetFile(SeedPath, out var moved));
+            Assert.Equal(patchBundle + ".bundle.bin", moved!.BundleRecord.Path);
+
+            // Only the path the patch created may be removed; the redirected base file must survive.
+            var removed = index.PurgeCustomBundles("PATCHED/TestPatch_", Owned(NewPath), saveIndex: true);
+
+            Assert.Equal(1, removed);
+            Assert.False(index.TryGetFile(NewPath, out _));
+            Assert.True(index.TryGetFile(SeedPath, out var kept));
+            Assert.Equal(seedBytes, kept!.Read().ToArray());
+        }
+
+        // The base file must still resolve — and still carry its content — after reopening.
+        using var reopened = new Index(indexPath, parsePaths: true);
+        Assert.True(reopened.TryGetFile(SeedPath, out var after));
+        Assert.Equal(seedBytes, after!.Read().ToArray());
+        Assert.False(reopened.TryGetFile(NewPath, out _));
+    }
+
+    /// <summary>Path set (case-insensitive) that a patch declares as its own output.</summary>
+    private static HashSet<string> Owned(params string[] paths)
+        => new(paths, StringComparer.OrdinalIgnoreCase);
+
+    [Fact]
     public void AddFile_RejectsInvalidPaths()
     {
         var indexPath = BuildSeedIndex();

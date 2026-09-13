@@ -13,6 +13,12 @@
     <ProjectReference Include="..\PoEToolbox.Core\PoEToolbox.Core.csproj" />
     <ProjectReference Include="..\LibDat2\LibDat2.csproj" />
     <Resource Include="../../images/mapBackground.png" Link="Assets/mapBackground.png" />
+    <!-- Canvas template for the map-number preview, extracted from a client with:
+         PoEToolbox.Cli extract-file <game-data> art/2ditems/maps/endgamemaps/endgamemap15.dds <file>
+         Only its geometry is used (the renderer clears the canvas and draws just the number), so the
+         same template serves every client and the preview needs no game data at all. The plate that
+         is actually seen behind the number is Assets/mapBackground.png. -->
+    <Resource Include="../../images/mapnumber-preview.dds" Link="Assets/mapnumber-preview.dds" />
   </ItemGroup>
 
 </Project>

@@ -53,7 +53,212 @@ public class Index : IDisposable {
 	internal MemoryStream? _BundleStreamToWrite;
 	internal readonly WeakReference<MemoryStream> WR_BundleStreamToWrite = new(null!);
 
+	public sealed class MutationSnapshot {
+		internal readonly BundleRecord[] Bundles;
+		internal readonly Dictionary<ulong, (BundleRecord Bundle, int Offset, int Size)> Files;
+		internal readonly int BaseUncompressedSize;
+		internal readonly DirectoryRecord[] Directories;
+		internal readonly byte[] DirectoryBundleData;
+
+		internal MutationSnapshot(BundleRecord[] bundles,
+			Dictionary<ulong, (BundleRecord Bundle, int Offset, int Size)> files,
+			int baseUncompressedSize,
+			DirectoryRecord[] directories,
+			byte[] directoryBundleData) {
+			Bundles = bundles;
+			Files = files;
+			BaseUncompressedSize = baseUncompressedSize;
+			Directories = directories;
+			DirectoryBundleData = directoryBundleData;
+		}
+	}
+
 	public virtual ReadOnlyMemory<BundleRecord> Bundles => _Bundles;
+
+	/// <summary>Captures file locations and bundle records before a multi-file mutation.</summary>
+	public virtual MutationSnapshot CaptureMutationSnapshot() {
+		lock (this) {
+			EnsureNotDisposed();
+			return new MutationSnapshot(
+				_Bundles.ToArray(),
+				_Files.ToDictionary(p => p.Key, p => (p.Value.BundleRecord, p.Value.Offset, p.Value.Size)),
+				baseBundle.UncompressedSize,
+				_Directories.ToArray(),
+				directoryBundleData.ToArray());
+		}
+	}
+
+	/// <summary>Restores a mutation snapshot and deletes all Bundles created after it.</summary>
+	public virtual void RollbackMutation(MutationSnapshot snapshot) {
+		ArgumentNullException.ThrowIfNull(snapshot);
+		lock (this) {
+			EnsureNotDisposed();
+			// The index Bundle may itself be a buffered GGPK stream. Abandon it before
+			// disposal so a failed transaction cannot flush a partially serialized index.
+			baseBundle.DiscardBufferedChanges();
+			if (_BundleToWrite is not null) {
+				_BundleToWrite.Abort();
+				_BundleToWrite = null;
+			}
+			_BundleStreamToWrite?.Dispose();
+			_BundleStreamToWrite = null;
+
+			foreach (var pair in snapshot.Files) {
+				if (_Files.TryGetValue(pair.Key, out var file))
+					file.Redirect(pair.Value.Bundle, pair.Value.Offset, pair.Value.Size);
+			}
+			foreach (var hash in _Files.Keys.Where(h => !snapshot.Files.ContainsKey(h)).ToArray()) {
+				var file = _Files[hash];
+				file.BundleRecord._Files.Remove(file);
+				_Files.Remove(hash);
+			}
+
+			var originalBundles = snapshot.Bundles.ToHashSet();
+			foreach (var bundle in _Bundles.Where(b => !originalBundles.Contains(b)).ToArray())
+				bundleFactory.DeleteBundle(bundle.Path);
+			_Bundles = snapshot.Bundles.ToArray();
+			for (var i = 0; i < _Bundles.Length; i++)
+				_Bundles[i].BundleIndex = i;
+			_Directories = snapshot.Directories.ToArray();
+			directoryBundleData = snapshot.DirectoryBundleData.ToArray();
+			CustomBundles.RemoveAll(b => !originalBundles.Contains(b));
+			baseBundle.UncompressedSize = snapshot.BaseUncompressedSize;
+			_Root = null;
+		}
+	}
+
+	/// <summary>Removes custom bundle records that no longer contain indexed files.</summary>
+	/// <remarks>Call after reverting a patch to delete physical orphan bundle files.</remarks>
+	public virtual int CleanupOrphanCustomBundles(bool saveIndex = true) {
+		lock (this) {
+			EnsureNotDisposed();
+			var count = CustomBundles.Count(b => b._Files.Count == 0);
+			if (count != 0 && saveIndex)
+				Save();
+			return count;
+		}
+	}
+
+	/// <summary>Removes the files a dedicated PATCHED prefix owns, leaving everything else alone.</summary>
+	/// <param name="pathPrefix">Bundle path prefix identifying the patch family.</param>
+	/// <param name="ownedPaths">Full paths (compared case-insensitively) that the patch itself created.
+	/// <para>
+	/// A file under the prefix whose path is not listed here is kept. That guard matters because
+	/// editing a base-game file redirects its record into the patch bundle: reverting a patch writes a
+	/// restored copy of e.g. <c>data/balance/miscanimated.datc64</c> into the patch bundle, so removing
+	/// that record would drop the table from the index entirely instead of restoring it.
+	/// </para></param>
+	public virtual int PurgeCustomBundles(string pathPrefix, IReadOnlySet<string> ownedPaths, bool saveIndex = true) {
+		ArgumentNullException.ThrowIfNull(ownedPaths);
+		ArgumentException.ThrowIfNullOrWhiteSpace(pathPrefix);
+		lock (this) {
+			EnsureNotDisposed();
+			var bundles = CustomBundles
+				.Where(b => b._Path.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase))
+				.ToArray();
+			var removed = 0;
+			foreach (var bundle in bundles)
+				foreach (var file in bundle._Files.ToArray()) {
+					if (file.Path is null || !ownedPaths.Contains(file.Path))
+						continue;
+					bundle._Files.Remove(file);
+					_Files.Remove(file.PathHash);
+					++removed;
+				}
+			if (removed == 0)
+				return 0;
+			_Root = null;
+			RebuildDirectoryTable();
+			if (saveIndex)
+				Save();
+			return removed;
+		}
+	}
+
+	private static bool IsCustomBundlePath(string path)
+		=> path.StartsWith(CUSTOM_BUNDLE_BASE_PATH, StringComparison.OrdinalIgnoreCase)
+			|| path.StartsWith("PATCHED/", StringComparison.OrdinalIgnoreCase);
+
+	private void RebuildDirectoryTable() {
+		// The first directory record stores the name-hash algorithm marker. Keep it
+		// when rebuilding after purge; pre-3.21 indexes use FNV instead of Murmur.
+		var rootHash = _Directories.Length > 0
+			? _Directories[0].PathHash
+			: 0xF42A94E69CFF42FEul;
+		var paths = ExtractExistingDirectoryPaths();
+		using var directory = new MemoryStream();
+		foreach (var path in paths.OrderBy(p => p, StringComparer.Ordinal)) {
+			directory.Write(0);
+			directory.Write(0);
+			directory.Write(1);
+			directory.Write(Encoding.UTF8.GetBytes(path));
+			directory.Write((byte)0);
+		}
+		var data = directory.ToArray();
+		using var bundleStream = new MemoryStream();
+		using (var bundle = new Bundle(bundleStream, (BundleRecord?)null))
+			bundle.Save(data);
+		directoryBundleData = bundleStream.ToArray();
+		_Directories = [new DirectoryRecord(rootHash, 0, data.Length, data.Length)];
+	}
+
+	/// <summary>
+	/// Reconstructs the full paths represented by the original directory bundle.
+	/// This preserves records whose <see cref="FileRecord.Path"/> could not be
+	/// resolved by <see cref="ParsePaths"/> but whose raw path entry is valid.
+	/// </summary>
+	private List<string> ExtractExistingDirectoryPaths() {
+		ReadOnlyMemory<byte> directory;
+		using (var bundle = new Bundle(new MemoryStream(directoryBundleData), false))
+			directory = bundle.ReadWithoutCache();
+
+		var paths = new List<string>(_Files.Count);
+		var seen = new HashSet<ulong>();
+		foreach (var record in _Directories) {
+			if (record.Offset < 0 || record.Size < 0 || record.Offset > directory.Length - record.Size)
+				throw new InvalidDataException("Directory table contains an invalid range; refusing to purge.");
+
+			var bytes = directory.Span;
+			var cursor = record.Offset;
+			var end = record.Offset + record.Size;
+			var prefixes = new List<byte[]>();
+			var baseMode = false;
+			while (cursor <= end - sizeof(int)) {
+				var index = BitConverter.ToInt32(bytes[cursor..]);
+				cursor += sizeof(int);
+				if (index == 0) {
+					baseMode = !baseMode;
+					if (baseMode)
+						prefixes.Clear();
+					continue;
+				}
+
+				var terminator = bytes[cursor..end].IndexOf((byte)0);
+				if (terminator < 0)
+					throw new InvalidDataException("Directory table contains an unterminated path; refusing to purge.");
+				var suffix = bytes.Slice(cursor, terminator).ToArray();
+				cursor += terminator + 1;
+				var prefixIndex = index - 1;
+				byte[] path;
+				if (prefixIndex >= 0 && prefixIndex < prefixes.Count) {
+					path = GC.AllocateUninitializedArray<byte>(prefixes[prefixIndex].Length + suffix.Length);
+					prefixes[prefixIndex].CopyTo(path, 0);
+					suffix.CopyTo(path, prefixes[prefixIndex].Length);
+				} else {
+					path = suffix;
+				}
+
+				if (baseMode) {
+					prefixes.Add(path);
+				} else {
+					var hash = NameHash(path);
+					if (_Files.ContainsKey(hash) && seen.Add(hash))
+						paths.Add(Encoding.UTF8.GetString(path));
+				}
+			}
+		}
+		return paths;
+	}
 	/// <summary>
 	/// Files with their <see cref="FileRecord.PathHash"/> as key.
 	/// </summary>
@@ -72,7 +277,7 @@ public class Index : IDisposable {
 	/// instead of being spread over several custom bundles when <see cref="MaxBundleSize"/> is reached.
 	/// </summary>
 	/// <remarks>
-	/// PoEToolbox 修订：允许任意安全子目录（如 <c>PATCHED/OilGrenade_20260912</c>），不再强制 <c>LibGGPK3/</c> 前缀——
+	/// PoEToolbox 修订：允许任意安全子目录（如 <c>PATCHED/OilGrenade_v1</c>），不再强制 <c>LibGGPK3/</c> 前缀——
 	/// 运行时 <see cref="GetBundleToWrite"/> 会把钉扎 bundle 动态加入 CustomBundles，前缀不是必要条件。
 	/// The bundle is still flushed to disk when it exceeds <see cref="MaxBundleSize"/>, so memory usage
 	/// stays bounded while all changes keep landing in the same file.
@@ -225,7 +430,7 @@ public class Index : IDisposable {
 					ptr = (int*)((byte*)ptr + pathLength);
 					var uncompressedSize = *ptr++;
 					_Bundles[i] = new BundleRecord(path, uncompressedSize, this, i);
-					if (path.StartsWith(CUSTOM_BUNDLE_BASE_PATH))
+					if (IsCustomBundlePath(path))
 						CustomBundles.Add(_Bundles[i]);
 				}
 
@@ -346,11 +551,15 @@ public class Index : IDisposable {
 				var br = CustomBundles[i];
 				if (br.Files.Count == 0) { // Empty bundle
 					CustomBundles.RemoveAt(i--);
-					_Bundles.RemoveAt(br.BundleIndex);
+					var bundleIndex = Array.IndexOf(_Bundles, br);
+					if (bundleIndex >= 0)
+						_Bundles.RemoveAt(bundleIndex);
 					baseBundle.UncompressedSize -= br.RecordLength;
 					removed.Add(br);
 				}
 			}
+			for (var i = 0; i < _Bundles.Length; i++)
+				_Bundles[i].BundleIndex = i;
 
 			using var ms = new MemoryStream(baseBundle.UncompressedSize);
 			ms.Write(_Bundles.Length);
@@ -1118,7 +1327,10 @@ public class Index : IDisposable {
 		lock (this) {
 			if (_BundleToWrite is not null) {
 				Debug.Fail("There're still changes haven't been saved when disposing Index. Did you forget to call Save()?");
-				_BundleToWrite.Dispose();
+				// Disposal is not a commit boundary. If the caller exits through an
+				// exception without Save(), discard the buffered bundle instead of
+				// flushing a partial mutation into the game data.
+				_BundleToWrite.Abort();
 				_BundleToWrite = null;
 			}
 			_BundleStreamToWrite?.Dispose();

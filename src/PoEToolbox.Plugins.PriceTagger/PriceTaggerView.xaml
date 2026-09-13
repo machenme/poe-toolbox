@@ -16,43 +16,6 @@
             <!-- ── Left Panel: GGPK / League / Options / Apply ── -->
             <StackPanel Grid.Column="0">
 
-                <!-- Card: GGPK -->
-                <Border Style="{StaticResource CardBorder}">
-                    <StackPanel>
-                        <TextBlock x:Name="LblGGPK" Text="游戏数据文件" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
-                        <TextBlock x:Name="GgpkPathHint" Margin="0,0,0,6"
-                                   Style="{StaticResource SmallText}"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="6"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="GgpkPathBox" Height="32"/>
-                            <Button Grid.Column="2" x:Name="BrowseBtn" Content="Browse"
-                                    Style="{StaticResource SecondaryButton}" Width="66"
-                                    Click="BrowseGgpk_Click"/>
-                        </Grid>
-                        <TextBlock x:Name="GgpkStatus" Margin="0,5,0,0"
-                                   Style="{StaticResource SmallText}"
-                                   Foreground="{DynamicResource SuccessBrush}"
-                                   TextTrimming="CharacterEllipsis"
-                                   Visibility="Collapsed"/>
-                        <TextBlock x:Name="GgpkAutoHint" Margin="0,3,0,0"
-                                   Style="{StaticResource SmallText}" Cursor="Hand"
-                                   Foreground="{DynamicResource AccentBrush}"
-                                   Text="🔍 Auto-detect PoE installation"
-                                   MouseLeftButtonDown="AutoDetectGgpk_Click"
-                                   Visibility="Collapsed"/>
-                        <TextBlock x:Name="GgpkModStatus" Margin="0,4,0,0"
-                                   Style="{StaticResource SmallText}"
-                                   Foreground="{DynamicResource WarningBrush}"
-                                   Visibility="Collapsed"/>
-                    </StackPanel>
-                </Border>
-
                 <!-- Card: League -->
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>

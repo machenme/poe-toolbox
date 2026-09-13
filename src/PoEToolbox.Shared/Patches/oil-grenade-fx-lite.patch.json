@@ -1,12 +1,14 @@
 {
   "patchId": "oil-grenade-fx-lite",
   "bundleName": "OilGrenade",
-  "_comment": "黏油榴弹特效+地面燃烧特效补丁 v1。bundle 落在索引同目录 PATCHED/<bundleName>_<时间戳>.bin。op 类型：addfile-derived（读原件+替换生成副本）/ patchptr-byid（dat 表按 Id 定位重定向指针）/ edittext（就地文本替换）。revert 自动取反：副本保留无引用、指针回原路径、文本反向替换。",
+  "version": "1",
+  "_comment": "黏油榴弹特效+地面燃烧特效补丁。bundle 落在索引同目录 PATCHED/<bundleName>_v<version>.bundle.bin。改了补丁内容必须升 version，否则新内容会被当成覆盖其他 Mod 而拒绝执行。op 类型：addfile-derived（读原件+替换生成副本）/ patchptr-byid（dat 表按 Id 定位重定向指针）/ edittext（就地文本替换）。revert 自动取反：副本保留无引用、指针回原路径、文本反向替换。",
   "operations": [
     {
       "op": "addfile-derived",
       "src": "metadata/effects/spells/grd_zones/grd_burning01.ao",
       "dst": "metadata/effects/spells/grd_zones/grd_burning01_oil.ao",
+      "targetSha256": "815567a5aff83986452170d40c12f22ca3f61971cbce58c95c286ba63d58d664",
       "replace": [
         { "old": "2 0 0 Linear 0.25 0 Linear", "new": "2 0 0 Linear 0.25 1 Linear", "count": 2 }
       ]

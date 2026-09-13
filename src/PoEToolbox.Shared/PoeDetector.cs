@@ -14,7 +14,15 @@ public sealed class PoeDetector : IPoeDetector
     public static readonly PoeDetector Default = new();
 
     private static readonly string[] PoeProcessNames =
-        ["PathOfExile", "PathOfExileSteam", "PathOfExile_x64", "PathOfExileEGL"];
+        [
+            "PathOfExile",
+            "PathOfExileSteam",
+            "PathOfExile_x64",
+            "PathOfExile_x64Steam",
+            "PathOfExile_KG",
+            "PathOfExile_x64_KG",
+            "PathOfExileEGL",
+        ];
 
     /// <summary>
     /// Detect the game data path. Returns either:
@@ -22,7 +30,7 @@ public sealed class PoeDetector : IPoeDetector
     ///   - Bundles2/_.index.bin path (Steam/Epic)
     ///   - null if not found
     /// </summary>
-    public string? DetectGameDataPath()
+    public string? DetectGameDataPath(PoeGameKind preferredGame = PoeGameKind.Unknown)
     {
         // Registry: PoE1
         string[] regPathsPoE1 =
@@ -38,7 +46,13 @@ public sealed class PoeDetector : IPoeDetector
             @"SOFTWARE\GrindingGearGames\Path of Exile 2",
         ];
 
-        foreach (var regPath in regPathsPoE1.Concat(regPathsPoE2))
+        var registryPaths = preferredGame switch
+        {
+            PoeGameKind.Poe1 => regPathsPoE1,
+            PoeGameKind.Poe2 => regPathsPoE2,
+            _ => regPathsPoE1.Concat(regPathsPoE2),
+        };
+        foreach (var regPath in registryPaths)
         {
             foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
             {
@@ -57,15 +71,31 @@ public sealed class PoeDetector : IPoeDetector
         }
 
         // Common paths (Steam, standalone)
-        foreach (var dir in new[]
+        var commonPaths = preferredGame switch
         {
-            @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile",
-            @"C:\Program Files\Grinding Gear Games\Path of Exile",
-            @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile",
-            @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile 2",
-            @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile 2",
-            @"C:\Program Files\Grinding Gear Games\Path of Exile 2",
-        })
+            PoeGameKind.Poe1 => new[]
+            {
+                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile",
+                @"C:\Program Files\Grinding Gear Games\Path of Exile",
+                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile",
+            },
+            PoeGameKind.Poe2 => new[]
+            {
+                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile 2",
+                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile 2",
+                @"C:\Program Files\Grinding Gear Games\Path of Exile 2",
+            },
+            _ => new[]
+            {
+                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile",
+                @"C:\Program Files\Grinding Gear Games\Path of Exile",
+                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile",
+                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile 2",
+                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile 2",
+                @"C:\Program Files\Grinding Gear Games\Path of Exile 2",
+            },
+        };
+        foreach (var dir in commonPaths)
         {
             var found = FindGameDataInDir(dir);
             if (found is not null) return found;

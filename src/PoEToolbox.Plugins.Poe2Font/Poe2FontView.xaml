@@ -16,26 +16,6 @@
         <StackPanel Grid.Row="0" Grid.Column="0">
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
-                    <TextBlock Text="POE2 游戏数据" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="GameDataPathBox" Height="32"
-                                 ToolTip="选择 Content.ggpk、_.index.bin 或包含它们的游戏目录"
-                                 TextChanged="GameDataPathBox_TextChanged"/>
-                        <Button Grid.Column="2" Content="选择..." Style="{StaticResource SecondaryButton}"
-                                Width="88" Click="Browse_Click"/>
-                    </Grid>
-                    <TextBlock x:Name="PathStatus" Style="{StaticResource SmallText}"
-                               TextWrapping="Wrap" Margin="0,7,0,0"/>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorder}">
-                <StackPanel>
                     <TextBlock Text="字体设置" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
                     <TextBlock Text="字体类型" Style="{StaticResource SmallText}"/>
                     <ComboBox x:Name="TypefaceBox" IsEditable="True" Height="32" Margin="0,5,0,10"
@@ -69,6 +49,8 @@
                             IsEnabled="False" Click="Restore_Click"/>
                     <TextBlock Text="应用前会保存两个目标文件的首次原始内容；后续调整会基于该备份重新生成。"
                                Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    <TextBlock x:Name="PathStatus" Style="{StaticResource SmallText}"
+                               TextWrapping="Wrap" Margin="0,7,0,0"/>
                 </StackPanel>
             </Border>
         </StackPanel>
@@ -83,8 +65,8 @@
 
             <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="16">
                 <StackPanel>
-                    <TextBlock Text="POE2 字体配置器" Style="{StaticResource TitleText}"/>
-                    <TextBlock Text="为繁体中文界面设置字体类型和统一字号倍率。生成文件保留原始 XML 结构，并附带中文配置说明。"
+                    <TextBlock Text="自定义字体配置器" Style="{StaticResource TitleText}"/>
+                    <TextBlock Text="为当前客户端设置字体类型和统一字号倍率。生成文件保留原始 XML 结构，并附带中文配置说明。"
                                Style="{StaticResource NormalText}" Margin="0,5,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
@@ -134,7 +116,7 @@
             </Border>
 
             <Border Grid.Row="3" Style="{StaticResource CardBorder}" Padding="12">
-                <TextBlock x:Name="ResultText" Text="请选择 POE2 游戏数据。" Style="{StaticResource SmallText}"
+                <TextBlock x:Name="ResultText" Text="请先在主窗口选择游戏数据。" Style="{StaticResource SmallText}"
                            TextWrapping="Wrap"/>
             </Border>
         </Grid>

@@ -131,6 +131,29 @@ public sealed class GameDataLoaderTests : IDisposable
     }
 
     [Fact]
+    public void GetBaselinePath_UsesBackupPathBesideIndex()
+    {
+        var indexPath = Path.Combine(CreateDirectory("backup-layout"), "_.index.bin");
+
+        var baselinePath = IndexBackupService.GetBaselinePath(indexPath);
+
+        Assert.Equal(
+            Path.Combine(Path.GetDirectoryName(indexPath)!, "backup", "_.index.bin"),
+            baselinePath);
+    }
+
+    [Fact]
+    public void EnsureBaselineExists_CopiesCurrentIndexWhenBackupIsMissing()
+    {
+        var indexPath = BuildIndex();
+
+        var baselinePath = IndexBackupService.EnsureBaselineExists(indexPath);
+
+        Assert.True(File.Exists(baselinePath));
+        Assert.Equal(File.ReadAllBytes(indexPath), File.ReadAllBytes(baselinePath));
+    }
+
+    [Fact]
     public void ResolvePath_ExistingFileWithAnUnrelatedExtension_Throws()
     {
         var file = Path.Combine(_root, "notes.txt");

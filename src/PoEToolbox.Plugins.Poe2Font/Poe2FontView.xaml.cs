@@ -4,8 +4,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
-using Microsoft.Win32;
 using PoEToolbox.Shared;
+using PoEToolbox.Sdk;
 
 namespace PoEToolbox.Plugins.Poe2Font;
 
@@ -13,12 +13,17 @@ public partial class Poe2FontView : UserControl
 {
     private bool _updatingSize;
     private bool _initialized;
+    private readonly IEventBus _eventBus;
+    private string? _gameDataPath;
+    private PoeGameKind _gameKind;
 
     private sealed record FontOption(string DisplayName, string RenderName, FontFamily FontFamily);
 
-    public Poe2FontView()
+    public Poe2FontView(IEventBus? eventBus = null)
     {
+        _eventBus = eventBus ?? new EventBus();
         InitializeComponent();
+        _eventBus.Subscribe<GameContextChanged>(OnGameContextChanged);
         var fonts = Fonts.SystemFontFamilies
             .Select(font => new FontOption(GetLocalizedFontName(font), font.Source, font))
             .Where(font => !string.IsNullOrWhiteSpace(font.DisplayName))
@@ -40,6 +45,8 @@ public partial class Poe2FontView : UserControl
         _initialized = true;
         UpdatePreview();
     }
+
+    public void Dispose() => _eventBus.Unsubscribe<GameContextChanged>(OnGameContextChanged);
 
     private static string GetLocalizedFontName(FontFamily font)
     {
@@ -64,26 +71,16 @@ public partial class Poe2FontView : UserControl
         return font.FamilyNames.Values.FirstOrDefault() ?? font.Source;
     }
 
-    private void Browse_Click(object sender, RoutedEventArgs e)
+    private void OnGameContextChanged(GameContextChanged context)
     {
-        var dialog = new OpenFileDialog
+        if (!Dispatcher.CheckAccess())
         {
-            Filter = "POE2 数据|Content.ggpk;_.index.bin|GGPK|Content.ggpk|Bundles2 索引|_.index.bin",
-            Title = "选择 POE2 Content.ggpk 或 _.index.bin",
-            CheckFileExists = true,
-        };
-
-        if (dialog.ShowDialog() == true)
-        {
-            GameDataPathBox.Text = dialog.FileName;
-            ValidatePath();
-        }
-    }
-
-    private void GameDataPathBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (!_initialized)
+            Dispatcher.BeginInvoke(() => OnGameContextChanged(context));
             return;
+        }
+
+        _gameDataPath = context.GameDataPath;
+        _gameKind = context.Game;
         ValidatePath();
     }
 
@@ -124,13 +121,14 @@ public partial class Poe2FontView : UserControl
 
     private void ValidatePath()
     {
-        var path = GameDataPathBox?.Text.Trim() ?? string.Empty;
-        var valid = File.Exists(path)
+        var path = _gameDataPath ?? GameDataPathPreference.Get() ?? string.Empty;
+        var valid = _gameKind == PoeGameKind.Poe2
+            && File.Exists(path)
             && (path.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase)
                 || path.EndsWith("_.index.bin", StringComparison.OrdinalIgnoreCase));
         PathStatus.Text = valid
             ? "已选择数据文件。应用时会检查 POE2 标识和两个字体 XML。"
-            : "请选择 Content.ggpk 或 Bundles2\\_.index.bin。";
+            : "请先在主窗口选择 POE2 游戏数据。";
         PathStatus.Foreground = FindResource(valid ? "SuccessBrush" : "WarningBrush") as System.Windows.Media.Brush;
         ApplyButton.IsEnabled = valid && TryReadOptions(out _);
         RestoreButton.IsEnabled = valid && Poe2FontService.HasBaseline(path);
@@ -148,8 +146,7 @@ public partial class Poe2FontView : UserControl
             ? "ErrorBrush"
             : "TextPrimaryBrush") as System.Windows.Media.Brush;
         ApplyPreviewFont(typeface, scale, validScale);
-        if (GameDataPathBox is not null)
-            ValidatePath();
+        ValidatePath();
     }
 
     private string GetSelectedTypeface()
@@ -228,9 +225,14 @@ public partial class Poe2FontView : UserControl
             return;
         }
 
-        var path = GameDataPathBox.Text.Trim();
+        var path = GetGameDataPath();
+        if (path is null)
+        {
+            UiStatus.Set(PathStatus, "请先在主窗口选择有效的游戏数据文件。", UiStatus.Kind.Warning);
+            return;
+        }
         var confirm = MessageBox.Show(
-            $"将为 POE2 应用以下字体配置：\n\n字体：{options.Typeface}\n字号倍率：{options.SizeScalePercent:0.##}%\n\n"
+            $"将为当前客户端应用以下字体配置：\n\n字体：{options.Typeface}\n字号倍率：{options.SizeScalePercent:0.##}%\n\n"
             + "首次应用会保存两个目标文件的原始内容，并写入新的 Bundle/索引。是否继续？",
             "应用 POE2 字体配置", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.OK)
@@ -262,7 +264,12 @@ public partial class Poe2FontView : UserControl
 
     private async void Restore_Click(object sender, RoutedEventArgs e)
     {
-        var path = GameDataPathBox.Text.Trim();
+        var path = GetGameDataPath();
+        if (path is null)
+        {
+            UiStatus.Set(PathStatus, "请先在主窗口选择有效的游戏数据文件。", UiStatus.Kind.Warning);
+            return;
+        }
         var confirm = MessageBox.Show(
             "将恢复首次使用字体功能时保存的两个原始 XML。当前字体配置会被移除，是否继续？",
             "恢复原始字体", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
@@ -294,11 +301,17 @@ public partial class Poe2FontView : UserControl
     private void SetBusy(bool busy, string status)
     {
         StatusText.Text = status;
-        GameDataPathBox.IsEnabled = !busy;
         TypefaceBox.IsEnabled = !busy;
         SizeScaleBox.IsEnabled = !busy;
         SizeScaleSlider.IsEnabled = !busy;
         ApplyButton.IsEnabled = !busy;
-        RestoreButton.IsEnabled = !busy && Poe2FontService.HasBaseline(GameDataPathBox.Text.Trim());
+        var path = _gameDataPath ?? GameDataPathPreference.Get();
+        RestoreButton.IsEnabled = !busy && path is not null && Poe2FontService.HasBaseline(path);
+    }
+
+    private string? GetGameDataPath()
+    {
+        var path = _gameDataPath ?? GameDataPathPreference.Get();
+        return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
     }
 }

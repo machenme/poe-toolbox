@@ -66,6 +66,13 @@ public class GGFileStream : Stream {
 		Modified = false;
 	}
 
+	/// <summary>Discard the in-memory buffer without writing it into Content.ggpk.</summary>
+	public void DiscardChanges() {
+		Modified = false;
+		_Buffer?.Dispose();
+		_Buffer = null;
+	}
+
 	public override int Read(byte[] buffer, int offset, int count) {
 		if (_Buffer is not null)
 			return _Buffer.Read(buffer, offset, count);

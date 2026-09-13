@@ -20,6 +20,7 @@ try
         "test" => CmdTest(remaining),
         "list" => CmdList(remaining),
         "read" => CmdRead(remaining),
+        "extract-file" => CmdExtractFile(remaining),
         "fetch" => CmdFetch(remaining),
         "pricetag" => CmdPriceTag(remaining),
         "modify" => CmdModify(remaining),
@@ -120,6 +121,34 @@ static int CmdRead(string[] a)
     Console.WriteLine($"{dt.Count} rows, cols: [{string.Join(", ", dt.Columns.Select(c => c.Name))}]");
     foreach (var row in dt.Rows.Take(5))
         Console.WriteLine($"  {row.GetValueOrDefault("Name") ?? row.GetValueOrDefault("Id") ?? "N/A"}");
+    return 0;
+}
+
+// ═══ extract-file: one indexed file → disk ══════════════════
+static int CmdExtractFile(string[] a)
+{
+    if (a.Length < 3)
+    {
+        Console.Error.WriteLine("Usage: extract-file <Content.ggpk|_.index.bin|game-dir> <path> <output>");
+        return 1;
+    }
+
+    var output = Path.GetFullPath(a[2]);
+    var written = GameDataLoader.Use(a[0], GameDataMode.Read, gameData =>
+    {
+        if (!gameData.TryGetFile(a[1], out var file) || file is null)
+            throw new FileNotFoundException($"Not found in the index: {a[1]}");
+
+        var bytes = file.Read().ToArray();
+        var directory = Path.GetDirectoryName(output);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+        File.WriteAllBytes(output, bytes);
+        return bytes.Length;
+    });
+
+    Console.WriteLine($"Extracted {a[1]} ({written:N0} bytes)");
+    Console.WriteLine($"  -> {output}");
     return 0;
 }
 
@@ -835,6 +864,7 @@ static void PrintUsage()
     Console.WriteLine("  test <file>    Test GGPK reading");
     Console.WriteLine("  list <file>    List files in index");
     Console.WriteLine("  read <file> <p> Read single datc64 file");
+    Console.WriteLine("  extract-file <game-data> <path> <output> Extract one file from the index to disk");
     Console.WriteLine("  extract <file> [table] [lang] Export datc64 to JSON");
     Console.WriteLine("  build-name-dictionary <file> <out> Build embedded item-name dictionary");
     Console.WriteLine("  extract-all <source> <out> [poe1|poe2] Batch export datc64/dat64 to JSON");
@@ -844,8 +874,8 @@ static void PrintUsage()
     Console.WriteLine("  cmp <file>     Round-trip encoder test");
     Console.WriteLine("  copy-file <game-data> <src-path> <dest-path> Copy a file to a new path (isolated)");
     Console.WriteLine("  restore <game-data> Restore the original baseline index");
-    Console.WriteLine("  fx-oilmod <game-data> <status|apply|revert> 黏油榴弹特效+地面燃烧特效补丁（内置补丁，PATCHED 独立 bundle）");
-    Console.WriteLine("  fx-patch <game-data> <patch.json> <status|apply|revert> 通用补丁引擎（执行 .patch.json 描述）");
+    Console.WriteLine("  fx-oilmod <game-data> <status|apply|revert|cleanup|purge> 黏油榴弹特效+地面燃烧特效补丁（内置补丁，PATCHED 独立 bundle）");
+    Console.WriteLine("  fx-patch <game-data> <patch.json|patch.zip> <status|apply|revert|cleanup|purge> 通用补丁引擎（执行 .patch.json 描述）");
 }
 static int Help() { PrintUsage(); return 0; }
 static int Unknown(string cmd) { Console.Error.WriteLine($"Unknown: {cmd}"); PrintUsage(); return 1; }

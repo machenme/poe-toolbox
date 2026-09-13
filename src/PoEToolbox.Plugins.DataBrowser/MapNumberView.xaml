@@ -17,32 +17,14 @@
             <StackPanel Grid.Column="0">
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
-                        <TextBlock Text="GGPK" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="6"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="GgpkPathBox" Height="32" IsReadOnly="True"
-                                     ToolTip="选择 Content.ggpk 或 _.index.bin"/>
-                            <Button x:Name="OpenFileButton" Grid.Column="2" Content="浏览"
-                                    Style="{StaticResource SecondaryButton}" Width="66"
-                                    Click="OpenFileButton_Click"/>
-                        </Grid>
-                        <TextBlock x:Name="GgpkStatus" Style="{StaticResource SmallText}"
-                                   Foreground="{DynamicResource SuccessBrush}" TextWrapping="Wrap"
-                                   Margin="0,6,0,0" Visibility="Collapsed"/>
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource CardBorder}">
-                    <StackPanel>
                         <TextBlock Text="写入设置" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
+                        <Button x:Name="LoadButton" Content="读取游戏数据" Style="{StaticResource SecondaryButton}"
+                                Height="36" IsEnabled="False" Click="LoadButton_Click"/>
                         <Button x:Name="ApplyButton" Content="写入地图标签" Style="{StaticResource PrimaryButton}"
-                                Height="48" FontSize="15" IsEnabled="False" Click="ApplyButton_Click"/>
+                                Height="48" FontSize="15" IsEnabled="False" Margin="0,8,0,0" Click="ApplyButton_Click"/>
                         <TextBlock Text="写入前会自动保存当前索引快照。"
-                                   Style="{StaticResource SmallText}" TextAlignment="Center" Margin="0,8,0,0"/>
+                                   Style="{StaticResource SmallText}" TextAlignment="Center"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -62,11 +44,11 @@
                         </Grid.RowDefinitions>
                         <StackPanel Grid.Row="0" Margin="0,0,0,8">
                             <TextBlock Text="地图标签设置" Style="{StaticResource SectionText}"/>
-                            <TextBlock Text="选择 GGPK 文件后可预览并调整数字样式。"
-                                       Style="{StaticResource SmallText}" Margin="0,4,0,0"/>
+                        <TextBlock x:Name="PreviewHint" Text="预览与样式调整；写入时才读取客户端数据。"
+                                   Style="{StaticResource SmallText}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <Grid Grid.Row="1">
-                            <TextBlock x:Name="SettingsPlaceholder" Text="请选择 Content.ggpk 或 _.index.bin"
+                            <TextBlock x:Name="SettingsPlaceholder" Text="请先在主窗口选择游戏数据"
                                        Style="{StaticResource NormalText}"
                                        Foreground="{DynamicResource PlaceholderBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -84,7 +66,7 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <TextBlock Text="输出" Style="{StaticResource SectionText}"/>
-                        <TextBlock x:Name="OutputText" Grid.Row="1" Text="等待选择 GGPK 文件。"
+                        <TextBlock x:Name="OutputText" Grid.Row="1" Text="等待主窗口选择游戏数据。"
                                    Style="{StaticResource NormalText}"
                                    Foreground="{DynamicResource PlaceholderBrush}"
                                    TextWrapping="Wrap" TextAlignment="Center"

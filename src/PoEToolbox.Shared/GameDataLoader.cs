@@ -178,10 +178,17 @@ public static class GameDataLoader
         return Task.Run(() => Open(resolved, mode), cancellationToken);
     }
 
-    private static GameDataAccess Open(string path, GameDataMode mode) => mode switch
+    private static GameDataAccess Open(string path, GameDataMode mode)
     {
-        GameDataMode.Read => GameDataAccess.OpenReadOnlyMapped(path),
-        GameDataMode.ReadWrite => GameDataAccess.Open(path),
-        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
-    };
+        if (mode == GameDataMode.ReadWrite && PoeDetector.Default.IsPoeRunning())
+            throw new InvalidOperationException(
+                "Path of Exile is running. Close the game before modifying game data.");
+
+        return mode switch
+        {
+            GameDataMode.Read => GameDataAccess.OpenReadOnlyMapped(path),
+            GameDataMode.ReadWrite => GameDataAccess.Open(path),
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
+        };
+    }
 }

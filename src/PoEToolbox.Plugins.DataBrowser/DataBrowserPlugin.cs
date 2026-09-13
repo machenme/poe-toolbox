@@ -23,6 +23,7 @@ public class DataBrowserPlugin : IPlugin
     public UserControl CreateView() => _view ??= new DataBrowserView(_eventBus);
     public void OnActivated() { }
     public void OnDeactivated() => _view?.ReleaseFileLocks();
+    public bool TryPrepareForAppClose() => _view?.ReleaseFileLocks() ?? true;
     public void OnAppShutdown()
     {
         _view?.ReleaseFileLocks();

@@ -2,7 +2,6 @@ using System.Windows.Controls;
 using PoEToolbox.Shared;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls.Primitives;
@@ -30,13 +29,13 @@ public partial class PriceTaggerView : UserControl
     private LeagueChoice? _selectedLeague;
     private PoeNinjaFetcher.PoeGame _activeGame = PoeNinjaFetcher.PoeGame.Poe1;
     private PoeNinjaFetcher.PoeGame? _clientGame;
+    private string? _gameDataPath;
     private readonly IConfigService<PriceTaggerConfig> _config =
         new PluginConfigService<PriceTaggerConfig>("PriceTagger");
     private readonly IEventBus _eventBus;
 
     private bool _langSwapped;
     private bool _applying;
-    private int _scanningClient;
     private int _totalProcessed, _totalUpdated, _totalSkipped;
     private readonly Stopwatch _timer = new();
     private PriceTaggerConfig _ptConfig = null!;
@@ -46,9 +45,9 @@ public partial class PriceTaggerView : UserControl
     public PriceTaggerView(IEventBus? eventBus = null)
     {
         _eventBus = eventBus ?? new EventBus();
+        _eventBus.Subscribe<GameContextChanged>(OnGameContextChanged);
         _ptConfig = _config.Load();
         InitializeComponent();
-        RestoreCachedGamePreference();
         InitCategories();
         InitLeagueCombo();
         ApplyLocalization();
@@ -57,10 +56,11 @@ public partial class PriceTaggerView : UserControl
         // (Keeps plugin startup light; GGPK indexing costs a lot of memory.)
         Loaded += (_, _) =>
         {
-            RestoreCachedGgpkPath();
             RestoreCachedLeague();
         };
     }
+
+    public void Dispose() => _eventBus.Unsubscribe<GameContextChanged>(OnGameContextChanged);
 
     // Last used league is only used to pre-fill the box; it never triggers
     // a network request or a game data read.
@@ -74,25 +74,22 @@ public partial class PriceTaggerView : UserControl
     /// </summary>
     private async Task DetectAndLoadLeaguesAsync()
     {
-        var poe1Task = PoeNinjaFetcher.GetLeaguesAsync(PoeNinjaFetcher.PoeGame.Poe1);
-        var poe2Task = PoeNinjaFetcher.GetLeaguesAsync(PoeNinjaFetcher.PoeGame.Poe2);
-        await Task.WhenAll(poe1Task, poe2Task);
+        if (_clientGame is null)
+            return;
 
-        var poe1Leagues = await poe1Task;
-        var poe2Leagues = await poe2Task;
-        PopulateLeagueCombo(poe1Leagues, poe2Leagues);
+        var clientGame = _clientGame.Value;
+        var leagues = await PoeNinjaFetcher.GetLeaguesAsync(clientGame);
+        PopulateLeagueCombo(leagues, clientGame);
 
-        var preferredGame = _clientGame ?? _activeGame;
-        var current = (preferredGame == PoeNinjaFetcher.PoeGame.Poe1 ? poe1Leagues : poe2Leagues)
-            .FirstOrDefault();
+        var current = leagues.FirstOrDefault();
         if (current is not null)
         {
-            var choice = new LeagueChoice(preferredGame, current.Id);
+            var choice = new LeagueChoice(clientGame, current.Id);
             ApplyLeague(choice);
             CacheLeague(choice);
         }
 
-        if (poe1Leagues.Count > 0 || poe2Leagues.Count > 0)
+        if (leagues.Count > 0)
             LeagueManualHint.Visibility = Visibility.Collapsed;
     }
 
@@ -108,14 +105,13 @@ public partial class PriceTaggerView : UserControl
         // Register it so the combo does not drop the selection on focus loss
         // before the league list has been fetched.
         _leagueGames[cachedLeague.League] = cachedLeague.Game;
-        SetActiveGame(cachedLeague.Game);
         ApplyLeague(cachedLeague);
     }
 
     // ═══ Idle release ══════════════════════════════════════════
 
-    /// <summary>True while a detect / client scan / apply job is still running.</summary>
-    public bool IsBusy => _detectingLeague || _applying || Volatile.Read(ref _scanningClient) > 0;
+    /// <summary>True while a league detection or apply job is still running.</summary>
+    public bool IsBusy => _detectingLeague || _applying;
 
     /// <summary>
     /// Drop everything the detect and apply steps produced: league list, detected
@@ -152,12 +148,6 @@ public partial class PriceTaggerView : UserControl
         StatDuration.Text = "--";
     }
 
-    private void RestoreCachedGamePreference()
-    {
-        if (Enum.TryParse<PoeNinjaFetcher.PoeGame>(_ptConfig.LeagueCacheGame, out var game))
-            _activeGame = game;
-    }
-
     private bool IsCompatibleWithClient(LeagueChoice choice) =>
         _clientGame is null || _clientGame == choice.Game;
 
@@ -185,14 +175,13 @@ public partial class PriceTaggerView : UserControl
     }
 
     private void PopulateLeagueCombo(
-        IReadOnlyList<PoeNinjaFetcher.League> poe1Leagues,
-        IReadOnlyList<PoeNinjaFetcher.League> poe2Leagues)
+        IReadOnlyList<PoeNinjaFetcher.League> leagues,
+        PoeNinjaFetcher.PoeGame game)
     {
         _leagueGames.Clear();
         LeagueCombo.Items.Clear();
 
-        AddLeagueOptions(poe1Leagues, PoeNinjaFetcher.PoeGame.Poe1);
-        AddLeagueOptions(poe2Leagues, PoeNinjaFetcher.PoeGame.Poe2);
+        AddLeagueOptions(leagues, game);
 
         _customLeagueItem = new ComboBoxItem
         {
@@ -257,8 +246,6 @@ public partial class PriceTaggerView : UserControl
         // Header
 
         // Section headers
-        LblGGPK.Text = UILabels.Get("GGPK");
-        GgpkPathHint.Text = UILabels.Get("GameDataHint");
         LblLeague.Text = UILabels.Get("League");
         LeagueManualHint.Text = UILabels.Get("LeagueManualHint");
         LblCategories.Text = UILabels.Get("Categories");
@@ -267,7 +254,6 @@ public partial class PriceTaggerView : UserControl
         LblCategoryHint.Text = UILabels.Get("CategoryHint");
 
         // Buttons
-        BrowseBtn.Content = UILabels.Get("Browse");
         DetectBtn.Content = UILabels.Get("Detect");
         AllBtn.Content = UILabels.Get("All");
         NoneBtn.Content = UILabels.Get("None");
@@ -325,13 +311,15 @@ public partial class PriceTaggerView : UserControl
 
     private async void UiMod_Click(object sender, RoutedEventArgs e)
     {
-        var ggpkPath = GgpkPathBox.Text.Trim();
-        if (!File.Exists(ggpkPath)) { LogError("Game data file not found."); return; }
+        var ggpkPath = GetGameDataPath();
+        if (ggpkPath is null) { LogError("Please select game data in the main window first."); return; }
 
-        var clientGame = await DetectClientGameAsync(ggpkPath);
+        var clientGame = _clientGame;
         if (clientGame != PoeNinjaFetcher.PoeGame.Poe1)
         {
-            LogInfo("Permanent TC is only available for PoE1. PoE2 already includes Traditional Chinese.");
+            LogInfo(clientGame is null
+                ? "Client version is not identified yet. Please wait for the shell to finish identifying the selected game data."
+                : "Permanent TC is only available for PoE1. PoE2 already includes Traditional Chinese.");
             return;
         }
 
@@ -444,8 +432,8 @@ public partial class PriceTaggerView : UserControl
 
     private async void Restore_Click(object sender, RoutedEventArgs e)
     {
-        var ggpkPath = GgpkPathBox.Text.Trim();
-        if (!File.Exists(ggpkPath)) { LogError("Game data file not found."); return; }
+        var ggpkPath = GetGameDataPath();
+        if (ggpkPath is null) { LogError("Please select game data in the main window first."); return; }
 
         var isZh = UILabels.Current != UILabels.Lang.English;
         var result = MessageBox.Show(
@@ -471,7 +459,6 @@ public partial class PriceTaggerView : UserControl
             _cachedLangStatus = null;
             _langSwapped = false;
             _ptConfig.LangSwapped = false; SavePtConfig();
-            GgpkModStatus.Visibility = Visibility.Collapsed;
             UiModBtn.Content = UILabels.Get("UiModBtn");
         }
         catch (Exception ex) { LogError($"Restore failed: {ex.Message}"); }
@@ -552,83 +539,40 @@ public partial class PriceTaggerView : UserControl
         }
     }
 
-    // ═══ GGPK ══════════════════════════════════════════════════
-
-    /// <summary>Restore GGPK path from cache only — no file open.</summary>
-    private void RestoreCachedGgpkPath()
+    private void OnGameContextChanged(GameContextChanged context)
     {
-        if (!string.IsNullOrWhiteSpace(GgpkPathBox.Text) && File.Exists(GgpkPathBox.Text))
+        if (string.IsNullOrWhiteSpace(context.GameDataPath))
             return;
 
-        // Restore from cache
-        var cachedPath = _ptConfig.GgpkPath;
-        if (cachedPath is not null && File.Exists(cachedPath))
+        if (!Dispatcher.CheckAccess())
         {
-            GgpkPathBox.Text = cachedPath;
-            GgpkStatus.Text = $"✓ {cachedPath}";
-            GgpkStatus.Visibility = Visibility.Visible;
-            GgpkAutoHint.Visibility = Visibility.Collapsed;
-            if (_ptConfig.LangSwapped)
-            {
-                _langSwapped = true;
-                var isZh = UILabels.Current != UILabels.Lang.English;
-                UiModBtn.Content = isZh ? "还原语言" : "Restore Language";
-                GgpkModStatus.Visibility = Visibility.Visible;
-            }
+            Dispatcher.BeginInvoke(() => OnGameContextChanged(context));
             return;
         }
 
-        // No cache — auto-detect once on first run (path only, the file itself
-        // is not opened until the user actually needs it)
-        AutoDetectGgpk(detectGame: false);
-    }
-
-    private void AutoDetectGgpk_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => AutoDetectGgpk();
-
-    private void AutoDetectGgpk(bool detectGame = true)
-    {
-        if (!string.IsNullOrWhiteSpace(GgpkPathBox.Text) && File.Exists(GgpkPathBox.Text))
-            return;
-
-        var path = PoeDetector.Default.DetectGameDataPath();
-        if (path is not null) { SetGgpkPath(path, detectGame); return; }
-    }
-
-    private void BrowseGgpk_Click(object sender, RoutedEventArgs e)
-    {
-        var dlg = new OpenFileDialog
+        if (context.Game == PoeGameKind.Unknown)
         {
-            Filter = "Game data files|*.ggpk;*.index.bin|Content.ggpk|*.ggpk|Index files|*.index.bin|All files|*.*",
-            Title = "Select Content.ggpk or _.index.bin"
-        };
-        if (dlg.ShowDialog() == true)
-        {
-            SetGgpkPath(dlg.FileName);
-            LogSuccess($"Selected: {Path.GetFileName(dlg.FileName)}");
+            _clientGame = null;
+            UpdatePermanentTcAvailability();
+            UpdateLeagueGameHint();
         }
-    }
-
-    private void SetGgpkPath(string path, bool detectGame = true)
-    {
-        GgpkPathBox.Text = path;
-        GgpkStatus.Text = $"✓ {path}";
-        GgpkStatus.Visibility = Visibility.Visible;
-        GgpkAutoHint.Visibility = Visibility.Collapsed;
-        _ptConfig.GgpkPath = path; SavePtConfig();
-        PublishGameContext(PoeGameKind.Unknown, path);
-        if (detectGame)
-            _ = DetectClientGameAsync(path);
-    }
-
-    private async Task DetectCurrentClientGameAsync()
-    {
-        var ggpkPath = GgpkPathBox.Text.Trim();
-        if (!File.Exists(ggpkPath))
+        else
         {
-            LogWarn("Game data not set — client version not detected.");
-            return;
+            var clientGame = ToPoeNinjaGame(context.Game);
+            _clientGame = clientGame;
+            SetActiveGame(clientGame);
+            UpdatePermanentTcAvailability();
+            UpdateLeagueGameHint();
+            if (_selectedLeague is not null && _selectedLeague.Game != clientGame)
+                ClearLeagueSelection();
         }
-        await DetectClientGameAsync(ggpkPath);
+        _gameDataPath = context.GameDataPath;
+    }
+
+    private string? GetGameDataPath()
+    {
+        var path = _gameDataPath ?? GameDataPathPreference.Get();
+        return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
     }
 
     /// <summary>Detect language mod status (opens game data). Called only from UiMod.</summary>
@@ -663,7 +607,11 @@ public partial class PriceTaggerView : UserControl
         StatusLabel.Text = "Detecting league...";
         try
         {
-            await DetectCurrentClientGameAsync();
+            if (_clientGame is null)
+            {
+                LogWarn("Client version is not identified yet. Please wait for the shell to finish identifying the selected game data.");
+                return;
+            }
             await DetectAndLoadLeaguesAsync();
             LogSuccess($"League: {LeagueCombo.Text}");
             StatusLabel.Text = "Ready";
@@ -680,70 +628,10 @@ public partial class PriceTaggerView : UserControl
         }
     }
 
-    private async Task<PoeNinjaFetcher.PoeGame?> ResolveGameAsync(string league)
-    {
-        if (_selectedLeague?.League.Equals(league, StringComparison.OrdinalIgnoreCase) == true)
-            return _selectedLeague.Game;
+    private PoeNinjaFetcher.PoeGame? ResolveGame() => _clientGame;
 
-        if (_leagueGames.TryGetValue(league, out var game) && game is not null)
-            return game.Value;
-
-        StatusLabel.Text = "Identifying game...";
-        var detectedGame = await PoeNinjaFetcher.DetectGameForLeagueAsync(league);
-        if (detectedGame is not null)
-            _leagueGames[league] = detectedGame;
-        return detectedGame;
-    }
-
-    private async Task<PoeNinjaFetcher.PoeGame?> DetectClientGameAsync(string gameDataPath)
-    {
-        Interlocked.Increment(ref _scanningClient);
-        try
-        {
-            var game = await Task.Run(() => GameDataLoader.Use(gameDataPath, GameDataMode.Read, gameData =>
-                gameData.IsPoe2Client
-                    ? PoeNinjaFetcher.PoeGame.Poe2
-                    : PoeNinjaFetcher.PoeGame.Poe1));
-
-            if (!string.Equals(GgpkPathBox.Text.Trim(), gameDataPath, StringComparison.OrdinalIgnoreCase))
-                return null;
-
-            _clientGame = game;
-            PublishGameContext(ToSessionGame(game), gameDataPath);
-            UpdatePermanentTcAvailability();
-            UpdateLeagueGameHint();
-            if (_activeGame != game)
-            {
-                SetActiveGame(game);
-                LogInfo($"Client data detected: {GameLabel(game)}");
-            }
-            if (_selectedLeague is not null && _selectedLeague.Game != game)
-            {
-                LogWarn($"Selected league is {GameLabel(_selectedLeague.Game)}, but client data is {GameLabel(game)}. League selection was reset.");
-                ClearLeagueSelection();
-            }
-
-            return game;
-        }
-        catch (Exception ex)
-        {
-            if (string.Equals(GgpkPathBox.Text.Trim(), gameDataPath, StringComparison.OrdinalIgnoreCase))
-                LogError($"Unable to read client data: {ex.Message}");
-            return null;
-        }
-        finally
-        {
-            Interlocked.Decrement(ref _scanningClient);
-        }
-    }
-
-    private void PublishGameContext(PoeGameKind game, string path)
-    {
-        _eventBus.Publish(new GameContextChanged(
-            game,
-            path,
-            PoeDetector.Default.IsPoeRunning()));
-    }
+    private static PoeNinjaFetcher.PoeGame ToPoeNinjaGame(PoeGameKind game)
+        => game == PoeGameKind.Poe2 ? PoeNinjaFetcher.PoeGame.Poe2 : PoeNinjaFetcher.PoeGame.Poe1;
 
     private static PoeGameKind ToSessionGame(PoeNinjaFetcher.PoeGame game)
         => game == PoeNinjaFetcher.PoeGame.Poe2 ? PoeGameKind.Poe2 : PoeGameKind.Poe1;
@@ -752,11 +640,15 @@ public partial class PriceTaggerView : UserControl
     {
         var isPoe2League = _selectedLeague?.Game == PoeNinjaFetcher.PoeGame.Poe2;
         var isPoe2Client = _clientGame == PoeNinjaFetcher.PoeGame.Poe2;
-        var canApplyPermanentTc = !isPoe2League && !isPoe2Client;
+        var canApplyPermanentTc = _clientGame == PoeNinjaFetcher.PoeGame.Poe1 && !isPoe2League;
 
         UiModBtn.Visibility = Visibility.Visible;
         UiModBtn.IsEnabled = canApplyPermanentTc;
-        UiModBtn.ToolTip = canApplyPermanentTc ? null : UILabels.Get("UiModPoe2Disabled");
+        UiModBtn.ToolTip = canApplyPermanentTc
+            ? null
+            : _clientGame is null
+                ? "等待主窗口识别客户端版本"
+                : UILabels.Get("UiModPoe2Disabled");
         RestoreBtn.SetValue(Grid.ColumnProperty, 2);
         RestoreBtn.SetValue(Grid.ColumnSpanProperty, 1);
 
@@ -764,7 +656,6 @@ public partial class PriceTaggerView : UserControl
         {
             _cachedLangStatus = null;
             _langSwapped = false;
-            GgpkModStatus.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -783,13 +674,16 @@ public partial class PriceTaggerView : UserControl
 
     private async void ApplyPrices_Click(object sender, RoutedEventArgs e)
     {
-        var ggpkPath = GgpkPathBox.Text.Trim();
-        if (!File.Exists(ggpkPath)) { LogError("Game data file not found."); return; }
+        var ggpkPath = GetGameDataPath();
+        if (ggpkPath is null) { LogError("Please select game data in the main window first."); return; }
 
-        var gameBeforeClientDetection = _activeGame;
-        var clientGame = await DetectClientGameAsync(ggpkPath);
-        if (clientGame is null) return;
-        if (gameBeforeClientDetection != clientGame.Value)
+        var clientGame = _clientGame;
+        if (clientGame is null)
+        {
+            LogWarn("Client version is not identified yet. Please wait for the shell to finish identifying the selected game data.");
+            return;
+        }
+        if (_activeGame != clientGame.Value)
         {
             LogInfo($"Client is {GameLabel(clientGame.Value)}; categories switched. Select categories and apply again.");
             return;
@@ -798,7 +692,7 @@ public partial class PriceTaggerView : UserControl
         var league = LeagueCombo.Text.Trim();
         if (string.IsNullOrEmpty(league)) { LogWarn("League not set."); return; }
 
-        var game = await ResolveGameAsync(league);
+        var game = ResolveGame();
         if (game is null)
         {
             LogWarn("Unable to identify PoE1 or PoE2 for this league.");

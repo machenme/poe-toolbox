@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Diagnostics.CodeAnalysis;
 
 using LibBundle3.Records;
 
@@ -274,6 +275,18 @@ public class Bundle : IDisposable {
 	public virtual void RemoveCache() {
 		cachedContent = null;
 		cacheTable = null;
+	}
+
+	/// <summary>Abandons buffered writes when the owning index transaction is rolled back.</summary>
+	[UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Optional cross-library stream capability is discovered only during transaction rollback.")]
+	public virtual void DiscardBufferedChanges() {
+		baseStream.GetType().GetMethod("DiscardChanges", Type.EmptyTypes)?.Invoke(baseStream, null);
+	}
+
+	[UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Optional cross-library stream capability is discovered only during transaction rollback.")]
+	public virtual void Abort() {
+		DiscardBufferedChanges();
+		Dispose();
 	}
 
 	/// <summary>

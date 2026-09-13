@@ -247,6 +247,7 @@ public sealed class GameDataAccess : IDisposable
     /// <exception cref="InvalidOperationException"><paramref name="destPath"/> already exists</exception>
     public LibBundle3.Records.FileRecord CopyFileAs(string sourcePath, string destPath)
     {
+        EnsureGameStoppedForMutation();
         FileLogger.App.Info($"CopyFileAs: {sourcePath} -> {destPath}");
         var file = Index.CopyFile(sourcePath, destPath);
         Save();
@@ -254,21 +255,43 @@ public sealed class GameDataAccess : IDisposable
     }
 
     /// <summary>
-    /// Add a brand-new file at <paramref name="path"/> and persist the index.
+    /// Add a brand-new file at <paramref name="path"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException"><paramref name="path"/> already exists</exception>
-    public LibBundle3.Records.FileRecord AddFile(string path, byte[] content)
+    public LibBundle3.Records.FileRecord AddFile(string path, byte[] content, bool saveIndex = true)
     {
+        if (saveIndex)
+            EnsureGameStoppedForMutation();
         FileLogger.App.Info($"AddFile: {path} ({content.Length} bytes)");
-        var file = Index.AddFile(path, content);
-        Save();
-        return file;
+        return Index.AddFile(path, content, saveIndex);
+    }
+
+    /// <summary>Deletes empty custom Bundle records and their physical files.</summary>
+    public int CleanupOrphanCustomBundles(bool saveIndex = true)
+    {
+        if (saveIndex)
+            EnsureGameStoppedForMutation();
+        return Index.CleanupOrphanCustomBundles(saveIndex);
+    }
+
+    /// <summary>Removes the files a patch created under its own prefix, plus any bundle left empty.</summary>
+    /// <param name="bundlePrefix">The patch's bundle name (without the PATCHED/ directory).</param>
+    /// <param name="ownedPaths">Paths the patch itself created; base-game files are never removed.</param>
+    public int PurgePatchBundles(string bundlePrefix, IReadOnlySet<string> ownedPaths, bool saveIndex = true)
+    {
+        if (saveIndex)
+            EnsureGameStoppedForMutation();
+        return Index.PurgeCustomBundles($"PATCHED/{bundlePrefix}_", ownedPaths, saveIndex);
     }
 
     // ── Save ───────────────────────────────────────────
 
     /// <summary>Persist all changes.</summary>
-    public void Save() => Index.Save();
+    public void Save()
+    {
+        EnsureGameStoppedForMutation("saving");
+        Index.Save();
+    }
 
     /// <summary>
     /// When set, all writes go into this single custom bundle instead of being spread over several ones.
@@ -308,16 +331,87 @@ public sealed class GameDataAccess : IDisposable
         }
     }
 
+    /// <summary>
+    /// Opens a forward-only reader over the raw index content: the Bundles2 <c>_.index.bin</c> on disk,
+    /// or the same file stored as a record inside a GGPK. Nothing is buffered by this call.
+    /// </summary>
+    /// <remarks>
+    /// For callers that only read the index through — hashing it or copying it out. A real index is a
+    /// few hundred MB, so they should not go via <see cref="ReadIndexBytes"/> and materialise it.
+    /// <para>
+    /// A GGPK cannot lend out its index node as a <see cref="LibGGPK3.GGFileStream"/>, because the open
+    /// container already owns the one stream a <c>FileRecord</c> allows. The reader therefore reads the
+    /// record in blocks, clamped to its own length.
+    /// </para>
+    /// </remarks>
+    public IndexReader OpenIndexReader()
+    {
+        if (_isDirectIndex)
+            return new IndexReader(new System.IO.FileStream(_indexPath!, System.IO.FileMode.Open,
+                System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite), null);
+
+        var b2Dir = (LibGGPK3.Records.DirectoryRecord)_ggpk!.Root["Bundles2"]!;
+        var idxNode = (LibGGPK3.Records.FileRecord)b2Dir["_.index.bin"]!;
+        return new IndexReader(null, idxNode);
+    }
+
+    /// <summary>
+    /// Forward-only reader over the raw index content, so a few hundred MB can be hashed or copied
+    /// without ever being held in memory as one array.
+    /// </summary>
+    public sealed class IndexReader : IDisposable
+    {
+        private readonly System.IO.FileStream? _file;
+        private readonly LibGGPK3.Records.FileRecord? _record;
+        private long _position;
+
+        internal IndexReader(System.IO.FileStream? file, LibGGPK3.Records.FileRecord? record)
+        {
+            _file = file;
+            _record = record;
+            Length = file?.Length ?? record!.DataLength;
+        }
+
+        /// <summary>Size of the raw index content in bytes.</summary>
+        public long Length { get; }
+
+        /// <summary>Bytes handed out so far.</summary>
+        public long Position => _position;
+
+        /// <summary>Reads the next block, or returns 0 once the whole content has been read.</summary>
+        /// <exception cref="EndOfStreamException">The content ended before <see cref="Length"/> bytes.</exception>
+        public int Read(Span<byte> destination)
+        {
+            var remaining = Length - _position;
+            if (remaining <= 0 || destination.IsEmpty)
+                return 0;
+
+            var wanted = (int)Math.Min(destination.Length, remaining);
+            if (_file is not null)
+            {
+                var read = _file.Read(destination[..wanted]);
+                if (read <= 0)
+                    throw new EndOfStreamException("The index file ended earlier than its length reports.");
+                _position += read;
+                return read;
+            }
+
+            _record!.Read(destination[..wanted], (int)_position);
+            _position += wanted;
+            return wanted;
+        }
+
+        public void Dispose() => _file?.Dispose();
+    }
+
     /// <summary>Write raw index bytes (for restore/replace).</summary>
     public void WriteIndexBytes(byte[] data)
     {
+        EnsureGameStoppedForMutation("replacing game data");
         FileLogger.App.Info($"Index replaced externally: {_gameDataPath} ({data.Length} bytes)");
         if (_isDirectIndex)
         {
-            // Close existing handle before overwriting
-            _index?.Dispose();
-            _mappedIndex?.Dispose();
-            _mappedIndex = null;
+            DetachDirectIndex();
             var tempPath = _indexPath! + ".tmp." + Guid.NewGuid().ToString("N");
             try
             {
@@ -329,21 +423,83 @@ public sealed class GameDataAccess : IDisposable
                 if (System.IO.File.Exists(tempPath))
                     System.IO.File.Delete(tempPath);
             }
-            var bundleDir = System.IO.Path.GetDirectoryName(_indexPath!)!;
-            // Match Open's tolerant mode: newer client indexes can contain
-            // unresolved paths that are unrelated to the files we access.
-            _index = new LibBundle3.Index(_indexPath!, parsePaths: false,
-                bundleFactory: new DriveBundleFactory(bundleDir));
-            _index.ParsePaths();
-            if (_pinWrites)
-                PinAllWritesToSingleBundle();
+            ReopenDirectIndex();
         }
         else
         {
-            var b2Dir = (LibGGPK3.Records.DirectoryRecord)_ggpk!.Root["Bundles2"]!;
-            var idxNode = (LibGGPK3.Records.FileRecord)b2Dir["_.index.bin"]!;
-            idxNode.Write(data);
+            WriteIndexIntoGgpk(data);
         }
+    }
+
+    /// <summary>
+    /// Write raw index bytes taken from <paramref name="sourcePath"/> (for restore).
+    /// </summary>
+    /// <remarks>
+    /// A Bundles2 index is copied file to file, so a hundreds-of-MB index is never materialised as a
+    /// byte array. A GGPK stores its index as a record inside the container, so that path still reads
+    /// the file back in.
+    /// </remarks>
+    public void WriteIndexBytesFrom(string sourcePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        EnsureGameStoppedForMutation("replacing game data");
+        var length = new System.IO.FileInfo(sourcePath).Length;
+        FileLogger.App.Info($"Index replaced externally: {_gameDataPath} (from {sourcePath}, {length} bytes)");
+        if (_isDirectIndex)
+        {
+            DetachDirectIndex();
+            var tempPath = _indexPath! + ".tmp." + Guid.NewGuid().ToString("N");
+            try
+            {
+                System.IO.File.Copy(sourcePath, tempPath, overwrite: true);
+                System.IO.File.Move(tempPath, _indexPath!, true);
+            }
+            finally
+            {
+                if (System.IO.File.Exists(tempPath))
+                    System.IO.File.Delete(tempPath);
+            }
+            ReopenDirectIndex();
+        }
+        else
+        {
+            WriteIndexIntoGgpk(System.IO.File.ReadAllBytes(sourcePath));
+        }
+    }
+
+    /// <summary>Closes the handles on a direct Bundles2 index so the file can be replaced.</summary>
+    private void DetachDirectIndex()
+    {
+        _index?.Dispose();
+        _mappedIndex?.Dispose();
+        _index = null;
+        _mappedIndex = null;
+    }
+
+    private void ReopenDirectIndex()
+    {
+        var bundleDir = System.IO.Path.GetDirectoryName(_indexPath!)!;
+        // Match Open's tolerant mode: newer client indexes can contain
+        // unresolved paths that are unrelated to the files we access.
+        _index = new LibBundle3.Index(_indexPath!, parsePaths: false,
+            bundleFactory: new DriveBundleFactory(bundleDir));
+        _index.ParsePaths();
+        if (_pinWrites)
+            PinAllWritesToSingleBundle();
+    }
+
+    private void WriteIndexIntoGgpk(byte[] data)
+    {
+        var b2Dir = (LibGGPK3.Records.DirectoryRecord)_ggpk!.Root["Bundles2"]!;
+        var idxNode = (LibGGPK3.Records.FileRecord)b2Dir["_.index.bin"]!;
+        idxNode.Write(data);
+    }
+
+    private static void EnsureGameStoppedForMutation(string action = "modifying game data")
+    {
+        if (PoeDetector.Default.IsPoeRunning())
+            throw new InvalidOperationException(
+                $"Path of Exile is running. Close the game before {action}.");
     }
 
     // ── Dispose ────────────────────────────────────────

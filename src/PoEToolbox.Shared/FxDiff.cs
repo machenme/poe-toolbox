@@ -29,28 +29,33 @@ public static class FxDiff
 
     public static int Run(string[] args)
     {
-        // diff <原版index> <修改后index> [-o 输出目录] [--id patchId] [--bundle bundleName]
-        string? vanilla = null, modified = null, outDir = null, patchId = null, bundleName = null;
+        // diff <原版index> <修改后index> [-o 输出目录] [--id patchId] [--bundle bundleName] [--version 版本] [--zip]
+        string? vanilla = null, modified = null, outDir = null, patchId = null, bundleName = null, version = null;
         var datPtr = false;
+        var zip = false;
         for (var i = 0; i < args.Length; i++)
         {
             var a = args[i];
             if (a is "-o" or "--out" && i + 1 < args.Length) outDir = args[++i];
             else if (a == "--id" && i + 1 < args.Length) patchId = args[++i];
             else if (a == "--bundle" && i + 1 < args.Length) bundleName = args[++i];
+            else if (a == "--version" && i + 1 < args.Length) version = args[++i];
             else if (a == "--dat-ptr") datPtr = true;
+            else if (a == "--zip") zip = true;
             else if (vanilla is null) vanilla = a;
             else if (modified is null) modified = a;
             else { LogErr($"多余参数: {a}"); return 2; }
         }
         if (vanilla is null || modified is null)
         {
-            LogErr("Usage: fx-patch diff <原版index.bin> <修改后index.bin> [-o 输出目录] [--id patchId] [--bundle bundleName]");
+            LogErr("Usage: fx-patch diff <原版index.bin> <修改后index.bin> [-o 输出目录] [--id patchId] [--bundle bundleName] [--version 版本] [--zip]");
             return 2;
         }
         outDir ??= "fx-patch-out";
-        patchId ??= $"diff-{DateTime.Now:yyyyMMdd-HHmm}";
-        bundleName ??= "DiffPatch";
+        patchId ??= DefaultPatchId();
+        version ??= "1";
+        // bundle 名不能用一个固定值：多个补丁共用前缀时，相同版本号会互相覆盖
+        bundleName ??= SanitizeBundleName(patchId);
 
         try
         {
@@ -63,16 +68,38 @@ public static class FxDiff
             outDir ??= Path.Combine(ConfigService.PatchesDirectory, patchId);
             using var gdA = GameDataAccess.OpenReadOnlyMapped(resolvedVanilla, bundleDir);
             using var gdB = GameDataAccess.OpenReadOnlyMapped(resolvedModified, bundleDir);
-            return Diff(gdA, gdB, outDir, patchId, bundleName, datPtr);
+            var code = Diff(gdA, gdB, outDir, patchId, bundleName, version, datPtr);
+            if (code == 0 && zip)
+            {
+                var zipPath = outDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + ".zip";
+                try
+                {
+                    CreateZip(outDir, zipPath);
+                    Log($"[完成] 补丁包已压缩: {zipPath}");
+                }
+                catch (Exception ex)
+                {
+                    LogErr($"压缩补丁包失败: {ex.Message}");
+                    return 1;
+                }
+            }
+            return code;
         }
         catch (Exception ex)
         {
             LogErr($"Error: {ex.Message}");
             return 1;
         }
+        finally
+        {
+            // Both indexes used to be held until the next natural collection: this is the only
+            // place in the toolbox that has two of them alive at once (~2 GB), so hand the memory
+            // back explicitly once the diff is written.
+            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
+        }
     }
 
-    private static int Diff(GameDataAccess gdA, GameDataAccess gdB, string outDir, string patchId, string bundleName, bool datPtr)
+    private static int Diff(GameDataAccess gdA, GameDataAccess gdB, string outDir, string patchId, string bundleName, string version, bool datPtr)
     {
         Log($"原版  : {gdA.GameDataPath}");
         Log($"修改后: {gdB.GameDataPath}");
@@ -175,6 +202,7 @@ public static class FxDiff
         {
             PatchId = patchId,
             BundleName = bundleName,
+            Version = version,
             Operations = ops,
         };
         var json = JsonSerializer.Serialize(patch,
@@ -367,6 +395,60 @@ public static class FxDiff
         foreach (var c in System.IO.Path.GetFileNameWithoutExtension(path))
             sb.Append(char.IsLetterOrDigit(c) ? c : '_');
         return sb.ToString();
+    }
+
+    /// <summary>默认补丁 ID：留空名字时使用的时间戳名（diff-年月日-时分）。</summary>
+    public static string DefaultPatchId() => $"diff-{DateTime.Now:yyyyMMdd-HHmm}";
+
+    /// <summary>由用户的自定义名字得到补丁 ID；名字为空/全是非法字符时回落到默认时间戳名。
+    /// 补丁 ID 同时是输出目录名、json 文件名与 bundle 名来源，因此必须去掉文件名非法字符。</summary>
+    public static string MakePatchId(string? customName)
+    {
+        var name = customName?.Trim() ?? "";
+        if (name.Length == 0)
+            return DefaultPatchId();
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var sb = new StringBuilder(name.Length);
+        foreach (var c in name)
+            sb.Append(invalid.Contains(c) || char.IsWhiteSpace(c) ? '_' : c);
+        var id = sb.ToString().Trim('_', '-', '.');
+        return id.Length == 0 ? DefaultPatchId() : id;
+    }
+
+    /// <summary>把补丁目录整体打包成 zip：zip 根目录就是 assets/ 与补丁描述 json 两项，
+    /// 与 <c>FxPatchEngine.ExtractZipPatch</c> 的"压缩目录内容"形态一致（解压后可直接 apply）。</summary>
+    internal static void CreateZip(string outDir, string zipPath)
+    {
+        if (File.Exists(zipPath))
+            File.Delete(zipPath);
+        var parent = Path.GetDirectoryName(Path.GetFullPath(zipPath));
+        if (!string.IsNullOrEmpty(parent))
+            Directory.CreateDirectory(parent);
+
+        var files = Directory.EnumerateFiles(outDir, "*", SearchOption.AllDirectories)
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+        using var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create);
+        foreach (var file in files)
+        {
+            var relative = Path.GetRelativePath(outDir, file).Replace('\\', '/');
+            var entry = zip.CreateEntry(relative, System.IO.Compression.CompressionLevel.Optimal);
+            using var source = File.OpenRead(file);
+            using var target = entry.Open();
+            source.CopyTo(target);
+        }
+    }
+
+    /// <summary>把补丁 ID 降成可做 bundle 路径片段的名字。
+    /// 只保留 ASCII 字母数字与 <c>-</c>/<c>_</c>，点号也替换掉，避免出现会被路径校验拒绝的 <c>..</c>。</summary>
+    private static string SanitizeBundleName(string patchId)
+    {
+        var sb = new StringBuilder(patchId.Length);
+        foreach (var c in patchId)
+            sb.Append(char.IsAsciiLetterOrDigit(c) || c is '-' or '_' ? c : '_');
+        var name = sb.ToString().Trim('_', '-');
+        return name.Length == 0 ? "Patch" : name;
     }
 
     private static bool IsToolArtifact(string path)

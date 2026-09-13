@@ -1,6 +1,9 @@
 using System.Net.Http;
+using System.Text.RegularExpressions;
+using System.IO;
 using System.Reflection;
 using System.Text.Json;
+using System.Text;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.App;
@@ -21,6 +24,7 @@ public static class UpdateChecker
     private const string CachedResultKey = "Update.CachedResult";
     private const string SkippedVersionKey = "Update.SkippedVersion";
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
+    private const int MaxMetadataBytes = 256 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -93,16 +97,56 @@ public static class UpdateChecker
 
         try
         {
-            var json = await http.GetStringAsync(PrimaryUpdateUrl).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<UpdateInfo>(json, JsonOptions);
+            var json = await GetBoundedStringAsync(http, PrimaryUpdateUrl).ConfigureAwait(false);
+            return ParseUpdateInfo(json);
         }
         catch (Exception ex)
         {
             FileLogger.WriteCritical("Failed to fetch primary update source, trying fallback.", ex);
         }
 
-        var fallbackJson = await http.GetStringAsync(FallbackUpdateUrl).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<UpdateInfo>(fallbackJson, JsonOptions);
+        var fallbackJson = await GetBoundedStringAsync(http, FallbackUpdateUrl).ConfigureAwait(false);
+        return ParseUpdateInfo(fallbackJson);
+    }
+
+    private static async Task<string> GetBoundedStringAsync(HttpClient http, string url)
+    {
+        using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        if (response.Content.Headers.ContentLength is > MaxMetadataBytes)
+            throw new InvalidDataException("Update metadata exceeds the 256 KiB limit.");
+
+        await using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var buffer = new MemoryStream(capacity: MaxMetadataBytes);
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk).ConfigureAwait(false)) > 0)
+        {
+            if (buffer.Length + read > MaxMetadataBytes)
+                throw new InvalidDataException("Update metadata exceeds the 256 KiB limit.");
+            await buffer.WriteAsync(chunk.AsMemory(0, read)).ConfigureAwait(false);
+        }
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    private static UpdateInfo? ParseUpdateInfo(string json)
+    {
+        var update = JsonSerializer.Deserialize<UpdateInfo>(json, JsonOptions);
+        if (update is null || ParseVersion(update.Version) is null)
+            throw new InvalidDataException("Update metadata has an invalid version.");
+        ValidateHttpsUrl(update.ReleaseUrl, nameof(update.ReleaseUrl));
+        ValidateHttpsUrl(update.DownloadUrl, nameof(update.DownloadUrl));
+        if (!string.IsNullOrWhiteSpace(update.Sha256)
+            && !Regex.IsMatch(update.Sha256, "^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant))
+            throw new InvalidDataException("Update metadata has an invalid SHA-256 value.");
+        return update;
+    }
+
+    private static void ValidateHttpsUrl(string? value, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            throw new InvalidDataException($"Update metadata field {field} must be an HTTPS URL.");
     }
 
     public static void ClearCachedResult()

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -220,9 +221,38 @@ public partial class VoyagerView : UserControl
 
     // ── Log ────────────────────────────────────────────
 
+    // The log area is a TextBlock: `Text += ...` rebuilds the whole string on every line, and it never
+    // shrank. Keep the last MaxLogLines lines in a builder and hand the block one string.
+    private const int MaxLogLines = 300;
+    private const int TrimSlackLines = 100;
+    private readonly StringBuilder _log = new();
+    private int _logLines;
+
     public void AppendLog(string msg)
     {
-        LogText.Text += $"{DateTime.Now:HH:mm:ss} {msg}\n";
+        _log.Append(DateTime.Now.ToString("HH:mm:ss")).Append(' ').Append(msg).Append('\n');
+        if (++_logLines > MaxLogLines + TrimSlackLines)
+            TrimLog();
+        LogText.Text = _log.ToString();
+    }
+
+    /// <summary>Drops whole lines from the front until only <see cref="MaxLogLines"/> remain.</summary>
+    private void TrimLog()
+    {
+        var drop = _logLines - MaxLogLines;
+        var cut = 0;
+        for (var i = 0; i < _log.Length && drop > 0; i++)
+            if (_log[i] == '\n')
+            {
+                drop--;
+                cut = i + 1;
+            }
+
+        if (cut == 0)
+            return;
+
+        _log.Remove(0, cut);
+        _logLines = MaxLogLines;
     }
 
     // ── Helpers ────────────────────────────────────────

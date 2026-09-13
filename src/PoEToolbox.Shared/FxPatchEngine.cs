@@ -34,11 +34,19 @@ public static class FxPatchEngine
 
     private const string BuiltInPatchFileName = "oil-grenade-fx-lite.patch.json";
 
+    /// <summary>Index-relative directory every patch bundle lives in.</summary>
+    internal const string PatchBundleDirectory = "PATCHED/";
+
     // ═══ 补丁描述模型 ═══════════════════════════════════════════
     internal sealed class PatchDef
     {
         public string PatchId { get; set; } = "";
         public string BundleName { get; set; } = "";
+
+        /// <summary>补丁内容版本，决定写入哪个 bundle。改了内容就必须升版本，
+        /// 否则新内容会被判定为"覆盖其他 Mod"而拒绝执行。</summary>
+        public string Version { get; set; } = "";
+
         public List<PatchOp> Operations { get; set; } = new();
 
         /// <summary>补丁描述文件所在目录（assets 相对路径的基准）。运行时注入，不序列化。</summary>
@@ -50,6 +58,8 @@ public static class FxPatchEngine
     {
         public string Op { get; set; } = "";       // addfile-derived | addfile-asset | patchptr-byid | edittext
         public string? Src { get; set; }           // addfile-derived
+        public string? SourceSha256 { get; set; }  // addfile-derived：源文件 SHA-256（可选）
+        public string? TargetSha256 { get; set; }  // addfile-derived：生成目标 SHA-256（可选）
         public string? Dst { get; set; }
         public List<TextReplace> Replace { get; set; } = new();
         public string? Asset { get; set; }         // addfile-asset：补丁包内成品内容（相对 BasePath）
@@ -80,6 +90,48 @@ public static class FxPatchEngine
         public int Count { get; set; } = -1;       // -1 = 全部替换
     }
 
+    // ═══ 补丁 bundle 路径 ═══════════════════════════════════════
+    /// <summary>写入目标：<c>PATCHED/&lt;bundleName&gt;_v&lt;version&gt;</c>。
+    /// 用版本号而不是执行时间戳，反复 apply/revert 才会复用同一个 bundle，
+    /// 而不是每轮都在磁盘上留下一个新文件。</summary>
+    internal static string BundlePathOf(PatchDef patch)
+        => $"{PatchBundleDirectory}{patch.BundleName}_v{patch.Version}";
+
+    /// <summary>匹配该补丁写过的全部 bundle（任意版本，也兼容旧的时间戳命名）。
+    /// 拿它判断某个文件是不是本补丁自己的产物。</summary>
+    internal static string BundlePrefixOf(PatchDef patch)
+        => $"{PatchBundleDirectory}{patch.BundleName}_";
+
+    /// <summary>该文件当前是否落在本补丁写的 bundle 里——是则可安全覆盖，
+    /// 不是则说明被别的 Mod 占用。</summary>
+    internal static bool IsPatchOwned(LibBundle3.Index index, PatchDef patch, string path)
+        => index.TryGetFile(path, out var fr)
+           && fr?.BundleRecord?.Path is { } bundlePath
+           && bundlePath.StartsWith(BundlePrefixOf(patch), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>补丁自己造出来的路径，也就是 purge 唯一允许删除的东西。
+    /// 其余落在这个前缀下的文件都来自游戏本体（被重定向进来的还原版表/被改过的资源），
+    /// 删掉它们的索引记录等于把文件从游戏里挖走。</summary>
+    internal static HashSet<string> OwnedPathsOf(PatchDef patch)
+    {
+        var owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var op in patch.Operations)
+        {
+            var isPatchCreated = op.Op switch
+            {
+                // 副本路径由补丁凭空造出
+                "addfile-derived" => true,
+                // 没有原版字节 == 原版本来就没有这个文件
+                "addfile-asset" => op.OriginalAsset is null,
+                // patchptr-byid / edittext 修改的都是游戏原有文件
+                _ => false,
+            };
+            if (isPatchCreated && !string.IsNullOrEmpty(op.Dst))
+                owned.Add(op.Dst!);
+        }
+        return owned;
+    }
+
     internal enum PatchState { NotApplied, Applied, Conflict, Incompatible }
 
     private sealed record OpState(PatchOp Op, PatchState State, string Detail);
@@ -99,7 +151,7 @@ public static class FxPatchEngine
         }
         else
         {
-            // fx-patch diff <vanilla> <modified> [-o dir] [--id x] [--bundle y]
+            // fx-patch diff <vanilla> <modified> [-o dir] [--id x] [--bundle y] [--version v]
             if (args.Length > 0 && args[0].Equals("diff", StringComparison.OrdinalIgnoreCase))
                 return FxDiff.Run(args[1..]);
             if (args.Length != 3) { Usage(builtInPatch); return 2; }
@@ -109,9 +161,11 @@ public static class FxPatchEngine
         }
 
         action = action.ToLowerInvariant();
-        if (action is not ("status" or "apply" or "revert")) { Usage(builtInPatch); return 2; }
+        if (action is not ("status" or "apply" or "revert" or "cleanup" or "purge")) { Usage(builtInPatch); return 2; }
 
-        PatchDef patch;
+        PatchDef? patch = null;
+        string? patchDir = null;
+        string? rawIdHint = null;
         try
         {
             var path = builtInPatch
@@ -125,15 +179,44 @@ public static class FxPatchEngine
             // 支持分发为 zip 压缩包（目录压缩而成）：解压到临时目录后按普通补丁处理
             if (!builtInPatch && path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                var extracted = ExtractZipPatch(path);
-                if (extracted is null)
+                rawIdHint = Path.GetFileNameWithoutExtension(path);
+                var extracted = ExtractZipPatch(path, out var dir);
+                if (extracted is not null)
+                    path = extracted;
+                else if (dir is not null)
+                    patchDir = dir; // 没有 patch.json：交给下面的整包替换识别
+                else
                     return 1;
-                path = extracted;
             }
-            patch = JsonSerializer.Deserialize<PatchDef>(File.ReadAllText(path),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip })
-                ?? throw new InvalidOperationException("补丁描述解析为空。");
-            patch.BasePath = Path.GetDirectoryName(Path.GetFullPath(path));
+            if (patchDir is null)
+            {
+                patch = JsonSerializer.Deserialize<PatchDef>(File.ReadAllText(path),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip })
+                    ?? throw new InvalidOperationException("补丁描述解析为空。");
+                patch.BasePath = Path.GetDirectoryName(Path.GetFullPath(path));
+                patchDir = patch.BasePath;
+                rawIdHint = patch.PatchId;
+            }
+        }
+        catch (Exception ex)
+        {
+            LogErr($"补丁描述加载失败: {ex.Message}");
+            return 1;
+        }
+
+        // 整包替换型补丁：包里带着 _.index.bin 与其他 .bin（bundle），应用 = 备份后整体覆盖同名文件，
+        // 不走索引级 op。这类补丁的作者通常直接改客户端文件后打包，没有 patch.json。
+        if (!builtInPatch && patchDir is not null && TryDetectRawPack(patchDir, rawIdHint) is { } rawPack)
+            return RunRawPack(GameDataLoader.ResolvePath(gameData), rawPack, action);
+
+        if (patch is null)
+        {
+            LogErr("压缩包内既没有补丁描述（patch.json / *.patch.json），也不是整包替换补丁（需含 _.index.bin 与其他 .bin 文件）。");
+            return 1;
+        }
+
+        try
+        {
             ValidatePatch(patch);
         }
         catch (Exception ex)
@@ -149,7 +232,9 @@ public static class FxPatchEngine
             {
                 "status" => CmdStatus(resolved, patch),
                 "apply" => CmdApplyOrRevert(resolved, patch, apply: true),
-                _ => CmdApplyOrRevert(resolved, patch, apply: false),
+                "revert" => CmdApplyOrRevert(resolved, patch, apply: false),
+                "cleanup" => CmdCleanup(resolved),
+                _ => CmdPurge(resolved, patch),
             };
         }
         catch (Exception ex)
@@ -171,10 +256,17 @@ public static class FxPatchEngine
     /// <summary>
     /// 把 zip 补丁包解压到临时目录并返回其中 patch.json 的路径。
     /// 兼容两种打包方式：压缩整个目录（顶层有一层文件夹）或压缩目录内容（patch.json 在 zip 根）。
+    /// 没有 patch.json 时照样解压（返回 null + <paramref name="extractedDir"/>），
+    /// 交给整包替换型识别——作者直接打包索引与 bundle 的补丁包就是这样。
     /// 临时目录按天清理，避免残留。
     /// </summary>
-    private static string? ExtractZipPatch(string zipPath)
+    internal static string? ExtractZipPatch(string zipPath) => ExtractZipPatch(zipPath, out _);
+
+    /// <inheritdoc cref="ExtractZipPatch(string)"/>
+    /// <param name="extractedDir">解压到的临时目录；没有 patch.json 时（整包替换型补丁包）靠它继续处理。</param>
+    internal static string? ExtractZipPatch(string zipPath, out string? extractedDir)
     {
+        extractedDir = null;
         try
         {
             using var archive = System.IO.Compression.ZipFile.OpenRead(zipPath);
@@ -184,18 +276,15 @@ public static class FxPatchEngine
                             || Path.GetFileName(e.FullName).EndsWith(".patch.json", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(e => e.FullName.Replace('\\', '/').Count(c => c == '/'))
                 .FirstOrDefault();
-            if (jsonEntry is null)
-            {
-                LogErr($"压缩包内未找到补丁描述（patch.json / *.patch.json）: {zipPath}");
-                return null;
-            }
 
-            var fullName = jsonEntry.FullName.Replace('\\', '/');
-            var slash = fullName.LastIndexOf('/');
-            var prefix = slash >= 0 ? fullName[..(slash + 1)] : "";
+            // 没有 patch.json 就整包解压（不裁剪前缀），让 TryDetectRawPack 去里面找 _.index.bin
+            var fullName = jsonEntry?.FullName.Replace('\\', '/');
+            var slash = fullName?.LastIndexOf('/') ?? -1;
+            var prefix = slash >= 0 ? fullName![..(slash + 1)] : "";
 
             var baseDir = Path.Combine(Path.GetTempPath(), "poe-toolbox-patch-" + Guid.NewGuid().ToString("N")[..12]);
             CleanStalePatchTempDirs(baseDir);
+            extractedDir = baseDir;
 
             foreach (var entry in archive.Entries)
             {
@@ -205,7 +294,12 @@ public static class FxPatchEngine
                 var relative = entryName[prefix.Length..];
                 if (relative.Length == 0)
                     continue;
-                var destination = Path.Combine(baseDir, relative.Replace('/', Path.DirectorySeparatorChar));
+                if (!TryGetSafeChildPath(baseDir, relative, out var destination))
+                {
+                    LogErr($"压缩包包含不安全路径，拒绝解压: {entry.FullName}");
+                    try { Directory.Delete(baseDir, recursive: true); } catch { }
+                    return null;
+                }
                 if (entryName.EndsWith('/'))
                 {
                     Directory.CreateDirectory(destination);
@@ -218,13 +312,50 @@ public static class FxPatchEngine
             }
 
             Log($"已解压补丁包: {Path.GetFileName(zipPath)} → {baseDir}");
-            return Path.Combine(baseDir, fullName[prefix.Length..].Replace('/', Path.DirectorySeparatorChar));
+            if (jsonEntry is null)
+            {
+                Log("压缩包内没有 patch.json，改按「整包替换型补丁」识别（需要包里有 _.index.bin 与 bundle 文件）。");
+                return null;
+            }
+            return TryGetSafeChildPath(baseDir, fullName![prefix.Length..], out var patchPath)
+                ? patchPath
+                : null;
         }
         catch (Exception ex)
         {
             LogErr($"解压补丁包失败: {ex.Message}");
             return null;
         }
+    }
+
+    internal static bool TryGetSafeChildPath(string rootDirectory, string relativePath, out string destination)
+    {
+        destination = "";
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return false;
+
+        var normalized = relativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        if (Path.IsPathRooted(normalized))
+            return false;
+        if (normalized.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
+            .Any(segment => segment is "." or ".."))
+            return false;
+
+        var root = Path.GetFullPath(rootDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var candidate = Path.GetFullPath(Path.Combine(root, normalized));
+        if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        destination = candidate;
+        return true;
+    }
+
+    private static string ResolvePatchFilePath(PatchDef patch, string relativePath)
+    {
+        var root = patch.BasePath ?? ".";
+        if (!TryGetSafeChildPath(root, relativePath, out var path))
+            throw new InvalidOperationException($"补丁资源路径不安全: {relativePath}");
+        return path;
     }
 
     /// <summary>清理超过 24 小时的旧补丁解压临时目录。</summary>
@@ -246,14 +377,76 @@ public static class FxPatchEngine
     private static void Usage(bool builtInPatch)
     {
         LogErr(builtInPatch
-            ? "Usage: fx-oilmod <game-data> <status|apply|revert>"
-            : "Usage: fx-patch <game-data> <patch.json|patch.zip> <status|apply|revert>\n       fx-patch diff <原版index.bin> <修改后index.bin> [-o 目录] [--id x] [--bundle y]");
+            ? "Usage: fx-oilmod <game-data> <status|apply|revert|cleanup|purge>"
+            : "Usage: fx-patch <game-data> <patch.json|patch.zip> <status|apply|revert|cleanup|purge>\n       fx-patch diff <原版index.bin> <修改后index.bin> [-o 目录] [--id x] [--bundle y] [--version v] [--zip]");
+    }
+
+    private static int CmdCleanup(string resolved)
+    {
+        if (PoeDetector.Default.IsPoeRunning())
+        {
+            LogErr("[中止] Path of Exile 正在运行。请先退出游戏，再清理补丁 Bundle。");
+            return 1;
+        }
+
+        var removed = GameDataLoader.Use(resolved, GameDataMode.ReadWrite,
+            gd => gd.CleanupOrphanCustomBundles(saveIndex: true));
+        Log(removed == 0
+            ? "[完成] 没有发现孤儿补丁 Bundle。"
+            : $"[完成] 已清理 {removed} 个无引用补丁 Bundle。");
+        return 0;
+    }
+
+    private static int CmdPurge(string resolved, PatchDef patch)
+    {
+        if (PoeDetector.Default.IsPoeRunning())
+        {
+            LogErr("[中止] Path of Exile 正在运行。请先退出游戏，再彻底清理补丁文件。");
+            return 1;
+        }
+
+        var owned = OwnedPathsOf(patch);
+        if (owned.Count == 0)
+        {
+            Log("[完成] 本补丁没有新增文件（只修改了游戏原有文件），无需彻底清理——还原补丁即可。");
+            return 0;
+        }
+
+        Log($"[清理] {patch.PatchId} v{patch.Version}：只移除本补丁新增的 {owned.Count} 个路径，游戏原有文件一律保留。");
+        // 一次 Use 内做完「删补丁文件 + 清孤儿 bundle」，只落盘一次。
+        // 孤儿收尾原本是独立的 cleanup 命令；捆绑在这里后，用户卸载完补丁不需要再手动跑一次，
+        // 语义完全相同——只删索引里已经没有任何文件记录的 PATCHED bundle（跨补丁，含本补丁腾空后的残留）。
+        var removed = 0;
+        var orphansRemoved = 0;
+        GameDataLoader.Use(resolved, GameDataMode.ReadWrite, gd =>
+        {
+            removed = gd.PurgePatchBundles(patch.BundleName, owned, saveIndex: false);
+            orphansRemoved = gd.CleanupOrphanCustomBundles(saveIndex: false);
+            // 必须自己收尾落盘：CleanupOrphanCustomBundles 只有发现空 bundle 时才 Save
+            // （Index.cs:135-137），而 purge 后 bundle 里往往还留着被 Redirect 进来的原生文件、
+            // 并不为空 —— 那次 Save 不会发生，purge 的改动就全丢了。
+            // 而 Save 本身（Index.cs:549-584）就会先摘掉空 bundle、写完索引再删它们的物理文件，
+            // 所以一次 gd.Save() 同时提交了两件事。
+            if (removed != 0 || orphansRemoved != 0)
+                gd.Save();
+        });
+        Log($"[完成] 已清理 {removed} 个补丁新增文件；索引中仍被引用的游戏文件保持不动。");
+        Log(orphansRemoved == 0
+            ? "[收尾] 没有残留的空补丁 Bundle 需要清理。"
+            : $"[收尾] 顺带清理了 {orphansRemoved} 个已无引用的补丁 Bundle。");
+        return 0;
     }
 
     private static void ValidatePatch(PatchDef patch)
     {
         if (string.IsNullOrWhiteSpace(patch.PatchId)) throw new InvalidOperationException("缺少 patchId。");
         if (string.IsNullOrWhiteSpace(patch.BundleName)) throw new InvalidOperationException("缺少 bundleName。");
+        // version 会被拼进 bundle 路径，必须限制字符集
+        if (string.IsNullOrWhiteSpace(patch.Version)) throw new InvalidOperationException("缺少 version。");
+        if (patch.Version.Contains("..")) throw new InvalidOperationException("version 不能包含 '..'。");
+        foreach (var c in patch.Version)
+            if (!char.IsAsciiLetterOrDigit(c) && c is not ('.' or '_' or '-'))
+                throw new InvalidOperationException($"version 只能包含字母、数字、点、下划线和短横线：\"{patch.Version}\"。");
         if (patch.Operations.Count == 0) throw new InvalidOperationException("operations 为空。");
         foreach (var op in patch.Operations)
         {
@@ -269,24 +462,262 @@ public static class FxPatchEngine
                 case "edittext" when string.IsNullOrEmpty(op.Path) || op.Old is null || op.New is null:
                     throw new InvalidOperationException("edittext 需要 path/old/new。");
             }
+            if (op.SourceSha256 is not null && !IsSha256(op.SourceSha256))
+                throw new InvalidOperationException("addfile-derived 的 sourceSha256 必须是 64 位十六进制 SHA-256。");
+            if (op.TargetSha256 is not null && !IsSha256(op.TargetSha256))
+                throw new InvalidOperationException("addfile-derived 的 targetSha256 必须是 64 位十六进制 SHA-256。");
         }
+    }
+
+    // ═══ 整包替换型补丁（包内自带 _.index.bin + bundle 文件）══════════
+    /// <summary>补丁包里的一个待覆盖文件：相对路径以 <c>_.index.bin</c> 所在目录为根。</summary>
+    internal sealed record RawPackFile(string RelativePath, string SourcePath);
+
+    internal sealed record RawPack(string PatchId, IReadOnlyList<RawPackFile> Files);
+
+    private const string RawManifestFileName = "manifest.txt";
+
+    /// <summary>
+    /// 识别"整包替换型"补丁：目录里有 <c>_.index.bin</c> 且至少还有一个其他 <c>.bin</c>。
+    /// 以 <c>_.index.bin</c> 所在的那层为根（作者打包时常带一层 <c>bundles2/</c>），
+    /// 其余文件按该根的相对路径原样落进游戏索引目录。
+    /// </summary>
+    internal static RawPack? TryDetectRawPack(string patchDir, string? patchIdHint)
+    {
+        var indexFile = Directory.EnumerateFiles(patchDir, "_.index.bin", SearchOption.AllDirectories)
+            .FirstOrDefault(p => string.Equals(Path.GetFileName(p), "_.index.bin", StringComparison.OrdinalIgnoreCase));
+        if (indexFile is null)
+            return null;
+
+        var root = Path.GetDirectoryName(indexFile)!;
+        var bundles = Directory.EnumerateFiles(root, "*.bin", SearchOption.AllDirectories)
+            .Where(p => !string.Equals(Path.GetFileName(p), "_.index.bin", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+        if (bundles.Count == 0)
+            return null;
+
+        var files = new List<RawPackFile> { new(Path.GetFileName(indexFile), indexFile) };
+        foreach (var bundle in bundles)
+            files.Add(new RawPackFile(Path.GetRelativePath(root, bundle), bundle));
+
+        return new RawPack(FxDiff.MakePatchId(patchIdHint), files);
+    }
+
+    internal static int RunRawPack(string resolved, RawPack pack, string action)
+    {
+        if (!resolved.EndsWith(".index.bin", StringComparison.OrdinalIgnoreCase) || !File.Exists(resolved))
+        {
+            LogErr("[中止] 整包替换补丁只支持把索引放在独立文件里的客户端（Bundles2/_.index.bin）。");
+            return 1;
+        }
+
+        Log($"[整包替换] {pack.PatchId}：{pack.Files.Count} 个文件（含索引本体）");
+        return action switch
+        {
+            "status" => RawStatus(resolved, pack),
+            "apply" => RawApply(resolved, pack),
+            "revert" => RawRevert(resolved, pack),
+            _ => RawNoBundleOperation(action),
+        };
+    }
+
+    private static int RawNoBundleOperation(string action)
+    {
+        Log($"[提示] 整包替换补丁不写 PATCHED bundle，{action} 对它不适用；要撤销请点「还原补丁」。");
+        return 0;
+    }
+
+    /// <summary>应用：先把游戏目录里的同名文件备份到 <c>backup/&lt;补丁名&gt;/</c>，再逐个覆盖。</summary>
+    private static int RawApply(string resolved, RawPack pack)
+    {
+        if (PoeDetector.Default.IsPoeRunning())
+        {
+            LogErr("[中止] Path of Exile 正在运行。请先退出游戏，再应用补丁。");
+            return 1;
+        }
+
+        var indexDir = Path.GetDirectoryName(resolved)!;
+        var backupDir = Path.Combine(IndexBackupService.GetBackupDirectory(resolved), pack.PatchId);
+        var baselinePath = IndexBackupService.GetBaselinePath(resolved);
+        Directory.CreateDirectory(backupDir);
+
+        var manifest = new List<string> { "# 整包替换还原清单：kind\t相对路径\t备份来源" };
+        foreach (var file in pack.Files)
+        {
+            var target = Path.Combine(indexDir, file.RelativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+
+            string kind, backupSource = "";
+            if (File.Exists(target))
+            {
+                var backupFile = Path.Combine(backupDir, file.RelativePath);
+                // 索引本体：原版基线 backup/_.index.bin 是特殊用途的那份，内容一致时直接复用，不重复占磁盘
+                if (string.Equals(file.RelativePath, Path.GetFileName(resolved), StringComparison.OrdinalIgnoreCase)
+                    && File.Exists(baselinePath) && SameContent(target, baselinePath))
+                {
+                    backupSource = "baseline";
+                    Log($"[备份] {file.RelativePath} 与原版基线一致，复用 {Path.GetFileName(baselinePath)}");
+                }
+                else if (File.Exists(backupFile))
+                {
+                    backupSource = file.RelativePath;
+                    Log($"[备份] {file.RelativePath} 之前已备份，保留最早的原始版本");
+                }
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(backupFile)!);
+                    File.Copy(target, backupFile);
+                    backupSource = file.RelativePath;
+                    Log($"[备份] {file.RelativePath} → backup/{pack.PatchId}/{file.RelativePath}");
+                }
+                kind = "replaced";
+            }
+            else
+            {
+                kind = "added";
+                Log($"[备份] 游戏目录原本没有 {file.RelativePath}（补丁新增），无需备份");
+            }
+
+            File.Copy(file.SourcePath, target, overwrite: true);
+            Log($"[覆盖] {file.RelativePath}（{new FileInfo(file.SourcePath).Length:N0} B）");
+            manifest.Add($"{kind}\t{file.RelativePath}\t{backupSource}");
+        }
+
+        File.WriteAllLines(Path.Combine(backupDir, RawManifestFileName), manifest);
+        Log($"[成功] {pack.PatchId} 应用完成：{pack.Files.Count} 个文件已写入 {indexDir}");
+        Log($"       原始文件备份在 {backupDir}，点「还原补丁」即可放回去。");
+        return 0;
+    }
+
+    /// <summary>还原：按清单把备份的文件放回原位；补丁新增的文件（原版没有）则删除。</summary>
+    private static int RawRevert(string resolved, RawPack pack)
+    {
+        if (PoeDetector.Default.IsPoeRunning())
+        {
+            LogErr("[中止] Path of Exile 正在运行。请先退出游戏，再还原补丁。");
+            return 1;
+        }
+
+        var indexDir = Path.GetDirectoryName(resolved)!;
+        var backupDir = Path.Combine(IndexBackupService.GetBackupDirectory(resolved), pack.PatchId);
+        var baselinePath = IndexBackupService.GetBaselinePath(resolved);
+        var manifest = ReadRawManifest(Path.Combine(backupDir, RawManifestFileName));
+
+        foreach (var file in pack.Files)
+        {
+            var target = Path.Combine(indexDir, file.RelativePath);
+            manifest.TryGetValue(file.RelativePath, out var entry);
+
+            if (entry?.Kind == "added")
+            {
+                if (File.Exists(target))
+                {
+                    File.Delete(target);
+                    Log($"[删除] {file.RelativePath}（补丁新增，原版没有）");
+                }
+                else
+                    Log($"[跳过] {file.RelativePath} 已不存在");
+                continue;
+            }
+
+            var source = entry?.BackupSource == "baseline"
+                ? baselinePath
+                : Path.Combine(backupDir, file.RelativePath);
+            if (File.Exists(source))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(source, target, overwrite: true);
+                Log($"[还原] {file.RelativePath} ← {source}");
+            }
+            else
+                LogErr($"[警告] {file.RelativePath} 找不到原始备份，未改动（可从 {backupDir} 手动恢复，或用「还原原版索引」）");
+        }
+
+        Log($"[成功] {pack.PatchId} 还原完成。");
+        return 0;
+    }
+
+    private static int RawStatus(string resolved, RawPack pack)
+    {
+        var indexDir = Path.GetDirectoryName(resolved)!;
+        var backupDir = Path.Combine(IndexBackupService.GetBackupDirectory(resolved), pack.PatchId);
+        Log($"索引目录: {indexDir}");
+        Log($"补丁: {pack.PatchId}（整包替换型，{pack.Files.Count} 个文件）");
+        Log($"备份目录: {backupDir}{(Directory.Exists(backupDir) ? "" : "（尚不存在，应用时自动创建）")}");
+
+        var applied = 0;
+        foreach (var file in pack.Files)
+        {
+            var target = Path.Combine(indexDir, file.RelativePath);
+            var state = File.Exists(target) && SameContent(target, file.SourcePath) ? "已应用" : "未应用";
+            if (state == "已应用")
+                applied++;
+            var backedUp = File.Exists(Path.Combine(backupDir, file.RelativePath)) ? "已备份" : "无备份";
+            Log($"  [{state}] {file.RelativePath}（{backedUp}）");
+        }
+
+        Log($"[结果] {applied}/{pack.Files.Count} 个文件已是补丁内容。");
+        return 0;
+    }
+
+    private static Dictionary<string, (string Kind, string BackupSource)?> ReadRawManifest(string manifestPath)
+    {
+        var result = new Dictionary<string, (string, string)?>(StringComparer.OrdinalIgnoreCase);
+        if (!File.Exists(manifestPath))
+            return result;
+        foreach (var line in File.ReadAllLines(manifestPath))
+        {
+            if (line.Length == 0 || line[0] == '#')
+                continue;
+            var parts = line.Split('\t');
+            if (parts.Length < 2)
+                continue;
+            result[parts[1]] = (parts[0], parts.Length > 2 ? parts[2] : "");
+        }
+        return result;
+    }
+
+    /// <summary>先比大小再比 SHA-256，避免大文件白算哈希。</summary>
+    private static bool SameContent(string left, string right)
+    {
+        if (new FileInfo(left).Length != new FileInfo(right).Length)
+            return false;
+        using var a = File.OpenRead(left);
+        using var b = File.OpenRead(right);
+        return SHA256.HashData(a).AsSpan().SequenceEqual(SHA256.HashData(b));
     }
 
     // ═══ status ═════════════════════════════════════════════════
     private static int CmdStatus(string resolved, PatchDef patch)
     {
-        using var gd = GameDataAccess.OpenReadOnlyMapped(resolved);
-        Log($"索引: {gd.GameDataPath}");
-        Log($"补丁: {patch.PatchId}");
-        foreach (var s in ComputeStates(gd, patch))
-            Log($"  [{Label(s.State)}] {s.Op.Describe}\n          └ {s.Detail}");
-        return 0;
+        try
+        {
+            using var gd = GameDataAccess.OpenReadOnlyMapped(resolved);
+            Log($"索引: {gd.GameDataPath}");
+            Log($"补丁: {patch.PatchId}");
+            foreach (var s in ComputeStates(gd, patch))
+                Log($"  [{Label(s.State)}] {s.Op.Describe}\n          └ {s.Detail}");
+            return 0;
+        }
+        finally
+        {
+            // Opened outside GameDataLoader, so the reclaim has to be requested here as well:
+            // "查看状态" is a button in the plugin and repeats, so the index must not pile up.
+            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
+        }
     }
 
     // ═══ apply / revert ═════════════════════════════════════════
     private static int CmdApplyOrRevert(string resolved, PatchDef patch, bool apply)
     {
         var verb = apply ? "应用" : "还原";
+
+        if (PoeDetector.Default.IsPoeRunning())
+        {
+            LogErr("[中止] Path of Exile 正在运行。请先退出游戏，再执行补丁应用或还原；背包清理使用独立的运行态流程。");
+            return 1;
+        }
 
         // Pass 1：只读预检，冲突/不兼容在写入前中止
         int unresolvedBefore;
@@ -295,7 +726,7 @@ public static class FxPatchEngine
         {
             unresolvedBefore = CountUnresolved(gd);
             Log($"[预检] {patch.PatchId} → {(apply ? "apply" : "revert")}");
-            preview = ComputeStates(gd, patch);
+            preview = ComputeStates(gd, patch, apply);
             foreach (var s in preview)
                 Log($"  [{Label(s.State)}] {s.Op.Describe}\n          └ {s.Detail}");
             if (preview.Any(s => s.State is PatchState.Conflict or PatchState.Incompatible))
@@ -305,64 +736,131 @@ public static class FxPatchEngine
             }
         }
 
-        // Pass 2：写入（独立 bundle：PATCHED/<bundleName>_<时间戳>.bundle.bin，后缀由库追加）
-        var bundlePath = $"PATCHED/{patch.BundleName}_{DateTime.Now:yyyyMMdd-HHmmss}";
+        // 预检期间游戏可能被重新启动，写入前再检查一次。
+        if (PoeDetector.Default.IsPoeRunning())
+        {
+            LogErr("[中止] 检测到 Path of Exile 已启动，未做任何写入。");
+            return 1;
+        }
+
+        // Pass 2：写入（独立 bundle：PATCHED/<bundleName>_v<version>.bundle.bin，后缀由库追加）
+        var bundlePath = BundlePathOf(patch);
         var exit = GameDataLoader.Use(resolved, GameDataMode.ReadWrite, gd =>
         {
             gd.PinnedWriteBundlePath = bundlePath;
             Log($"[写入] 补丁 bundle: {bundlePath}");
 
             var backup = IndexBackupService.Begin(gd);
+            var beforeIndexBytes = gd.ReadIndexBytes();
+            var mutationSnapshot = gd.Index.CaptureMutationSnapshot();
+            var originalMaxBundleSize = gd.Index.MaxBundleSize;
             var changed = false;
-            foreach (var op in patch.Operations)
+            var committed = false;
+            try
             {
-                var opChanged = ExecuteOp(gd, patch, op, apply);
-                changed |= opChanged;
-            }
-
-            if (changed)
-                gd.Save();
-            else
-                Log("[完成] 无需写入（全部操作已处于目标状态）。");
-
-            IndexBackupService.Complete(gd, backup, apply ? "fx-patch-apply" : "fx-patch-revert",
-                new Dictionary<string, string>
+                // 补丁事务不能在中途触发 Bundle flush；所有 FileRecord/AddFile 操作
+                // 都只改内存中的索引和单个待写 Bundle，最后统一 Save 一次。
+                gd.Index.MaxBundleSize = int.MaxValue;
+                foreach (var op in patch.Operations)
                 {
-                    ["patchId"] = patch.PatchId,
-                    ["bundle"] = bundlePath,
-                });
-            Log($"[备份] baseline={backup.BaselinePath}");
-            return 0;
+                    var opChanged = ExecuteOp(gd, patch, op, apply);
+                    changed |= opChanged;
+                }
+
+                if (changed)
+                {
+                    gd.Save();
+                    committed = true;
+                }
+                else
+                    Log("[完成] 无需写入（全部操作已处于目标状态）。");
+
+                // 审计日志不是游戏数据事务的一部分；保存成功后即使日志目录不可写，
+                // 也不能把已经提交的游戏数据误报成失败。
+                try
+                {
+                    IndexBackupService.Complete(gd, backup, apply ? "fx-patch-apply" : "fx-patch-revert",
+                        new Dictionary<string, string>
+                        {
+                            ["patchId"] = patch.PatchId,
+                            ["bundle"] = bundlePath,
+                        });
+                    Log($"[备份] baseline={backup.BaselinePath}");
+                }
+                catch (Exception ex)
+                {
+                    LogErr($"[警告] 游戏数据已保存，但写入审计日志失败：{ex.Message}");
+                }
+                return 0;
+            }
+            catch
+            {
+                if (!committed)
+                {
+                    try
+                    {
+                        // 尚未 Save 时，唯一可能落盘的是新建/刷出的本次补丁 Bundle。
+                        // 回滚它即可保证原索引和原 Bundle 不受影响；当前 gd 随后会被释放。
+                        gd.Index.RollbackMutation(mutationSnapshot);
+                        try
+                        {
+                            gd.WriteIndexBytes(beforeIndexBytes);
+                        }
+                        catch (Exception restoreEx)
+                        {
+                            LogErr($"[严重] 原始索引恢复失败：{restoreEx.Message}");
+                        }
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        LogErr($"[严重] 补丁事务失败，且清理临时 Bundle 失败：{rollbackEx.Message}");
+                    }
+                }
+                throw;
+            }
+            finally
+            {
+                gd.Index.MaxBundleSize = originalMaxBundleSize;
+            }
         });
         if (exit != 0)
             return exit;
 
         // Pass 3：重开校验
-        using (var gd = GameDataAccess.OpenReadOnlyMapped(resolved))
+        try
         {
-            var after = ComputeStates(gd, patch);
-            Log("[校验] 重新打开索引后的状态：");
-            foreach (var s in after)
-                Log($"  [{Label(s.State)}] {s.Op.Describe}\n          └ {s.Detail}");
-
-            var targetState = apply ? PatchState.Applied : PatchState.NotApplied;
-            // revert 豁免：addfile-derived 副本按设计保留；addfile-asset 无原版字节（新增类）同样保留
-            var allOk = after.All(s =>
-                !apply && (s.Op.Op == "addfile-derived" || (s.Op.Op == "addfile-asset" && s.Op.OriginalAsset is null))
-                    || s.State == targetState);
-            var unresolvedAfter = CountUnresolved(gd);
-            var unresolvedOk = unresolvedAfter == unresolvedBefore;
-            Log($"[校验] unresolved: {unresolvedBefore:N0} -> {unresolvedAfter:N0} {(unresolvedOk ? "OK" : "MISMATCH!")}");
-            foreach (var s in after.Where(s => !apply && s.State == PatchState.Applied
-                && (s.Op.Op == "addfile-derived" || (s.Op.Op == "addfile-asset" && s.Op.OriginalAsset is null))))
-                Log($"[校验] {s.Op.Dst} 保留（新增内容，无引用/无还原目标时无害）");
-            if (!allOk)
+            using (var gd = GameDataAccess.OpenReadOnlyMapped(resolved))
             {
-                LogErr($"[失败] 校验未全部达到{(apply ? "已应用" : "未应用")}状态。");
-                return 1;
+                var after = ComputeStates(gd, patch);
+                Log("[校验] 重新打开索引后的状态：");
+                foreach (var s in after)
+                    Log($"  [{Label(s.State)}] {s.Op.Describe}\n          └ {s.Detail}");
+
+                var targetState = apply ? PatchState.Applied : PatchState.NotApplied;
+                // revert 豁免：addfile-derived 副本按设计保留；addfile-asset 无原版字节（新增类）同样保留
+                var allOk = after.All(s =>
+                    !apply && (s.Op.Op == "addfile-derived" || (s.Op.Op == "addfile-asset" && s.Op.OriginalAsset is null))
+                        || s.State == targetState);
+                var unresolvedAfter = CountUnresolved(gd);
+                var unresolvedOk = unresolvedAfter == unresolvedBefore;
+                Log($"[校验] unresolved: {unresolvedBefore:N0} -> {unresolvedAfter:N0} {(unresolvedOk ? "OK" : "MISMATCH!")}");
+                foreach (var s in after.Where(s => !apply && s.State == PatchState.Applied
+                    && (s.Op.Op == "addfile-derived" || (s.Op.Op == "addfile-asset" && s.Op.OriginalAsset is null))))
+                    Log($"[校验] {s.Op.Dst} 保留（新增内容，无引用/无还原目标时无害）");
+                if (!allOk)
+                {
+                    LogErr($"[失败] 校验未全部达到{(apply ? "已应用" : "未应用")}状态。");
+                    return 1;
+                }
+                if (!unresolvedOk)
+                    return 1;
             }
-            if (!unresolvedOk)
-                return 1;
+        }
+        finally
+        {
+            // Pass 3 is a second full open of the index in the same process. Apply and revert are
+            // usually run back to back, so the verification copy must not sit on the heap either.
+            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
         }
 
         Log($"[成功] {patch.PatchId} {verb}完成。");
@@ -370,10 +868,10 @@ public static class FxPatchEngine
     }
 
     // ═══ 单 op 三态计算（只读）══════════════════════════════════
-    private static OpState[] ComputeStates(GameDataAccess gd, PatchDef patch)
-        => patch.Operations.Select(op => ComputeState(gd, patch, op)).ToArray();
+    private static OpState[] ComputeStates(GameDataAccess gd, PatchDef patch, bool? applying = null)
+        => patch.Operations.Select(op => ComputeState(gd, patch, op, applying)).ToArray();
 
-    private static OpState ComputeState(GameDataAccess gd, PatchDef patch, PatchOp op)
+    private static OpState ComputeState(GameDataAccess gd, PatchDef patch, PatchOp op, bool? applying = null)
     {
         try
         {
@@ -383,13 +881,34 @@ public static class FxPatchEngine
                 {
                     if (!gd.FileExists(op.Src!))
                         return new OpState(op, PatchState.Incompatible, $"找不到源文件 {op.Src}");
-                    return gd.FileExists(op.Dst!)
-                        ? new OpState(op, PatchState.Applied, $"副本已存在 {op.Dst}")
-                        : new OpState(op, PatchState.NotApplied, "副本不存在");
+                    if (applying == false)
+                        return gd.FileExists(op.Dst!)
+                            ? new OpState(op, PatchState.Applied, $"副本存在 {op.Dst}（还原时保留无引用副本）")
+                            : new OpState(op, PatchState.NotApplied, "副本不存在");
+                    var source = gd.ReadFile(op.Src!)!;
+                    var sourceSha = Sha(source);
+                    if (op.SourceSha256 is not null
+                        && !sourceSha.Equals(op.SourceSha256, StringComparison.OrdinalIgnoreCase))
+                        return new OpState(op, PatchState.Incompatible,
+                            $"源文件 SHA-256 不匹配：实际 {sourceSha}，预期 {op.SourceSha256}");
+
+                    var target = BuildDerivedContent(source, op, out var targetSha);
+                    if (op.TargetSha256 is not null
+                        && !targetSha.Equals(op.TargetSha256, StringComparison.OrdinalIgnoreCase))
+                        return new OpState(op, PatchState.Incompatible,
+                            $"目标内容 SHA-256 不匹配：生成 {targetSha}，预期 {op.TargetSha256}");
+                    if (!gd.FileExists(op.Dst!))
+                        return new OpState(op, PatchState.NotApplied, "副本不存在");
+
+                    var existingSha = Sha(gd.ReadFile(op.Dst!)!);
+                    return existingSha.Equals(targetSha, StringComparison.OrdinalIgnoreCase)
+                        ? new OpState(op, PatchState.Applied, $"副本内容 SHA-256 匹配 {targetSha}")
+                        : new OpState(op, PatchState.Conflict,
+                            $"目标文件已存在但内容指纹不匹配：实际 {existingSha}，预期 {targetSha}（可能被其他 Mod 占用）");
                 }
                 case "addfile-asset":
                 {
-                    var assetPath = Path.Combine(patch.BasePath ?? ".", op.Asset!);
+                    var assetPath = ResolvePatchFilePath(patch, op.Asset!);
                     if (!File.Exists(assetPath))
                         return new OpState(op, PatchState.Incompatible, $"补丁包内找不到 asset {op.Asset}");
                     if (!gd.FileExists(op.Dst!))
@@ -399,7 +918,7 @@ public static class FxPatchEngine
                         return new OpState(op, PatchState.Applied, "内容与补丁 asset 一致");
                     if (op.OriginalAsset is not null)
                     {
-                        var origPath = Path.Combine(patch.BasePath ?? ".", op.OriginalAsset);
+                        var origPath = ResolvePatchFilePath(patch, op.OriginalAsset);
                         if (File.Exists(origPath) && sha == Sha(File.ReadAllBytes(origPath)))
                             return new OpState(op, PatchState.NotApplied, "内容为原版");
                     }
@@ -450,7 +969,7 @@ public static class FxPatchEngine
         {
             case "addfile-asset":
             {
-                var assetPath = Path.Combine(patch.BasePath ?? ".", op.Asset!);
+                var assetPath = ResolvePatchFilePath(patch, op.Asset!);
                 var newBytes = File.ReadAllBytes(assetPath);
                 if (apply)
                 {
@@ -466,7 +985,7 @@ public static class FxPatchEngine
                         Log($"[op] 替换 {op.Dst}（{newBytes.Length:N0} B，asset）");
                         return true;
                     }
-                    gd.AddFile(op.Dst!, newBytes);
+                    gd.AddFile(op.Dst!, newBytes, saveIndex: false);
                     Log($"[op] 新增 {op.Dst}（{newBytes.Length:N0} B，asset）");
                     return true;
                 }
@@ -476,7 +995,7 @@ public static class FxPatchEngine
                     Log($"[skip] {op.Dst} 保留（新增内容，无原版字节可还原）");
                     return false;
                 }
-                var origPath = Path.Combine(patch.BasePath ?? ".", op.OriginalAsset);
+                var origPath = ResolvePatchFilePath(patch, op.OriginalAsset);
                 if (!File.Exists(origPath))
                     throw new InvalidOperationException($"补丁包内找不到原版 asset {op.OriginalAsset}");
                 var origBytes = File.ReadAllBytes(origPath);
@@ -498,22 +1017,31 @@ public static class FxPatchEngine
                     Log($"[skip] {op.Dst} 副本保留（还原指针后无引用，随 PATCHED bundle 清理）");
                     return false;
                 }
-                var content = BuildDerivedContent(gd, op);
+                var source = gd.ReadFile(op.Src!) ?? throw new FileNotFoundException($"索引中找不到源文件: {op.Src}");
+                var sourceSha = Sha(source);
+                if (op.SourceSha256 is not null && !sourceSha.Equals(op.SourceSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"源文件 SHA-256 不匹配：实际 {sourceSha}，预期 {op.SourceSha256}");
+                var content = BuildDerivedContent(source, op, out var targetSha);
+                if (op.TargetSha256 is not null && !targetSha.Equals(op.TargetSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"目标内容 SHA-256 不匹配：生成 {targetSha}，预期 {op.TargetSha256}");
                 if (gd.FileExists(op.Dst!))
                 {
-                    var existing = DecodeText(gd.ReadFile(op.Dst!)!, out _, out _);
-                    var ok = op.Replace.All(r => existing.Contains(r.New, StringComparison.Ordinal));
-                    if (ok)
+                    var existingSha = Sha(gd.ReadFile(op.Dst!)!);
+                    if (existingSha.Equals(targetSha, StringComparison.OrdinalIgnoreCase))
                     {
-                        Log($"[skip] {op.Dst} 已存在且内容正确");
+                        Log($"[skip] {op.Dst} 已存在且内容指纹正确");
                         return false;
                     }
-                    gd.Index.TryGetFile(op.Dst!, out var fr);
-                    fr!.Write(content);
-                    Log($"[op] 重写副本 {op.Dst}（{content.Length:N0} B）");
+                    // 本补丁上一版留下的副本要放行（否则升版本时补丁会被自己挡住）；
+                    // 真正被其他 Mod 占用的仍然拒绝。
+                    if (!IsPatchOwned(gd.Index, patch, op.Dst!))
+                        throw new InvalidOperationException($"目标文件 {op.Dst} 已存在但内容指纹不匹配（实际 {existingSha}，预期 {targetSha}），拒绝覆盖其他 Mod。");
+                    gd.Index.TryGetFile(op.Dst!, out var ownCopy);
+                    ownCopy!.Write(content);
+                    Log($"[op] 覆盖本补丁旧版副本 {op.Dst}（{content.Length:N0} B）");
                     return true;
                 }
-                gd.AddFile(op.Dst!, content);
+                gd.AddFile(op.Dst!, content, saveIndex: false);
                 Log($"[op] 新增副本 {op.Dst}（{content.Length:N0} B）");
                 return true;
             }
@@ -524,8 +1052,7 @@ public static class FxPatchEngine
                 var field = LocatePtrField(dat, layout, op.Id!, op.OriginalPath!, op.NewPath!)
                     ?? throw new InvalidOperationException($"表中找不到 Id={op.Id}（客户端不兼容）");
                 var target = apply ? op.NewPath! : op.OriginalPath!;
-                // apply 目标是补丁专属新路径 → 开启单引用约束（哨兵劫持修复）；revert 回共享原始路径 → 必须关闭
-                var (newDat, changed) = RepointString(dat, layout, field, target, fixForeignRefs: apply);
+                var (newDat, changed) = RepointString(dat, layout, field, target);
                 if (!changed)
                 {
                     Log($"[skip] 指针已指向 \"{target}\"");
@@ -567,9 +1094,8 @@ public static class FxPatchEngine
     }
 
     // ═══ addfile-derived：读原件 → 声明的替换 → 回编码（动态生成，不内嵌成品）═══
-    private static byte[] BuildDerivedContent(GameDataAccess gd, PatchOp op)
+    private static byte[] BuildDerivedContent(byte[] bytes, PatchOp op, out string targetSha)
     {
-        var bytes = gd.ReadFile(op.Src!) ?? throw new FileNotFoundException($"索引中找不到源文件: {op.Src}");
         var text = DecodeText(bytes, out var enc, out var preamble);
         foreach (var r in op.Replace)
         {
@@ -582,7 +1108,9 @@ public static class FxPatchEngine
                 ? text.Replace(r.Old, r.New, StringComparison.Ordinal)
                 : ReplaceFirstN(text, r.Old, r.New, r.Count);
         }
-        return EncodeText(text, enc, preamble);
+        var result = EncodeText(text, enc, preamble);
+        targetSha = Sha(result);
+        return result;
     }
 
     // ═══ datc64 原始字节引擎（指针公式 abs = v + dataOffset - 8，实测验证）═══
@@ -702,24 +1230,26 @@ public static class FxPatchEngine
 
     /// <summary>
     /// 把指针改指 targetString（存在则复用，缺失则追加）。
-    /// <paramref name="fixForeignRefs"/> = 单引用约束：apply 时目标路径是补丁专属新路径，任何"非目标行"
-    /// 指向它都是异常（典型 = 原指向旧 EOF 的空串哨兵被追加劫持，见 GUIDE 坑 5），改指新空串锚点。
-    /// revert 还原到共享的原始路径时必须传 false（原始路径可被多行合法共享）。
+    /// 只修改定位到的字段，不重写其他行的 foreign reference。
+    /// 这样 apply/revert 都是严格成对的单字段变换，不会把其他行改成不可逆的哨兵引用。
     /// </summary>
-    private static (byte[] Data, bool Changed) RepointString(byte[] data, DatLayout layout, PtrField field, string targetString, bool fixForeignRefs)
+    private static (byte[] Data, bool Changed) RepointString(byte[] data, DatLayout layout, PtrField field, string targetString)
     {
         var targetAbs = FindExactString(data, layout.DataOffset, targetString);
         if (targetAbs < 0)
         {
-            targetAbs = data.Length;
+            // Preserve the old EOF as an empty-string sentinel. Some foreign rows may
+            // legitimately point at that offset; appending the target directly would
+            // silently retarget those rows and make apply/revert non-reversible.
+            targetAbs = data.Length + 2;
             var strBytes = Encoding.Unicode.GetBytes(targetString);
-            var append = new byte[strBytes.Length + 2]; // 字符串 + NUL 终止
-            strBytes.CopyTo(append, 0);
+            var append = new byte[strBytes.Length + 4]; // empty sentinel + string + NUL
+            strBytes.CopyTo(append, 2);
             var bigger = new byte[data.Length + append.Length];
             Array.Copy(data, bigger, data.Length);
             Array.Copy(append, 0, bigger, data.Length, append.Length);
             data = bigger;
-            Log($"[ptr] blob 追加 \"{targetString}\" @0x{targetAbs:X}（+{append.Length} B）");
+            Log($"[ptr] blob 追加空串哨兵 + \"{targetString}\" @0x{targetAbs:X}（+{append.Length} B）");
         }
 
         var rowStart = 4 + field.Row * layout.RowLen;
@@ -736,46 +1266,7 @@ public static class FxPatchEngine
             changed = true;
         }
 
-        var foreignFixed = false;
-        if (fixForeignRefs)
-        {
-            var foreign = new List<(int row, int off)>();
-            for (var q = 4; q + 8 <= layout.SepPos; q++)
-            {
-                var row = (q - 4) / layout.RowLen;
-                if (row >= layout.RowCount)
-                    continue;
-                var off = q - 4 - row * layout.RowLen;
-                if (row == field.Row && off == field.FieldOffset)
-                    continue;
-                var v = BitConverter.ToInt64(data, q);
-                if (v <= 0)
-                    continue;
-                var absRel = (long)v + layout.DataOffset - 8;
-                var absAbs = (long)v;
-                if (absRel == targetAbs || absAbs == targetAbs)
-                    foreign.Add((row, off));
-            }
-            if (foreign.Count > 0)
-            {
-                // 空串锚点：blob 末尾追加两个 NUL，作为安全空串定位
-                var emptyAbs = data.Length;
-                var bigger = new byte[data.Length + 2];
-                Array.Copy(data, bigger, data.Length);
-                data = bigger;
-                foreach (var (hRow, hOff) in foreign)
-                {
-                    var hPos = 4 + hRow * layout.RowLen + hOff;
-                    var hOld = BitConverter.ToInt64(data, hPos);
-                    var hNew = emptyAbs - (layout.DataOffset - 8);
-                    BitConverter.GetBytes(hNew).CopyTo(data, hPos);
-                    Log($"[ptr] 哨兵修复 ROW[{hRow}] +{hOff}: 0x{hOld:X} -> 0x{hNew:X}（空串锚点）");
-                }
-                foreignFixed = true;
-            }
-        }
-
-        return (data, changed || foreignFixed);
+        return (data, changed);
     }
 
     // ═══ 文本工具 ═══════════════════════════════════════════════
@@ -840,6 +1331,9 @@ public static class FxPatchEngine
         => gd.Index.Files.Values.Count(f => string.IsNullOrEmpty(f.Path));
 
     internal static string Sha(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+    private static bool IsSha256(string value)
+        => value.Length == 64 && value.All(Uri.IsHexDigit);
 
     private static string Label(PatchState s) => s switch
     {

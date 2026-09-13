@@ -20,6 +20,7 @@ public static class SchemaManager
 
     private static List<TableSchema>? _cachedTables;
     private static readonly HttpClient _http = new();
+    private const long MaxSchemaBytes = 16L * 1024 * 1024;
 
     /// <summary>
     /// Ensure schema.min.json exists and is up to date.
@@ -162,6 +163,14 @@ public static class SchemaManager
         return Convert.ToHexStringLower(hash);
     }
 
+    private static void ValidateSchemaFile(string path)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        if (!document.RootElement.TryGetProperty("tables", out var tables)
+            || tables.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("Schema response does not contain a tables array.");
+    }
+
     private static async Task<bool> DownloadToAsync(string url, string dest)
     {
         try
@@ -169,12 +178,27 @@ public static class SchemaManager
             Console.WriteLine($"  Downloading: {url[..Math.Min(80, url.Length)]}...");
             var response = await _http.GetAsync(url);
             response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength is > MaxSchemaBytes)
+                throw new InvalidDataException("Schema response exceeds the 16 MiB limit.");
+
+            await using var source = await response.Content.ReadAsStreamAsync();
             await using var fs = File.Create(dest);
-            await response.Content.CopyToAsync(fs);
+            var buffer = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer)) > 0)
+            {
+                total += read;
+                if (total > MaxSchemaBytes)
+                    throw new InvalidDataException("Schema response exceeds the 16 MiB limit.");
+                await fs.WriteAsync(buffer.AsMemory(0, read));
+            }
+            ValidateSchemaFile(dest);
             return true;
         }
         catch (Exception ex)
         {
+            try { if (File.Exists(dest)) File.Delete(dest); } catch { }
             Console.WriteLine($"  Download failed: {ex.Message}");
             return false;
         }

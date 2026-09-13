@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Windows.Data;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Windows.Media;
 using PoEToolbox.Shared;
 
@@ -18,6 +19,10 @@ public partial class MainWindow : Window
     private readonly PluginManager _pluginManager;
     private readonly IAppState _sessionState;
     private IPlugin? _activePlugin;
+    private bool _initialGameDataHintShown;
+    private int _gameDataDetectionVersion;
+    private bool _windowClosed;
+    private int _indexBackupRunning;
 
     public MainWindow()
     {
@@ -34,6 +39,8 @@ public partial class MainWindow : Window
         _pluginManager.EventBus.Publish(new GameContextChanged(
             PoeGameKind.Unknown, null, PoeDetector.Default.IsPoeRunning()));
         SourceInitialized += (_, _) => InitializeGlobalPluginHotkeys();
+        Loaded += (_, _) => PromptForInitialGameData();
+        UpdateGameDataPathDisplay(GameDataPathPreference.Get());
 
         // Show disclaimer on first run
         if (!DisclaimerPage.IsAccepted())
@@ -42,6 +49,7 @@ public partial class MainWindow : Window
             page.Accepted += () =>
             {
                 DisclaimerOverlay.Visibility = Visibility.Collapsed;
+                PromptForInitialGameData();
                 if (NavList.Items.Count > 0) NavList.SelectedIndex = 0;
             };
             page.Declined += () => Application.Current.Shutdown();
@@ -56,13 +64,30 @@ public partial class MainWindow : Window
         ApplyVersionState(UpdateChecker.GetCachedResult());
         _ = LoadUpdateStateAsync();
 
+        BeginGameKindDetection(GameDataPathPreference.Get());
+
+        // Snapshot the remembered client's index if it is not kept yet. A GGPK is left closed here:
+        // opening one on every launch costs a full load, and it gets its snapshot when picked (or before a change).
+        StartIndexBackup(GameDataPathPreference.Get(), openContainerIfNeeded: false);
+
         // Mirror the file log (all modules' operations) into the global log dock.
         FileLogger.EntryLogged += OnFileLogEntry;
     }
 
     private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (NavList.SelectedItem is not NavigationEntry { Plugin: { } plugin }) return;
+        if (NavList.SelectedItem is not NavigationEntry { Plugin: { } plugin } entry) return;
+        if (!entry.IsEnabled)
+        {
+            // Selection can still be changed programmatically while the client type is being
+            // detected. Keep an incompatible view from being activated in that short window.
+            var fallback = NavList.Items.Cast<object>()
+                .OfType<NavigationEntry>()
+                .FirstOrDefault(item => item.Plugin is not null && item.IsEnabled);
+            if (fallback is not null)
+                NavList.SelectedItem = fallback;
+            return;
+        }
 
         _activePlugin?.OnDeactivated();
         _activePlugin = plugin;
@@ -70,6 +95,12 @@ public partial class MainWindow : Window
         {
             FileLogger.App.Info($"Plugin activated: {plugin.Name}");
             PluginContent.Content = plugin.CreateView();
+            // EventBus does not replay state for views created lazily. Re-publish the shell's
+            // current context so every module starts from the same client version shown below.
+            _pluginManager.EventBus.Publish(new GameContextChanged(
+                _sessionState.Game,
+                _sessionState.GameDataPath,
+                _sessionState.IsPoeRunning));
             _activePlugin.OnActivated();
         }
         catch (Exception ex)
@@ -221,6 +252,110 @@ public partial class MainWindow : Window
         ? $"{version.Major}.{version.Minor}"
         : $"{version.Major}.{version.Minor}.{version.Build}";
 
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        var dataBrowser = _pluginManager.Plugins
+            .OfType<PoEToolbox.Plugins.DataBrowser.DataBrowserPlugin>()
+            .FirstOrDefault();
+        if (dataBrowser is not null && !dataBrowser.TryPrepareForAppClose())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    private void SelectGameDataButton_Click(object sender, RoutedEventArgs e)
+        => PromptForGameData();
+
+    private void PromptForInitialGameData()
+    {
+        if (_initialGameDataHintShown || !DisclaimerPage.IsAccepted())
+            return;
+
+        _initialGameDataHintShown = true;
+        UpdateGameDataSelectionHighlight(GameDataPathPreference.Get() is null);
+    }
+
+    private void PromptForGameData()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择游戏数据文件",
+            Filter = "游戏数据文件|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|索引文件|_.index.bin|全部文件|*.*",
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            var path = GameDataAccess.ResolvePath(dialog.FileName);
+            GameDataPathPreference.Set(path);
+            UpdateGameDataPathDisplay(path);
+            _pluginManager.EventBus.Publish(new GameContextChanged(
+                PoeGameKind.Unknown, path, PoeDetector.Default.IsPoeRunning()));
+            StartIndexBackup(path, openContainerIfNeeded: true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"无法使用该文件：\n{ex.Message}", "游戏数据无效", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Keeps a pristine copy of the client index (backup/_.index.bin beside the client) as soon as a
+    /// client is picked, so a restore target exists before anything can touch it. Runs off the UI thread:
+    /// the copy is a few hundred MB and opening a GGPK costs a full load.
+    /// </summary>
+    /// <param name="openContainerIfNeeded">
+    /// False on startup with a remembered path, where opening a GGPK just to snapshot it is not worth the cost.
+    /// </param>
+    private void StartIndexBackup(string? gameDataPath, bool openContainerIfNeeded)
+    {
+        if (string.IsNullOrWhiteSpace(gameDataPath))
+            return;
+
+        // One snapshot at a time; a later selection just rides along with the one already running.
+        if (Interlocked.Exchange(ref _indexBackupRunning, 1) == 1)
+            return;
+
+        var path = gameDataPath;
+        Task.Run(() =>
+        {
+            try
+            {
+                IndexBackupService.EnsureBaselineExists(path, openContainerIfNeeded);
+            }
+            catch (Exception ex)
+            {
+                FileLogger.App.Warn($"Original index backup skipped: {ex.Message}");
+            }
+            finally
+            {
+                Volatile.Write(ref _indexBackupRunning, 0);
+            }
+        });
+    }
+
+    private void UpdateGameDataPathDisplay(string? path)
+    {
+        var hasPath = !string.IsNullOrWhiteSpace(path);
+        GameDataPathDisplay.Text = hasPath ? path : "未选择游戏数据";
+        GameDataPathDisplay.ScrollToEnd();
+        GameDataPathDisplay.ToolTip = GameDataPathDisplay.Text;
+        UpdateGameDataSelectionHighlight(!hasPath);
+    }
+
+    private void UpdateGameDataSelectionHighlight(bool highlighted)
+    {
+        if (SelectGameDataButton is null)
+            return;
+
+        SelectGameDataButton.Style = (Style)FindResource(highlighted ? "PrimaryButton" : "SecondaryButton");
+    }
+
     private void ApplyLocalization()
     {
         Title = UILabels.Get("AppTitle");
@@ -249,6 +384,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _windowClosed = true;
         try
         {
             _pluginManager.EventBus.Unsubscribe<GameContextChanged>(OnGameContextChanged);
@@ -275,7 +411,63 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnGameContextChanged(GameContextChanged _) => UpdateShellStatus();
+    private void OnGameContextChanged(GameContextChanged context)
+    {
+        if (_windowClosed)
+            return;
+
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => OnGameContextChanged(context));
+            return;
+        }
+
+        UpdateGameDataPathDisplay(context.GameDataPath ?? GameDataPathPreference.Get());
+        UpdateShellStatus();
+        NavList.Items.Refresh();
+
+        if (context.Game == PoeGameKind.Unknown && !string.IsNullOrWhiteSpace(context.GameDataPath))
+            BeginGameKindDetection(context.GameDataPath);
+
+        if (_activePlugin is not null && !IsPluginAvailable(_activePlugin, _sessionState.Game))
+        {
+            var fallback = NavList.Items.Cast<object>()
+                .OfType<NavigationEntry>()
+                .FirstOrDefault(item => item.Plugin is not null && item.IsEnabled);
+            if (fallback is not null && !ReferenceEquals(NavList.SelectedItem, fallback))
+                NavList.SelectedItem = fallback;
+        }
+    }
+
+    private async void BeginGameKindDetection(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        var version = Interlocked.Increment(ref _gameDataDetectionVersion);
+        try
+        {
+            var isPoe2 = await GameDataLoader.UseAsync(
+                path,
+                GameDataMode.Read,
+                (gd, _) => Task.FromResult(gd.IsPoe2Client));
+
+            if (_windowClosed || version != Volatile.Read(ref _gameDataDetectionVersion))
+                return;
+
+            _pluginManager.EventBus.Publish(new GameContextChanged(
+                isPoe2 ? PoeGameKind.Poe2 : PoeGameKind.Poe1,
+                GameDataAccess.ResolvePath(path),
+                PoeDetector.Default.IsPoeRunning()));
+        }
+        catch (Exception ex)
+        {
+            if (_windowClosed || version != Volatile.Read(ref _gameDataDetectionVersion))
+                return;
+
+            FileLogger.App.Warn($"Unable to identify game client from {path}: {ex.Message}");
+        }
+    }
 
     private void OnLeagueChanged(LeagueChanged _) => UpdateShellStatus();
 
@@ -320,11 +512,12 @@ public partial class MainWindow : Window
                 GetPluginGroup(plugin),
                 GetGroupOrder(plugin),
                 plugin.Order,
-                plugin))
+                plugin,
+                () => _sessionState.Game))
             .ToList();
 
         // Keep the POE2 section visible while its tools are temporarily unavailable.
-        entries.Add(new NavigationEntry("POE2", 2, int.MaxValue, null));
+        entries.Add(new NavigationEntry("POE2", 2, int.MaxValue, null, () => _sessionState.Game));
 
         var view = new ListCollectionView(entries);
         view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(NavigationEntry.GroupName)));
@@ -337,8 +530,18 @@ public partial class MainWindow : Window
         => plugin is PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin
             ? "POE1"
             : plugin is PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin
+                || plugin is PoEToolbox.Plugins.FxPatch.FxPatchPlugin
                 ? "POE2"
             : "通用";
+
+    private static bool IsPluginAvailable(IPlugin? plugin, PoeGameKind game)
+        => plugin switch
+        {
+            PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin => game == PoeGameKind.Poe1,
+            PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin => game == PoeGameKind.Poe2,
+            PoEToolbox.Plugins.FxPatch.FxPatchPlugin => game == PoeGameKind.Poe2,
+            _ => plugin is not null,
+        };
 
     private static int GetGroupOrder(IPlugin plugin)
         => GetPluginGroup(plugin) switch
@@ -352,10 +555,12 @@ public partial class MainWindow : Window
         string GroupName,
         int GroupOrder,
         int PluginOrder,
-        IPlugin? Plugin)
+        IPlugin? Plugin,
+        Func<PoeGameKind> GameProvider)
     {
         public string Name => Plugin?.Name ?? string.Empty;
         public string IconGlyph => Plugin?.IconGlyph ?? string.Empty;
+        public bool IsEnabled => IsPluginAvailable(Plugin, GameProvider());
     }
 
     // ═══ Global log dock ═══════════════════════════════════

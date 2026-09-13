@@ -45,7 +45,16 @@ public partial class DataBrowserView : UserControl
         TextPreview.FontSize = Math.Clamp(_config.EditorFontSize, 8, 32);
     }
 
-    public void ReleaseFileLocks(bool keepReopenPath = false)
+    public bool ReleaseFileLocks(bool keepReopenPath = false, bool promptForPendingChanges = true)
+    {
+        if (promptForPendingChanges && !ConfirmPendingChangesBeforeClose())
+            return false;
+
+        ReleaseFileLocksCore(keepReopenPath);
+        return true;
+    }
+
+    private void ReleaseFileLocksCore(bool keepReopenPath)
     {
         if (keepReopenPath)
             _reopenPath ??= _gd?.GameDataPath;
@@ -86,6 +95,78 @@ public partial class DataBrowserView : UserControl
         SetBusy(false, "已释放游戏数据文件占用", false);
         UpdateFileLockButton();
         MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
+    }
+
+    private bool ConfirmPendingChangesBeforeClose()
+    {
+        var activeEditDirty = IsActiveEditDirty();
+        if (_pendingEdits.Count == 0 && !activeEditDirty)
+            return true;
+
+        var changeCount = _pendingEdits.Count + (activeEditDirty ? 1 : 0);
+        var choice = MessageBox.Show(
+            $"当前有 {changeCount} 个文件的未保存修改。\n\n选择“是”保存，选择“否”放弃修改，选择“取消”继续编辑。",
+            "关闭前处理未保存修改",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Warning);
+        if (choice == MessageBoxResult.Cancel)
+            return false;
+        if (choice == MessageBoxResult.No)
+        {
+            _pendingEdits.Clear();
+            StopTextEdit();
+            UpdatePendingChangesUi();
+            return true;
+        }
+
+        if (_gd is null)
+            return false;
+
+        if (activeEditDirty && !StageActiveEdit())
+            return false;
+
+        var gameDataPath = _gd.GameDataPath;
+        var edits = _pendingEdits.Values.ToList();
+        ReleaseFileLocksCore(keepReopenPath: true);
+        try
+        {
+            SetBusy(true, "正在保存未保存修改...", true);
+            Task.Run(() => ReplaceService.ReplaceTexts(gameDataPath, edits)).GetAwaiter().GetResult();
+            _pendingEdits.Clear();
+            UpdatePendingChangesUi();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            UiStatus.Set(StatusText, "❌ 保存失败，已取消关闭", UiStatus.Kind.Error);
+            FileLogger.App.Error("DataBrowser close-save failed.", ex);
+            MessageBox.Show($"保存失败，已取消关闭：\n{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+        finally
+        {
+            SetBusy(false, StatusText.Text, false);
+        }
+    }
+
+    private bool IsActiveEditDirty()
+        => _isEditingText
+           && !string.Equals(TextPreview.Text, _editingOriginalText, StringComparison.Ordinal);
+
+    private bool StageActiveEdit()
+    {
+        if (!IsActiveEditDirty() || string.IsNullOrWhiteSpace(_editingPath))
+            return false;
+
+        var encoding = _currentPreview?.TextEncoding ?? new UTF8Encoding(false);
+        _pendingEdits[_editingPath] = new PendingTextEdit(
+            _editingPath,
+            _editingOriginalText ?? "",
+            TextPreview.Text,
+            encoding);
+        StopTextEdit();
+        UpdatePendingChangesUi();
+        return true;
     }
 
     // ── Open ────────────────────────────────────────────
@@ -164,6 +245,9 @@ public partial class DataBrowserView : UserControl
             }
             cts.Token.ThrowIfCancellationRequested();
 
+            if ((_pendingEdits.Count > 0 || IsActiveEditDirty())
+                && !ReleaseFileLocks(keepReopenPath: true))
+                return;
             _gd?.Dispose();
             _gd = opened;
             opened = null;
@@ -515,7 +599,7 @@ public partial class DataBrowserView : UserControl
         if (confirmation != MessageBoxResult.OK) return;
         var gameDataPath = _gd.GameDataPath;
         var edits = _pendingEdits.Values.ToList();
-        ReleaseFileLocks(keepReopenPath: true);
+        ReleaseFileLocks(keepReopenPath: true, promptForPendingChanges: false);
         var cts = new CancellationTokenSource(); _operationCts = cts;
         SetBusy(true, "正在保存全部修改...", true); ProgressBar.IsIndeterminate = true;
         try
@@ -962,7 +1046,8 @@ public partial class DataBrowserView : UserControl
         _config.LastExtractDir = Path.GetDirectoryName(dialog.FileName);
         ConfigService.SavePluginConfig("DataBrowser", _config);
 
-        ReleaseFileLocks(keepReopenPath: true);
+        if (!ReleaseFileLocks(keepReopenPath: true))
+            return;
         var cts = new CancellationTokenSource();
         _operationCts = cts;
         SetBusy(true, "正在替换文件...", true);
@@ -1037,7 +1122,8 @@ public partial class DataBrowserView : UserControl
 
         var gameDataPath = _gd.GameDataPath;
 
-        ReleaseFileLocks(keepReopenPath: true);
+        if (!ReleaseFileLocks(keepReopenPath: true))
+            return;
         var cts = new CancellationTokenSource();
         _operationCts = cts;
         SetBusy(true, "正在复制为新路径...", true);

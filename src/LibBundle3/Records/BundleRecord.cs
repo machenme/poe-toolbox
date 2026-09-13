@@ -25,7 +25,7 @@ public class BundleRecord {
 	/// <summary>
 	/// Index of the <see cref="BundleRecord"/> in <see cref="Index.Bundles"/>
 	/// </summary>
-	public virtual int BundleIndex { get; }
+	public virtual int BundleIndex { get; protected internal set; }
 	/// <summary>
 	/// <see cref="Index"/> instance which contains this bundle
 	/// </summary>
