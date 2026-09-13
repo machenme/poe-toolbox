@@ -50,6 +50,8 @@ Content.ggpk
 
 # Docs (not tracked)
 docs/
+PRD-*.md
+SPEC-*.md
 AUDIT_PRD.md
 AUDIT_SPEC.md
 TODO.md
