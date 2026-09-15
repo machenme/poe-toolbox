@@ -11,10 +11,15 @@
   <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Sdk\PoEToolbox.Sdk.csproj" />
     <ProjectReference Include="..\LibBundledGGPK3\LibBundledGGPK3.csproj" />
+    <ProjectReference Include="..\LibDat2\LibDat2.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="PoEToolbox.Tests" />
+    <InternalsVisibleTo Include="PoEToolbox.Plugins.FxPatch" />
+    <InternalsVisibleTo Include="PoEToolbox.Plugins.AffixWorkbench" />
+    <InternalsVisibleTo Include="PoEToolbox.App" />
+    <InternalsVisibleTo Include="PoEToolbox" />
   </ItemGroup>
 
   <ItemGroup>

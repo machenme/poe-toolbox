@@ -329,7 +329,15 @@ public partial class PriceTaggerView : UserControl
         if (_cachedLangStatus == null)
         {
             StatusLabel.Text = isZh ? "检测语言状态..." : "Detecting language...";
-            _langSwapped = await DetectLanguageModAsync(ggpkPath);
+            var detected = await DetectLanguageModAsync(ggpkPath);
+            if (detected is null)
+            {
+                // 检测失败不能当"未劫持"处理，否则用户会据此做出错误的还原决定
+                LogError(isZh ? "语言状态检测失败，请检查游戏数据文件。" : "Language detection failed. Check the game data file.");
+                StatusLabel.Text = "Ready";
+                return;
+            }
+            _langSwapped = detected.Value;
             _cachedLangStatus = _langSwapped ? "true" : "false";
             _ptConfig.LangSwapped = _langSwapped; SavePtConfig();
             StatusLabel.Text = "Ready";
@@ -370,17 +378,8 @@ public partial class PriceTaggerView : UserControl
                     if (gd.Index.TryGetFile("Art/UIImages1.txt", out var ff))
                     {
                         var fd = ff.Read().ToArray();
-                        var txt = System.Text.Encoding.Unicode.GetString(fd);
-                        var fr = txt.IndexOf("Common/FlagIcons/fr\"");
-                        var cn = txt.IndexOf("Common/FlagIcons/zhCN\"");
-                        var fc = txt.IndexOf("1.dds\" ", fr) + 7;
-                        var cc = txt.IndexOf("1.dds\" ", cn) + 7;
-                        if (fr > 0 && cn > fr && fc > 7 && cc > 7)
+                        if (EditTools.TrySwapFlagCoords(fd))
                         {
-                            var fb = fc * 2; var cb = cc * 2;
-                            var tmp = fd[fb..(fb + 26)].ToArray();
-                            Array.Copy(fd, cb, fd, fb, 26);
-                            Array.Copy(tmp, 0, fd, cb, 26);
                             ff.Write(fd);
                             swappedFlag = true;
                         }
@@ -389,15 +388,7 @@ public partial class PriceTaggerView : UserControl
                     if (gd.Index.TryGetFile("Data/Languages.dat", out var lf))
                     {
                         var dat = new DatContainer(lf.Read().ToArray(), "Languages.dat");
-                        int frn = -1, tch = -1;
-                        for (var i = 0; i < dat.FieldDatas.Count; ++i)
-                        {
-                            var name = (string)dat.FieldDatas[i][1].Value;
-                            if (name == "French") frn = i;
-                            else if (name == "Traditional Chinese") tch = i;
-                        }
-                        (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
-                        (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
+                        EditTools.SwapFrenchTraditionalChinese(dat);
                         lf.Write(dat.Save(false, false));
                         swappedLang = true;
                     }
@@ -575,8 +566,9 @@ public partial class PriceTaggerView : UserControl
         return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
     }
 
-    /// <summary>Detect language mod status (opens game data). Called only from UiMod.</summary>
-    private async Task<bool> DetectLanguageModAsync(string ggpkPath)
+    /// <summary>Detect language mod status (opens game data). Called only from UiMod.
+    /// null = 检测失败（数据打开/解析出错），与"未检测到劫持"区分。</summary>
+    private async Task<bool?> DetectLanguageModAsync(string ggpkPath)
     {
         try
         {
@@ -587,12 +579,16 @@ public partial class PriceTaggerView : UserControl
                 {
                     var dat = new DatContainer(langFr.Read().ToArray(), "Languages.dat");
                     var frId = dat.FieldDatas[1][1].Value as string;
-                    return Task.FromResult(frId == "Traditional Chinese");
+                    return Task.FromResult<bool?>(frId == "Traditional Chinese");
                 }
-                return Task.FromResult(false);
+                return Task.FromResult<bool?>(false);
             });
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            FileLogger.App.Warn($"Language mod detection failed: {ex.Message}");
+            return null;
+        }
     }
 
     // ═══ League ════════════════════════════════════════════════
@@ -735,6 +731,20 @@ public partial class PriceTaggerView : UserControl
         ProgressPct.Text = "0%";
         StatusTime.Text = "";
 
+        // 统计只在任务内累加，收尾时交回 UI 线程统一发布，避免跨线程读写共享字段
+        var totalProcessed = 0;
+        var totalUpdated = 0;
+        var totalSkipped = 0;
+
+        void ResetApplyUi(string statusText)
+        {
+            StatusLabel.Text = statusText;
+            StatusCategory.Text = "";
+            _applying = false;
+            ApplyBtn.IsEnabled = true;
+            ProgressBar.Visibility = Visibility.Collapsed;
+        }
+
         LogInfo(new string('─', 40));
 
         // Step 1: Fetch missing data
@@ -768,12 +778,8 @@ public partial class PriceTaggerView : UserControl
                 LogError(isZh
                     ? $"物价获取未完成，已停止标价：{string.Join("、", failed)}"
                     : $"Price fetch did not complete; tagging was stopped: {string.Join(", ", failed)}");
-                StatusLabel.Text = "Failed";
-                StatusCategory.Text = "";
-                _applying = false;
-                ApplyBtn.IsEnabled = true;
-                ProgressBar.Visibility = Visibility.Collapsed;
                 _timer.Stop();
+                ResetApplyUi("Failed");
                 return;
             }
 
@@ -811,9 +817,9 @@ public partial class PriceTaggerView : UserControl
                     if (!results.TryGetValue(category, out var result))
                         continue;
 
-                    _totalProcessed += result.Matched;
-                    _totalUpdated += result.Tagged;
-                    _totalSkipped += result.Skipped;
+                    totalProcessed += result.Matched;
+                    totalUpdated += result.Tagged;
+                    totalSkipped += result.Skipped;
                     LogSuccess($"  {category}: complete.");
                 }
                 succeeded = true;
@@ -831,20 +837,20 @@ public partial class PriceTaggerView : UserControl
 
                 Dispatcher.Invoke(() =>
                 {
-                    StatProcessed.Text = _totalProcessed.ToString();
-                    StatUpdated.Text = _totalUpdated.ToString();
-                    StatSkipped.Text = _totalSkipped.ToString();
+                    _totalProcessed = totalProcessed;
+                    _totalUpdated = totalUpdated;
+                    _totalSkipped = totalSkipped;
+                    StatProcessed.Text = totalProcessed.ToString();
+                    StatUpdated.Text = totalUpdated.ToString();
+                    StatSkipped.Text = totalSkipped.ToString();
                     StatDuration.Text = dur;
                     ProgressBar.Value = 100;
                     ProgressPct.Text = "100%";
-                    StatusLabel.Text = succeeded ? (dryRun ? "Dry run complete" : "Done") : "Failed";
-                    StatusCategory.Text = "";
+                    ResetApplyUi(succeeded ? (dryRun ? "Dry run complete" : "Done") : "Failed");
                     StatusTime.Text = $"Finished {DateTime.Now:HH:mm}";
-                    _applying = false;
-                    ApplyBtn.IsEnabled = true;
                     LogInfo(new string('─', 40));
                     if (succeeded)
-                        LogSuccess($"Finished — {_totalUpdated} updated, {_totalSkipped} skipped in {dur}");
+                        LogSuccess($"Finished — {totalUpdated} updated, {totalSkipped} skipped in {dur}");
                     // The index that was opened for this run is closed now — hand the few hundred MB
                     // back without blocking the UI thread on the collection itself.
                     MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
@@ -916,8 +922,17 @@ public partial class PriceTaggerView : UserControl
 
     private void LogInfo(string msg) => AppendColored(msg, (Brush)FindResource("TextSecondaryBrush"));
     private void LogSuccess(string msg) => AppendColored(msg, (Brush)FindResource("SuccessBrush"));
-    private void LogWarn(string msg) => AppendColored(msg, (Brush)FindResource("WarningBrush"));
-    private void LogError(string msg) => AppendColored(msg, (Brush)FindResource("ErrorBrush"));
+    // 警告与错误同时落盘：屏幕日志会随界面切换/重开丢失，文件日志是排障的依据
+    private void LogWarn(string msg)
+    {
+        FileLogger.App.Warn(msg);
+        AppendColored(msg, (Brush)FindResource("WarningBrush"));
+    }
+    private void LogError(string msg)
+    {
+        FileLogger.App.Error(msg);
+        AppendColored(msg, (Brush)FindResource("ErrorBrush"));
+    }
     private void LogAccent(string msg) => AppendColored(msg, (Brush)FindResource("AccentBrush"));
 
     private void AppendColored(string text, Brush color)

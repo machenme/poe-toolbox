@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using System.Windows.Input;
 using LibBundle3.Nodes;
 using LibBundle3.Records;
@@ -131,7 +132,14 @@ public partial class DataBrowserView : UserControl
         try
         {
             SetBusy(true, "正在保存未保存修改...", true);
-            Task.Run(() => ReplaceService.ReplaceTexts(gameDataPath, edits)).GetAwaiter().GetResult();
+            // 关闭流程是同步契约（OnClosing → TryPrepareForAppClose 需立即给出结论），
+            // 但不能让窗口整段冻结：关掉输入、泵消息帧保持界面可绘制，保存任务在后台跑。
+            // 期间再次点关闭会因 _gd 已释放而走"取消关闭"分支，不会重入。
+            IsEnabled = false;
+            var saveTask = Task.Run(() => ReplaceService.ReplaceTexts(gameDataPath, edits));
+            while (!saveTask.Wait(50))
+                Dispatcher.PushFrame(new DispatcherFrame());
+            saveTask.GetAwaiter().GetResult();
             _pendingEdits.Clear();
             UpdatePendingChangesUi();
             return true;
@@ -145,6 +153,7 @@ public partial class DataBrowserView : UserControl
         }
         finally
         {
+            IsEnabled = true;
             SetBusy(false, StatusText.Text, false);
         }
     }

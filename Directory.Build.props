@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    释放 .pdb / obj 文件的构建锁：禁用 Roslyn 共享编译节点（VBCSCompiler）。
+    共享节点会在两次构建之间继续持有 obj\*.pdb 的句柄，下一次构建偶发
+    CS2012 / MSB3713 "另一个进程正在使用"（本机无杀软，曾长期误判为杀软抢锁）。
+    关掉后每次编译独立起 csc，句柄随进程退出释放；代价是每个项目多几百毫秒编译启动。
+  -->
+  <PropertyGroup>
+    <UseSharedCompilation>false</UseSharedCompilation>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,112 @@
+{
+  "patchId": "oil-ground-fx-lite",
+  "bundleName": "OilGround",
+  "version": "2",
+  "_comment": "地面燃烧特效补丁（从原 oil-grenade-fx-lite 拆分）：把黏油榴弹留下的燃烧地面换成调淡的独立副本 grd_Burning01_oil.ao，并把 miscanimated.datc64 与 oilground.ot 的引用指向副本。v2 新增：去掉油面点燃时的过渡动画（transition_FIRE 的火焰波粒子与 OilIgnite 音效）——生成只保留骨架的独立副本 transition_FIRE_oil.ao，把 Base/Abyssal/Divine 三个点燃过渡 Id 重定向到副本，oilground.ot 预加载同步指向副本；共享原版 transition_FIRE.ao 与其他技能（如炸药榴弹、瓦尔守卫）的引用完全不动。version 从 1 升到 2：改了补丁内容必须升 version，否则新内容会被当成覆盖其他 Mod 而拒绝执行。bundle 落在索引同目录 PATCHED/<bundleName>_v<version>.bundle.bin。op 类型：addfile-derived（读原件+替换生成副本）/ patchptr-byid（dat 表按 Id 定位重定向指针）/ edittext（就地文本替换）。revert 自动取反：副本保留无引用、指针回原路径、文本反向替换。",
+  "operations": [
+    {
+      "op": "addfile-derived",
+      "src": "metadata/effects/spells/grd_zones/grd_burning01.ao",
+      "dst": "metadata/effects/spells/grd_zones/grd_burning01_oil.ao",
+      "targetSha256": "815567a5aff83986452170d40c12f22ca3f61971cbce58c95c286ba63d58d664",
+      "replace": [
+        {
+          "old": "2 0 0 Linear 0.25 0 Linear",
+          "new": "2 0 0 Linear 0.25 1 Linear",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "op": "patchptr-byid",
+      "table": "data/balance/miscanimated.datc64",
+      "id": "BaseOilGroundBurningEffect",
+      "originalPath": "Metadata/Effects/Spells/grd_Zones/grd_Burning01.ao",
+      "newPath": "Metadata/Effects/Spells/grd_Zones/grd_Burning01_oil.ao"
+    },
+    {
+      "op": "edittext",
+      "path": "metadata/effects/spells/crossbow_oilgrenade/oilground.ot",
+      "old": "preload_animated_object = \"Metadata/Effects/Spells/grd_Zones/grd_Burning01.ao\"",
+      "new": "preload_animated_object = \"Metadata/Effects/Spells/grd_Zones/grd_Burning01_oil.ao\""
+    },
+    {
+      "op": "addfile-derived",
+      "src": "metadata/effects/spells/grd_zones/transition_FIRE.ao",
+      "dst": "metadata/effects/spells/grd_zones/transition_FIRE_oil.ao",
+      "sourceSha256": "e938b0c5d7c0d31e2980751b37375b54d790a8aee5c8c241ebcbc556e919ad55",
+      "targetSha256": "f423e475a22da941cad7541eea1ba56076ba9c6773840ef65c19ffb337cfe506",
+      "replace": [
+        {
+          "old": "\"events\": [\n\t\t\t\t\t{\n\t\t\t\t\t\t\"type\": \"ParticleEffectEventType\",\n\t\t\t\t\t\t\"time\": 0.0,\n\t\t\t\t\t\t\"filename\": \"Metadata/Effects/Spells/grd_Zones/FX/transitionWave_FIRE_01.pet\",\n\t\t\t\t\t\t\"bone_group\": \"FX_line\"\n\t\t\t\t\t}\n\t\t\t\t]",
+          "new": "\"events\": []"
+        },
+        {
+          "old": "\"events\": [\n\t\t\t\t\t{\n\t\t\t\t\t\t\"type\": \"SoundEventType\",\n\t\t\t\t\t\t\"time\": 0.0,\n\t\t\t\t\t\t\"skip_on_loop\": true,\n\t\t\t\t\t\t\"filename\": \"Audio/Sound Effects/Skills/4.0/Primal/Wyvern_ElectricSpit/OilIgnite\"\n\t\t\t\t\t}\n\t\t\t\t]",
+          "new": "\"events\": []"
+        }
+      ]
+    },
+    {
+      "op": "patchptr-byid",
+      "table": "data/balance/miscanimated.datc64",
+      "id": "BaseOilGroundIgnitionTransitionEffect",
+      "originalPath": "Metadata/Effects/Spells/grd_Zones/transition_FIRE.ao",
+      "newPath": "Metadata/Effects/Spells/grd_Zones/transition_FIRE_oil.ao"
+    },
+    {
+      "op": "addfile-derived",
+      "src": "metadata/effects/microtransactions/spells/mercenary/abyssal/crossbow_explosivegrenade/transition_FIRE.ao",
+      "dst": "metadata/effects/spells/grd_zones/transition_FIRE_oil_abyssal.ao",
+      "sourceSha256": "c1640a5b8210e5c568ec1f2b2e266f56b0bef0eb24d171397e3bbfb0122fae26",
+      "targetSha256": "246a4af64f868222d82401408d7892293687b5d04b026dcd6103e406589e6d3e",
+      "replace": [
+        {
+          "old": "\"events\": [\n\t\t\t\t\t{\n\t\t\t\t\t\t\"type\": \"ParticleEffectEventType\",\n\t\t\t\t\t\t\"time\": 0.0,\n\t\t\t\t\t\t\"filename\": \"Metadata/Effects/Microtransactions/Spells/Mercenary/Abyssal/crossbow_explosivegrenade/pet/transitionWave_FIRE_01.pet\",\n\t\t\t\t\t\t\"bone_group\": \"FX_line\"\n\t\t\t\t\t}\n\t\t\t\t]",
+          "new": "\"events\": []"
+        },
+        {
+          "old": "\"events\": [\n\t\t\t\t\t{\n\t\t\t\t\t\t\"type\": \"SoundEventType\",\n\t\t\t\t\t\t\"time\": 0.0,\n\t\t\t\t\t\t\"skip_on_loop\": true,\n\t\t\t\t\t\t\"filename\": \"Audio/Sound Effects/Skills/4.0/Primal/Wyvern_ElectricSpit/OilIgnite\"\n\t\t\t\t\t}\n\t\t\t\t]",
+          "new": "\"events\": []"
+        }
+      ]
+    },
+    {
+      "op": "patchptr-byid",
+      "table": "data/balance/miscanimated.datc64",
+      "id": "AbyssalOilGroundIgnitionTransition",
+      "originalPath": "Metadata/Effects/Microtransactions/Spells/Mercenary/Abyssal/crossbow_explosivegrenade/transition_FIRE.ao",
+      "newPath": "Metadata/Effects/Spells/grd_Zones/transition_FIRE_oil_abyssal.ao"
+    },
+    {
+      "op": "addfile-derived",
+      "src": "metadata/effects/microtransactions/spells/mercenary/divine/crossbow_explosivegrenade/transition_FIRE.ao",
+      "dst": "metadata/effects/spells/grd_zones/transition_FIRE_oil_divine.ao",
+      "sourceSha256": "9f3752f7432c05dee9e7fce354e0328ae176037822f2d43b72b5171d13cc0781",
+      "targetSha256": "246a4af64f868222d82401408d7892293687b5d04b026dcd6103e406589e6d3e",
+      "replace": [
+        {
+          "old": "\"events\": [\n\t\t\t\t\t{\n\t\t\t\t\t\t\"type\": \"ParticleEffectEventType\",\n\t\t\t\t\t\t\"time\": 0.0,\n\t\t\t\t\t\t\"filename\": \"Metadata/Effects/Microtransactions/Spells/Mercenary/Divine/crossbow_explosivegrenade/pet/transitionWave_FIRE_01.pet\",\n\t\t\t\t\t\t\"bone_group\": \"FX_line\"\n\t\t\t\t\t}\n\t\t\t\t]",
+          "new": "\"events\": []"
+        },
+        {
+          "old": "\"events\": [\n\t\t\t\t\t{\n\t\t\t\t\t\t\"type\": \"SoundEventType\",\n\t\t\t\t\t\t\"time\": 0.0,\n\t\t\t\t\t\t\"skip_on_loop\": true,\n\t\t\t\t\t\t\"filename\": \"Audio/Sound Effects/Skills/4.0/Primal/Wyvern_ElectricSpit/OilIgnite\"\n\t\t\t\t\t}\n\t\t\t\t]",
+          "new": "\"events\": []"
+        }
+      ]
+    },
+    {
+      "op": "patchptr-byid",
+      "table": "data/balance/miscanimated.datc64",
+      "id": "DivineOilGroundIgnitionTransition",
+      "originalPath": "Metadata/Effects/Microtransactions/Spells/Mercenary/Divine/crossbow_explosivegrenade/transition_FIRE.ao",
+      "newPath": "Metadata/Effects/Spells/grd_Zones/transition_FIRE_oil_divine.ao"
+    },
+    {
+      "op": "edittext",
+      "path": "metadata/effects/spells/crossbow_oilgrenade/oilground.ot",
+      "old": "preload_animated_object = \"Metadata/Effects/Spells/grd_Zones/transition_FIRE.ao\"",
+      "new": "preload_animated_object = \"Metadata/Effects/Spells/grd_Zones/transition_FIRE_oil.ao\""
+    }
+  ]
+}

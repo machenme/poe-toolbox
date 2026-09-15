@@ -52,9 +52,10 @@ public class FileRecord {
 		if (bundle is not null)
 			return bundle.Read(Offset, Size);
 		// TODO: Bundle cache implementation
-		bundle = BundleRecord.Index._BundleToWrite;
+		var index = BundleRecord.Index;
+		bundle = index._BundleToWrite;
 		if (bundle?.Record == BundleRecord) // The bundle being written
-			return bundle.ReadWithoutCache(Offset, Size);
+			return ReadFromWriteBundle(index, Offset);
 		if (BundleRecord.TryGetBundle(out bundle, out var ex))
 			using (bundle)
 				return bundle.ReadWithoutCache(Offset, Size);
@@ -74,14 +75,34 @@ public class FileRecord {
 		var (offset, length) = range.GetOffsetAndLength(Size);
 		if (bundle is not null)
 			return bundle.Read(Offset + offset, length);
-		bundle = BundleRecord.Index._BundleToWrite;
-		if (bundle?.Record == BundleRecord)
-			return bundle.ReadWithoutCache(Offset + offset, length);
+		var index = BundleRecord.Index;
+		bundle = index._BundleToWrite;
+		if (bundle?.Record == BundleRecord) // The bundle being written
+			return ReadFromWriteBundle(index, Offset + offset);
 		if (BundleRecord.TryGetBundle(out bundle, out var ex))
 			using (bundle) // TODO: Bundle cache implementation
 				return bundle.ReadWithoutCache(Offset + offset, length);
 		ex?.ThrowKeepStackTrace();
 		throw new FileNotFoundException("Failed to get bundle: " + BundleRecord.Path);
+	}
+
+	/// <summary>
+	/// Read this record from the index's bundle being written.
+	/// </summary>
+	/// <remarks>
+	/// The pending content exists only in the write buffer: the bundle's <c>metadata.uncompressed_size</c>
+	/// still reports its last saved size until <see cref="Index.Save"/>, so reading through the bundle
+	/// would fail for anything appended after it was created. Read from the buffer instead while it is
+	/// still pending; once it has been flushed the bundle on disk is up to date again.
+	/// </remarks>
+	protected internal virtual ReadOnlyMemory<byte> ReadFromWriteBundle(Index index, int absoluteOffset) {
+		var ms = index._BundleStreamToWrite;
+		if (ms is not null && ms.Length >= (long)absoluteOffset + Size) {
+			lock (index) {
+				return ms.GetBuffer().AsSpan(absoluteOffset, Size).ToArray();
+			}
+		}
+		return index._BundleToWrite!.ReadWithoutCache(absoluteOffset, Size);
 	}
 
 	/// <summary>

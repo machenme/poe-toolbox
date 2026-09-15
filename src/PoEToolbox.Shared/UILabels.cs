@@ -2,7 +2,8 @@ namespace PoEToolbox.Shared;
 
 /// <summary>
 /// Multi-language UI strings. Supports EN/SC/TC.
-/// Plugins register their own localization keys via AddKeys().
+/// All keys (shell and plugins) are maintained centrally in the dictionaries below —
+/// there is currently no per-plugin registration API; missing keys fall back via <see cref="Get"/>.
 /// </summary>
 public static class UILabels
 {
@@ -15,7 +16,6 @@ public static class UILabels
     {
         ["AppTitle"] = "PoE Toolbox",
         ["Subtitle"] = "Stream of Exile utility tools",
-        ["Version"] = "v0.1.2",
         ["Theme"] = "Theme",
         ["FollowSystem"] = "Follow System",
         ["Light"] = "Light",
@@ -45,13 +45,17 @@ public static class UILabels
         ["OpenReleasePage"] = "View releases",
         ["SkipVersion"] = "Skip v{0}",
         ["OpenAppDataFolder"] = "Open data folder",
+        ["SelectGameDataTitle"] = "Select game data file",
+        ["GameDataFilter"] = "Game data files|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|Index files|_.index.bin|All files|*.*",
+        ["NoGameDataSelected"] = "No game data selected",
+        ["CollapseLog"] = "▤ Hide log",
+        ["ShowLog"] = "▤ Show log",
     };
 
     private static readonly Dictionary<string, string> TC = new()
     {
         ["AppTitle"] = "流放工具箱",
         ["Subtitle"] = "流亡黯道實用工具集合",
-        ["Version"] = "v0.1.2",
         ["Theme"] = "主題",
         ["FollowSystem"] = "跟隨系統",
         ["Light"] = "淺色",
@@ -79,13 +83,17 @@ public static class UILabels
         ["OpenReleasePage"] = "查看發佈頁",
         ["SkipVersion"] = "跳過 v{0}",
         ["OpenAppDataFolder"] = "開啟資料夾",
+        ["SelectGameDataTitle"] = "選擇遊戲資料檔案",
+        ["GameDataFilter"] = "遊戲資料檔案|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|索引檔案|_.index.bin|全部檔案|*.*",
+        ["NoGameDataSelected"] = "未選擇遊戲資料",
+        ["CollapseLog"] = "▤ 收合日誌",
+        ["ShowLog"] = "▤ 輸出日誌",
     };
 
     private static readonly Dictionary<string, string> SC = new()
     {
         ["AppTitle"] = "流放工具箱",
         ["Subtitle"] = "流放之路实用工具集合",
-        ["Version"] = "v0.1.2",
         ["Theme"] = "主题",
         ["FollowSystem"] = "跟随系统",
         ["Light"] = "浅色",
@@ -113,6 +121,11 @@ public static class UILabels
         ["OpenReleasePage"] = "查看发布页",
         ["SkipVersion"] = "跳过 v{0}",
         ["OpenAppDataFolder"] = "打开数据文件夹",
+        ["SelectGameDataTitle"] = "选择游戏数据文件",
+        ["GameDataFilter"] = "游戏数据文件|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|索引文件|_.index.bin|全部文件|*.*",
+        ["NoGameDataSelected"] = "未选择游戏数据",
+        ["CollapseLog"] = "▤ 收起日志",
+        ["ShowLog"] = "▤ 输出日志",
     };
 
     // ═══ Plugin: Price Tagger keys ═══════════════════════

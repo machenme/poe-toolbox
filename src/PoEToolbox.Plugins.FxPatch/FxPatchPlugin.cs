@@ -13,11 +13,13 @@ public sealed class FxPatchPlugin : IPlugin
         => _eventBus = eventBus ?? new EventBus();
 
     public string Name => "特效补丁";
-    public string IconGlyph => "";
+    public string IconGlyph => "\uE945"; // Segoe MDL2 Assets: LightningBolt
     public int Order => 9;
 
     public UserControl CreateView() => _view ??= new FxPatchView(_eventBus);
-    public void OnActivated() { }
+
+    /// <summary>切到本模块时按补丁记录刷新「哪些补丁已经打上」并默认勾选——只读一个小 json，不打开索引。</summary>
+    public void OnActivated() => _view?.RefreshStatusIfStale();
     public void OnDeactivated() { }
     public void OnAppShutdown() => _view?.Dispose();
 }

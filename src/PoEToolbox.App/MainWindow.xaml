@@ -126,12 +126,12 @@
         <!-- ═══ Body ════════════════════════════════════════════ -->
         <Grid Grid.Row="1" Margin="24,16,24,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="Auto" MinWidth="180"/>
                 <ColumnDefinition Width="16"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left nav -->
+            <!-- Left nav（宽度自适应最长模块名） -->
             <Border Grid.Column="0" Style="{StaticResource CardBorder}" Padding="4">
                 <ListBox x:Name="NavList" SelectionChanged="NavList_SelectionChanged"
                          BorderThickness="0" Background="Transparent"
@@ -251,9 +251,21 @@
         <!-- ═══ Status Bar (32px) ════════════════════════════════ -->
         <Border Grid.Row="3" Background="{DynamicResource SurfaceBrush}" Padding="12,0">
             <Grid>
-                <TextBlock x:Name="StatusLabel" Text="Ready"
-                           Style="{StaticResource SmallText}"
-                           VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 整体兜底入口：无论当前在哪个模块，改坏了游戏都能从这里一键恢复原版 -->
+                    <Button x:Name="RestoreBaselineButton" Click="RestoreBaselineButton_Click"
+                            Content="恢复游戏原版"
+                            Style="{StaticResource SecondaryButton}"
+                            Height="24" Padding="10,0" FontSize="11"
+                            Foreground="{DynamicResource ErrorBrush}"
+                            BorderBrush="{DynamicResource ErrorBrush}"
+                            Cursor="Hand"
+                            ToolTip="整体兜底：用备份的原版索引替换当前索引，并删除所有补丁新增的文件（含第三方补丁）。任何模块改坏了游戏都可以用它恢复；日常卸载单个补丁请到「特效补丁」页。"/>
+                    <TextBlock x:Name="StatusLabel" Text="Ready"
+                               Style="{StaticResource SmallText}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
                 <Button x:Name="GlobalLogToggle" Click="GlobalLogToggle_Click"
                         Content="▤ 输出日志"
                         Style="{StaticResource SecondaryButton}"

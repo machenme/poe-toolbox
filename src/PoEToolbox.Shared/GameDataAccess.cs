@@ -19,7 +19,7 @@ public sealed class GameDataAccess : IDisposable
     private static long _openSequence;
     private bool _isDirectIndex;
     private bool _registeredOpen;
-    private bool _disposed;
+    private int _disposed;
     private bool _pinWrites;
     private BundledGGPK? _ggpk;
     private LibBundle3.Index? _index;
@@ -211,9 +211,19 @@ public sealed class GameDataAccess : IDisposable
         }
         else
         {
-            _index = new LibBundle3.Index(indexPath, parsePaths: false, bundleFactory, readOnly);
-            // Newer client indexes can include unresolved paths unrelated to game data we use.
-            _index.ParsePaths();
+            try
+            {
+                _index = new LibBundle3.Index(indexPath, parsePaths: false, bundleFactory, readOnly);
+                // Newer client indexes can include unresolved paths unrelated to game data we use.
+                _index.ParsePaths();
+            }
+            catch
+            {
+                // ParsePaths 等失败时释放半初始化的 Index，避免泄漏已打开的 bundle 句柄
+                _index?.Dispose();
+                _index = null;
+                throw;
+            }
         }
 
         _indexPath = indexPath;
@@ -281,7 +291,12 @@ public sealed class GameDataAccess : IDisposable
     {
         if (saveIndex)
             EnsureGameStoppedForMutation();
-        return Index.PurgeCustomBundles($"PATCHED/{bundlePrefix}_", ownedPaths, saveIndex);
+        // 两个前缀：带版本的 PATCHED/<name>_vN，以及不写版本时的 PATCHED/<name>。
+        // 放宽到后者会让同名前缀的另一个补丁（<name>_other）也进入候选，但它造出来的路径
+        // 不在这个补丁的 ownedPaths 里，实际不会被删。
+        return Index.PurgeCustomBundles(
+            [$"PATCHED/{bundlePrefix}_", $"PATCHED/{bundlePrefix}"],
+            ownedPaths, saveIndex);
     }
 
     // ── Save ───────────────────────────────────────────
@@ -506,8 +521,8 @@ public sealed class GameDataAccess : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        // check-then-act 在多线程下可能重复递减 _openInstanceCount，用原子交换保证只执行一次
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
         _ggpk?.Dispose();
         _index?.Dispose();
         _mappedIndex?.Dispose();

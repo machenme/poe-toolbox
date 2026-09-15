@@ -16,7 +16,7 @@ public sealed class MapNumberPlugin : IPlugin
     }
 
     public string Name => "修改地图标签";
-    public string IconGlyph => ""; // edit
+    public string IconGlyph => "\uE70F"; // Segoe MDL2 Assets: Edit（铅笔；原 E125 是旧版 Segoe UI Symbol 码点，MDL2 里不是编辑）
     public int Order => 16;
 
     public UserControl CreateView() => _view ??= new MapNumberView(_eventBus);

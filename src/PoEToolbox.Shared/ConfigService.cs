@@ -19,6 +19,8 @@ public static class ConfigService
     public static readonly string CacheDirectory = Path.Combine(DataDirectory, "cache");
     /// <summary>生成的补丁包（fx-patch diff 产物）输出目录。</summary>
     public static readonly string PatchesDirectory = Path.Combine(DataDirectory, "patches");
+    /// <summary>词缀上色的上色方案目录。</summary>
+    public static readonly string AffixSchemesDirectory = Path.Combine(DataDirectory, "affix-schemes");
     private static readonly string LegacyConfigPath = Path.Combine(AppContext.BaseDirectory, "work", "config.json");
 
     private static readonly JsonSerializerOptions JsonOpts = new()

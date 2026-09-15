@@ -15,7 +15,7 @@ public class DataBrowserPlugin : IPlugin
     }
 
     public string Name => "GGPK文件浏览";
-    public string IconGlyph => ""; // folder
+    public string IconGlyph => "\uE8B7"; // folder
     public int Order => 15;
 
     private DataBrowserView? _view;

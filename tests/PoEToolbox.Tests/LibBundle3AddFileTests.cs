@@ -129,6 +129,46 @@ public sealed class LibBundle3AddFileTests : IDisposable
     }
 
     [Fact]
+    public void Read_BeforeSave_ReturnsPendingContent_FromWriteBundle()
+    {
+        var indexPath = BuildSeedIndex();
+        var seedBytes = Encoding.UTF8.GetBytes(SeedText);
+        var first = Encoding.UTF8.GetBytes("{\"effect\":\"burning\"}");
+        var second = Encoding.UTF8.GetBytes("{\"effect\":\"ignition\"}");
+
+        // Reproduces the patch-engine sequence: two new files are appended into the write bundle
+        // and a base file is redirected into it, then the next operation reads the redirected
+        // file back — all before Save. The pending content lives only in the write buffer, so
+        // reads must not go through the bundle's (stale) metadata.
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            index.AddFile(NewPath, first);
+            var redirectedPath = "metadata/effects/spells/grd_zones/grd_burning02.ao";
+            Assert.True(index.TryGetFile(redirectedPath, out var redirected));
+            redirected!.Write(second);
+            Assert.True(index.TryGetFile(OtherSeedPath, out var other));
+            Assert.Equal(second, other!.Read().ToArray());
+
+            Assert.True(index.TryGetFile(NewPath, out var added));
+            Assert.Equal(first, added!.Read().ToArray());
+
+            // The untouched seed file keeps its original content.
+            Assert.True(index.TryGetFile(SeedPath, out var seed));
+            Assert.Equal(seedBytes, seed!.Read().ToArray());
+
+            index.Save();
+        }
+
+        using var reopened = new Index(indexPath, parsePaths: true);
+        Assert.True(reopened.TryGetFile(NewPath, out var pending));
+        Assert.Equal(first, pending!.Read().ToArray());
+        Assert.True(reopened.TryGetFile(OtherSeedPath, out var after));
+        Assert.Equal(second, after!.Read().ToArray());
+        Assert.True(reopened.TryGetFile(SeedPath, out var original));
+        Assert.Equal(seedBytes, original!.Read().ToArray());
+    }
+
+    [Fact]
     public void DisposeWithoutSave_DoesNotPersistPendingMutation()
     {
         var indexPath = BuildSeedIndex();
@@ -150,8 +190,13 @@ public sealed class LibBundle3AddFileTests : IDisposable
         var patchPath = "PATCHED/TestPatch_1";
         var patchFile = "metadata/effects/spells/grd_zones/test_patch.ao";
 
+        IReadOnlyList<(ulong PathHash, int Offset, int Size, int RecursiveSize)> pristineRecords;
+        int pristineBlobLength;
         using (var index = new Index(indexPath, parsePaths: true))
         {
+            pristineRecords = ReadDirectoryRecords(index);
+            pristineBlobLength = ReadDirectoryBlobLength(index);
+
             index.PinnedWriteBundlePath = patchPath;
             index.AddFile(patchFile, Encoding.UTF8.GetBytes("patch"));
             index.Save();
@@ -169,8 +214,19 @@ public sealed class LibBundle3AddFileTests : IDisposable
         }
 
         Assert.False(File.Exists(bundleFile));
+        // The directory table must come out of purge structurally identical to how it was
+        // before the patch was applied. It must never be regenerated wholesale: the game
+        // client builds its filesystem view from the per-directory records, and a rebuild
+        // collapses it into one root record, which left the client unable to resolve any
+        // path (2026-09-13 launch crash).
         using var reopened = new Index(indexPath, parsePaths: true);
+        var recordsAfter = ReadDirectoryRecords(reopened);
+        Assert.Equal(pristineRecords.Count, recordsAfter.Count); // appended record dropped, not collapsed
+        Assert.All(recordsAfter, r => Assert.NotEqual(0, r.RecursiveSize)); // client mis-reads zero spans
+        Assert.Equal(pristineBlobLength, ReadDirectoryBlobLength(reopened)); // no orphan entry left behind
+
         Assert.Equal(2, reopened.Files.Count);
+        Assert.False(reopened.TryGetFile(patchFile, out _));
         Assert.True(reopened.TryGetFile(SeedPath, out _));
         Assert.True(reopened.TryGetFile(OtherSeedPath, out _));
     }
@@ -208,6 +264,8 @@ public sealed class LibBundle3AddFileTests : IDisposable
         }
 
         // The base file must still resolve — and still carry its content — after reopening.
+        // parsePaths: true also proves the purged path's directory entry was removed cleanly
+        // (any unresolved path would throw here).
         using var reopened = new Index(indexPath, parsePaths: true);
         Assert.True(reopened.TryGetFile(SeedPath, out var after));
         Assert.Equal(seedBytes, after!.Read().ToArray());
@@ -426,6 +484,15 @@ public sealed class LibBundle3AddFileTests : IDisposable
                 (int)fRecursive.GetValue(value)!));
         }
         return records;
+    }
+
+    /// <summary>Reads the raw directory-blob length of an index (there's no public accessor for it).</summary>
+    private static int ReadDirectoryBlobLength(Index index)
+    {
+        var data = (byte[]?)typeof(Index)
+            .GetField("directoryBundleData", BindingFlags.NonPublic | BindingFlags.Instance)?
+            .GetValue(index) ?? throw new InvalidOperationException("cannot read directoryBundleData");
+        return data.Length;
     }
 
     // ── Tiny synthetic index builder ───────────────────────────

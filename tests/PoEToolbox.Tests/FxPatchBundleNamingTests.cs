@@ -9,8 +9,8 @@ using Index = LibBundle3.Index;
 namespace PoEToolbox.Tests;
 
 /// <summary>
-/// A patch writes into a bundle named after its <c>version</c> instead of the moment it ran, so a
-/// repeated apply/revert cycle reuses one file instead of piling up bundles. And purge may only delete
+/// A patch writes into a stable bundle named after its (optional) <c>version</c> instead of the moment
+/// it ran, so a repeated apply/revert cycle reuses one file instead of piling up bundles. And purge may only delete
 /// paths the patch itself created — reverting redirects base-game files into the patch bundle, and
 /// dropping those records would delete the files from the index rather than restore them.
 /// </summary>
@@ -52,6 +52,57 @@ public sealed class FxPatchBundleNamingTests : IDisposable
         // recognisable as this patch's own output (that's what makes upgrading possible).
         Assert.Equal("PATCHED/OilGrenade_", FxPatchEngine.BundlePrefixOf(patch));
         Assert.StartsWith(FxPatchEngine.BundlePrefixOf(patch), FxPatchEngine.BundlePathOf(patch), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BundlePath_WithoutVersion_FallsBackToTheBareBundleName()
+    {
+        // version 是可选的：不写时补丁固定落在 PATCHED/<bundleName>，
+        // 反复 apply/revert 始终复用这一个 bundle。
+        Assert.Equal("PATCHED/OilGrenade", FxPatchEngine.BundlePathOf(Patch("OilGrenade", null)));
+    }
+
+    [Fact]
+    public void IsPatchOwned_RecognisesAVersionlessBundle()
+    {
+        var indexPath = SeedIndex.Build(_directory, (SeedPath, Encoding.UTF8.GetBytes(SeedText)));
+        var patch = Patch("TestPatch", null);
+
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            index.PinnedWriteBundlePath = FxPatchEngine.BundlePathOf(patch);
+            index.AddFile(PatchCopy, Encoding.UTF8.GetBytes("own output"));
+            index.Save();
+        }
+
+        using var reopened = new Index(indexPath, parsePaths: true);
+
+        // 无版本补丁的 bundle 名不带下划线，光靠前缀认不出来——必须认得出是自己的产物，
+        // 否则重跑同一个补丁会被自己的上一个产物当成"别的 Mod"挡下来。
+        Assert.True(FxPatchEngine.IsPatchOwned(reopened, patch, PatchCopy));
+        Assert.False(FxPatchEngine.IsPatchOwned(reopened, Patch("OtherPatch", null), PatchCopy));
+        Assert.False(FxPatchEngine.IsPatchOwned(reopened, patch, SeedPath));
+    }
+
+    [Fact]
+    public void IsPatchOwned_VersionlessPatchStillOwnsItsOldVersionedBundle()
+    {
+        var indexPath = SeedIndex.Build(_directory, (SeedPath, Encoding.UTF8.GetBytes(SeedText)));
+        var v1 = Patch("TestPatch", "1");
+        var versionless = Patch("TestPatch", null);
+
+        using (var index = new Index(indexPath, parsePaths: true))
+        {
+            index.PinnedWriteBundlePath = FxPatchEngine.BundlePathOf(v1);
+            index.AddFile(PatchCopy, Encoding.UTF8.GetBytes("v1 output"));
+            index.Save();
+        }
+
+        using var reopened = new Index(indexPath, parsePaths: true);
+
+        // 给已有补丁去掉 version 之后，前身 PATCHED/<name>_v1 里的产物仍算自己的，
+        // 否则迁移到无版本命名时会被自己上一版挡住、要求先卸载。
+        Assert.True(FxPatchEngine.IsPatchOwned(reopened, versionless, PatchCopy));
     }
 
     [Fact]
@@ -147,6 +198,6 @@ public sealed class FxPatchBundleNamingTests : IDisposable
         Assert.False(FxPatchEngine.IsPatchOwned(reopened, Patch("OtherPatch", "1"), PatchCopy));
     }
 
-    private static FxPatchEngine.PatchDef Patch(string bundleName, string version)
+    private static FxPatchEngine.PatchDef Patch(string bundleName, string? version)
         => new() { PatchId = "test-" + bundleName, BundleName = bundleName, Version = version };
 }

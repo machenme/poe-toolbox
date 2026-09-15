@@ -1,6 +1,6 @@
 # PoE Toolbox
 
-Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游戏数据浏览、特效补丁、地图标签修改、POE2 字体配置与 PoB 国服交易补丁。物价数据来自 [poe.ninja](https://poe.ninja)，物品名称写入使用本地游戏客户端数据。
+Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游戏数据浏览、特效补丁、词缀上色、地图标签修改、POE2 字体配置与 PoB 国服交易补丁。物价数据来自 [poe.ninja](https://poe.ninja)，物品名称写入使用本地游戏客户端数据。
 
 ## 功能
 
@@ -9,8 +9,10 @@ Windows 下的 Path of Exile 工具箱，提供 PoE1 / PoE2 物价标注、游�
 | **物价标注** | PoE1 / PoE2 | 点击“检测当前联盟”后识别客户端版本并从 poe.ninja 获取行情，在繁中基础物品名后追加价格标签 |
 | **联盟选择** | PoE1 / PoE2 | 加载两代联盟列表，支持自定义联盟名；写入前校验联盟与客户端版本一致 |
 | **数据浏览** | PoE1 / PoE2 | 浏览、搜索、编辑和提取 `Content.ggpk` 或 Bundles2 `_.index.bin` 内的数据；支持文本文件查找、批量替换、批量保存、路径复制，以及"复制为新路径"生成隔离副本 |
-| **特效补丁** | PoE2 | 指令式补丁引擎：一个补丁 = 一份几 KB 的 JSON 描述文件；内置“黏油榴弹特效+地面燃烧特效”补丁，支持自定义补丁与索引 diff 自动生成；重复执行安全、随时可还原，与官方更新及其他补丁叠加共存 |
-| **术语翻译** | PoE1 / PoE2 | 使用内置术语资源和游戏数据进行术语翻译，支持后台执行与取消 |
+| **特效补丁** | PoE2 | 指令式补丁引擎：一个补丁 = 一份几 KB 的 JSON 描述文件；内置“地面燃烧特效”与“黏油榴弹特效”两个补丁（勾选即可，可多选一起执行），也支持逐个应用自定义补丁；重复执行安全、随时可还原，与官方更新及其他补丁叠加共存 |
+| **创建补丁** | PoE2 | 补丁生成器：diff 原版与修改后的两份索引，自动生成可分发的补丁（zip 补丁包）；这里也存放特效补丁系统的整体介绍 |
+| **词缀上色** | PoE2 | 词缀自定义上色：读取客户端全部词缀描述文件（约 1.9 万条），按「装备词缀 / 地图与图鉴 / 掉落容器与遗物 / 技能与天赋 / 其他」分组浏览与搜索（支持正则），可勾选批量上色，颜色用 RGBA 自定义并支持一键生成等级色阶；自动识别客户端语言（简体中文 / 繁体中文 / 英文）并只给该语言上色，一键应用为游戏补丁、随时恢复；方案可保存与分享 |
+| **攻略翻译** | PoE1 / PoE2 | 使用内置术语资源和游戏数据进行攻略翻译，支持后台执行与取消 |
 | **地图标签** | PoE1 / PoE2 | 独立通用工具；PoE1 修改 `mapnumbers1..16.dds`，PoE2 修改 `endgamemap1..15.dds`，支持字体、字号和偏移 |
 | **POE2 字体配置** | PoE2 | 修改 `metadata/ui/uisettings.xml` 与 `uisettings.traditional chinese.xml`；支持系统字体、字号倍率和实时预览，可恢复原始配置 |
 | **PoB 国服补丁** | PoE1 | 修改 PoB 交易地址和赛季编号，并支持还原国际服配置 |
@@ -61,25 +63,36 @@ PoE1 和 PoE2 的基础物品中英名称词典已内置在发布文件中。客
 
 ## 特效补丁系统
 
-特效补丁是一套“指令式”的游戏数据修改系统：**一个补丁就是一份几 KB 的 `.patch.json` 描述文件**，引擎按描述就地修改游戏索引，而不是分发整个几十 MB 的索引文件。内置补丁“黏油榴弹特效+地面燃烧特效”（延长黏油榴弹地面燃烧的淡出、去掉落地油花与点燃火波）是第一个实例；可以在“特效补丁”页面操作，也可以走命令行。
+特效补丁是一套“指令式”的游戏数据修改系统：**一个补丁就是一份几 KB 的 `.patch.json` 描述文件**，引擎按描述就地修改游戏索引，而不是分发整个几十 MB 的索引文件。内置两个补丁，可分别启用：
+
+- **地面燃烧特效**（`oil-ground-fx-lite`）：延长黏油榴弹留下的地面燃烧的淡出，并去掉油面点燃时的火焰过渡动画（含点燃音效）；其他技能的同类燃烧地面不受影响。
+- **黏油榴弹特效**（`oil-grenade-fx-lite`）：去掉黏油榴弹落地的油花与点燃火波。
+
+可以在“特效补丁”页面勾选内置补丁后操作（可勾选多个一起执行；自定义补丁则一次选择并应用一个），也可以走命令行。
+
+打开“特效补丁”页面时会直接显示每个内置补丁装没装，**已经装上的会自动勾选**，想还原直接点「恢复游戏原版」即可。这份状态来自游戏目录里的 `Bundles2\backup\applied-patches.json`——补丁应用时由引擎顺手写下的一个小记录文件，打开页面读它就知道装了哪些，不用为了看状态再去开几个 GB 的索引。记录只是展示用的账本，不参与还原（还原仍然靠索引本身与 `backup\_.index.bin` 基线）；万一它与实际情况对不上（比如用启动器修复过客户端），点「高级维护」里的「刷新补丁状态」会重新打开索引核对一遍并纠正记录。
 
 想自己写补丁，先看 [补丁创作方法论](docs/GUIDE-patch-authoring.md)：怎么改一个被多处引用的共享特效，却不影响引用它的其他技能（推荐做法，不是强制规范）。
 
 ### 补丁如何执行
 
-以内置补丁为例，一份描述文件长这样：
+以内置的地面燃烧特效补丁为例，一份描述文件长这样：
 
 ```json
 {
-  "patchId": "oil-grenade-fx-lite",
-  "bundleName": "OilGrenade",
-  "version": "1",
+  "patchId": "oil-ground-fx-lite",
+  "bundleName": "OilGround",
+  "version": "2",
   "operations": [
     { "op": "addfile-derived", "src": ".../grd_burning01.ao", "dst": ".../grd_burning01_oil.ao",
       "replace": [ { "old": "2 0 0 Linear 0.25 0 Linear", "new": "2 0 0 Linear 0.25 1 Linear", "count": 2 } ] },
     { "op": "patchptr-byid", "table": "data/balance/miscanimated.datc64",
       "id": "BaseOilGroundBurningEffect", "originalPath": ".../grd_Burning01.ao", "newPath": ".../grd_Burning01_oil.ao" },
-    { "op": "edittext", "path": ".../oilground.ot", "old": "preload .../grd_Burning01.ao", "new": "preload .../grd_Burning01_oil.ao" }
+    { "op": "edittext", "path": ".../oilground.ot", "old": "preload .../grd_Burning01.ao", "new": "preload .../grd_Burning01_oil.ao" },
+    { "op": "addfile-derived", "src": ".../transition_FIRE.ao", "dst": ".../transition_FIRE_oil.ao",
+      "replace": [ { "old": "...火焰波粒子事件...", "new": "\"events\": []" }, { "old": "...OilIgnite 音效事件...", "new": "\"events\": []" } ] },
+    { "op": "patchptr-byid", "table": "data/balance/miscanimated.datc64",
+      "id": "BaseOilGroundIgnitionTransitionEffect", "originalPath": ".../transition_FIRE.ao", "newPath": ".../transition_FIRE_oil.ao" }
   ]
 }
 ```
@@ -88,7 +101,7 @@ PoE1 和 PoE2 的基础物品中英名称词典已内置在发布文件中。客
 
 1. **备份**：如果 `backup/_.index.bin` 还不存在就把当前索引逐字节保存为 baseline（选择游戏数据时就会自动保留一份），之后每次成功修改在工具日志里记一条（索引哈希变化才记）。
 2. **逐条执行操作**（见下表）。每条操作先校验现状再动手：目标不存在或内容与预期不符 = 冲突，**整个补丁中止**，不做半套修改。
-3. **独立落盘**：所有写入进入游戏索引同目录 `PATCHED\<bundleName>_v<版本号>.bundle.bin`，与原版 Bundle 以及其他工具的写入位置物理隔离。
+3. **独立落盘**：所有写入进入游戏索引同目录 `PATCHED\<bundleName>.bundle.bin`（写了 `version` 时是 `PATCHED\<bundleName>_v<版本号>.bundle.bin`），与原版 Bundle 以及其他工具的写入位置物理隔离。
 4. **校验**：重新打开索引确认全部操作生效，否则报告失败。
 
 ### 四种操作类型
@@ -111,16 +124,16 @@ PoE1 和 PoE2 的基础物品中英名称词典已内置在发布文件中。客
 
 ### 版本号与清理
 
-`version` 字段（必填）决定补丁写进哪个 Bundle：`PATCHED\<bundleName>_v<版本号>.bundle.bin`。用版本号而不是执行时间，同一个版本反复 apply / revert 始终复用同一个文件，不会在磁盘上堆积。
+`version` 字段是可选的，决定补丁写进哪个 Bundle：写了是 `PATCHED\<bundleName>_v<版本号>.bundle.bin`，不写就是 `PATCHED\<bundleName>.bundle.bin`。同一个补丁反复 apply / revert 始终复用同一个文件，不会在磁盘上堆积；**没有 `version` 也能正常应用与还原**。
 
-- **改了补丁内容就必须升 `version`**，否则新内容会被当成“覆盖其他 Mod”而拒绝执行。
-- 不同补丁请用不同的 `bundleName`，这样版本号相同也不会互相覆盖。
+- 不同补丁请用不同的 `bundleName`，这样互不干扰。
 
 界面上的两个按钮和一个清理想清楚：
 
 | 操作 | 做什么 | 影响面 |
 |------|--------|--------|
 | 启用特效补丁 / 恢复游戏原版（界面主按钮） | 写入/撤销补丁引用 | 可逆，随时来回切；恢复原版不会删除补丁文件 |
+| 刷新补丁状态（界面「高级维护」里） | 打开索引核对每个补丁的真实状态，并顺手纠正 `applied-patches.json` | 只读游戏数据，不改动任何东西 |
 | 完全卸载补丁（界面「高级维护」里，默认收起） | 只移除**本补丁自己新增**的文件：`addfile-derived` 的副本、`addfile-asset` 的新增文件，并顺带清理因之腾空的补丁 Bundle | 补丁改过的游戏原有文件一律保留 |
 
 命令行多一个 `cleanup`：删除索引中已无任何文件引用的补丁 Bundle（升版本后旧版会被腾空），只删空壳、无损。走「完全卸载」时它会自动跟着跑一遍，一般不需要单独执行。
@@ -129,7 +142,7 @@ PoE1 和 PoE2 的基础物品中英名称词典已内置在发布文件中。客
 
 ### 补丁生成器（diff）
 
-不想手写 JSON？在“特效补丁”页面选择**原版索引**和**修改后索引**，引擎自动 diff 两份索引（秒级，300 万文件不全量计算），生成 `patch.json` + `assets/` 到 `%LocalAppData%\PoEToolbox\patches\<补丁ID>\`。也可以把别人发布的整包索引 mod 一条命令转成本工具的补丁格式。
+不想手写 JSON？在“创建补丁”模块选择**原版索引**和**修改后索引**，引擎自动 diff 两份索引（秒级，300 万文件不全量计算），生成 `patch.json` + `assets/` 到 `%LocalAppData%\PoEToolbox\patches\<补丁ID>\`。也可以把别人发布的整包索引 mod 一条命令转成本工具的补丁格式。
 
 ### 分发为 zip 补丁包
 
@@ -154,10 +167,13 @@ UI 里点“自定义补丁”直接选 zip 即可（补丁来源会自动切到
 ### 命令行
 
 ```powershell
-# 内置油弹补丁：查看状态 / 应用 / 还原
+# 内置特效补丁：查看状态 / 应用 / 还原（省略 patch-id 对两个内置补丁都执行）
 dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> status
 dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> apply
 dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> revert
+
+# 只操作其中一个：oil-ground-fx-lite 或 oil-grenade-fx-lite
+dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> oil-ground-fx-lite apply
 
 # 执行任意补丁描述
 dotnet run --project src\PoEToolbox.Cli -- fx-patch <game-data> <patch.json> status|apply|revert
@@ -169,9 +185,9 @@ dotnet run --project src\PoEToolbox.Cli -- fx-patch diff <原版索引> <修改�
 dotnet run --project src\PoEToolbox.Cli -- restore <game-data>
 ```
 
-## 术语翻译
+## 攻略翻译
 
-术语翻译功能使用内置的基础术语资源，并结合当前游戏数据进行翻译处理。翻译任务在后台执行，可以随时取消；翻译资源构建脚本位于 `tools/BuildBaseItemTranslationDictionary.ps1`。
+攻略翻译功能使用内置的基础术语资源，并结合当前游戏数据进行翻译处理。翻译任务在后台执行，可以随时取消；翻译资源构建脚本位于 `tools/BuildBaseItemTranslationDictionary.ps1`。
 
 ## 从源码构建
 
@@ -243,7 +259,7 @@ dotnet run --project src\PoEToolbox.Cli -- extract-all <source> <output-dir> [po
 dotnet run --project src\PoEToolbox.Cli -- copy-file <game-data> <源路径> <目标路径>
 
 # 特效补丁引擎（详见上方“特效补丁系统”）
-dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> <status|apply|revert>
+dotnet run --project src\PoEToolbox.Cli -- fx-oilmod <game-data> [patch-id|all] <status|apply|revert>
 dotnet run --project src\PoEToolbox.Cli -- fx-patch <game-data> <patch.json> <status|apply|revert>
 dotnet run --project src\PoEToolbox.Cli -- restore <game-data>
 ```
@@ -260,7 +276,7 @@ src/
 |- PoEToolbox.Shared/              配置、客户端检测、统一数据访问与特效补丁引擎
 |- PoEToolbox.Plugins.PriceTagger/ 物价标注界面
 |- PoEToolbox.Plugins.DataBrowser/ 数据浏览与地图标签插件
-|- PoEToolbox.Plugins.FxPatch/     特效补丁管理界面
+|- PoEToolbox.Plugins.FxPatch/     特效补丁与补丁生成器界面
 |- PoEToolbox.Plugins.Poe2Font/   POE2 字体配置与实时预览
 |- PoEToolbox.Plugins.PoeCnPatch/  PoB 国服补丁
 |- PoEToolbox.Plugins.BagCleaner/  背包清理

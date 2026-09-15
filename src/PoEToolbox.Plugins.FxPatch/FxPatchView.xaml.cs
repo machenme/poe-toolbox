@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,10 +10,31 @@ namespace PoEToolbox.Plugins.FxPatch;
 public partial class FxPatchView : UserControl
 {
     private readonly IEventBus _eventBus;
-    private bool _running;
-    private bool _settingVanillaDefault;
-    private bool _vanillaAutoSelected;
-    private bool _settingPatchPath;
+
+    private sealed class BuiltInRow
+    {
+        public required FxPatchEngine.BuiltInPatchDef Def;
+        public required CheckBox Check;
+        public required TextBlock StateText;
+        public FxPatchEngine.PatchState? State;
+    }
+
+    private sealed class ThirdPartyRow
+    {
+        public required FxPatchStateStore.AppliedPatch Entry;
+        public required CheckBox Check;
+    }
+
+    private readonly List<BuiltInRow> _builtInRows = [];
+    private readonly List<ThirdPartyRow> _thirdPartyRows = [];
+    /// <summary>程序化设置勾选时抑制「用户改过勾选」标记。</summary>
+    private bool _suppressCheckEvents;
+    /// <summary>用户手动改过勾选后，自动刷新不再覆盖他的选择（除非显式点刷新）。</summary>
+    private bool _userEditedSelection;
+    private bool _statusStale = true;
+    private string? _statusLoadedPath;
+    private bool _refreshing;
+
     private string? _gameDataPath;
     private PoeGameKind _gameKind;
 
@@ -22,10 +42,59 @@ public partial class FxPatchView : UserControl
     {
         _eventBus = eventBus ?? new EventBus();
         InitializeComponent();
+        BuildBuiltInChecks();
         _eventBus.Subscribe<GameContextChanged>(OnGameContextChanged);
+        Loaded += (_, _) => RefreshStatusIfStale();
     }
 
     public void Dispose() => _eventBus.Unsubscribe<GameContextChanged>(OnGameContextChanged);
+
+    /// <summary>按引擎内置补丁注册表生成勾选列表，新增内置补丁自动出现在这里。
+    /// 每行 = 勾选框 + 右侧启用状态（读了补丁记录后填入）。</summary>
+    private void BuildBuiltInChecks()
+    {
+        foreach (var def in FxPatchEngine.BuiltIns)
+        {
+            var grid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var check = new CheckBox
+            {
+                Content = $"{def.DisplayName}（{def.Id}）",
+                VerticalContentAlignment = VerticalAlignment.Center,
+            };
+            check.Checked += (_, _) => OnUserToggle();
+            check.Unchecked += (_, _) => OnUserToggle();
+
+            var stateText = new TextBlock
+            {
+                Text = "待检测",
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 0, 0),
+                Style = FindResource("SmallText") as Style,
+            };
+            stateText.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+
+            grid.Children.Add(check);
+            grid.Children.Add(stateText);
+            Grid.SetColumn(stateText, 1);
+
+            BuiltInChecksPanel.Children.Add(grid);
+            _builtInRows.Add(new BuiltInRow { Def = def, Check = check, StateText = stateText });
+        }
+    }
+
+    private void OnUserToggle()
+    {
+        if (_suppressCheckEvents)
+            return;
+        _userEditedSelection = true;
+    }
+
+    /// <summary>当前勾选的内置补丁 ID（按注册表顺序）。</summary>
+    private List<string> CheckedBuiltInIds =>
+        _builtInRows.Where(r => r.Check.IsChecked == true).Select(r => r.Def.Id).ToList();
 
     private void OnGameContextChanged(GameContextChanged context)
     {
@@ -38,130 +107,294 @@ public partial class FxPatchView : UserControl
             return;
         }
 
+        // 只记路径：读补丁记录放在切到本模块时（OnActivated / Loaded）做。
+        if (_gameDataPath != context.GameDataPath)
+            _statusStale = true;
         _gameDataPath = context.GameDataPath;
         _gameKind = context.Game;
-        _ = SetDefaultVanillaIndexAsync();
     }
 
-    private void DiffVanillaBox_TextChanged(object sender, TextChangedEventArgs e)
+    // ═══ 补丁状态：读记录（快）═══════════════════════════════
+    /// <summary>由插件在切到本模块时调用；只在状态陈旧（换过游戏目录或刚执行过操作）时重读。</summary>
+    public void RefreshStatusIfStale(bool force = false)
     {
-        if (!_settingVanillaDefault)
-            _vanillaAutoSelected = false;
+        if (_gameKind != PoeGameKind.Poe2)
+            return;
+        var path = (_gameDataPath ?? GameDataPathPreference.Get())?.Trim();
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        if (!force && !_statusStale && _statusLoadedPath == path)
+            return;
+
+        // 还没有补丁记录（例如升级前就打过补丁）：先扫一次索引把账本建起来，之后都只读这个小文件。
+        if (!File.Exists(FxPatchStateStore.FilePathOf(path)))
+        {
+            _ = RescanAsync(quiet: true);
+            return;
+        }
+
+        LoadRecordedPatches(path, overwriteUserSelection: force || !_userEditedSelection);
+        _statusStale = false;
+        _statusLoadedPath = path;
     }
 
-    private async Task SetDefaultVanillaIndexAsync()
+    /// <summary>读引擎写下的补丁记录（一个小 json，不开索引），把已启用的补丁默认勾上。</summary>
+    private void LoadRecordedPatches(string path, bool overwriteUserSelection)
     {
-        if (_gameKind != PoeGameKind.Poe2
-            || DiffVanillaBox is null
-            || (!_vanillaAutoSelected && DiffVanillaBox.Text.Trim().Length > 0))
+        var entries = FxPatchStateStore.Read(path);
+        var appliedIds = new HashSet<string>(
+            entries.Select(e => e.Id), StringComparer.OrdinalIgnoreCase);
+
+        var states = new Dictionary<string, (FxPatchEngine.PatchState State, string Tip)>();
+        foreach (var row in _builtInRows)
+            states[row.Def.Id] = appliedIds.Contains(row.Def.Id)
+                ? (FxPatchEngine.PatchState.Applied, TooltipOf(FxPatchEngine.PatchState.Applied, ""))
+                : (FxPatchEngine.PatchState.NotApplied, TooltipOf(FxPatchEngine.PatchState.NotApplied, ""));
+
+        ApplyStates(states, overwriteUserSelection);
+
+        // 第三方补丁（自定义 / 整包替换型）以与内置一致的勾选行展示在左侧下半区。
+        RenderThirdPartyList(entries);
+        SetStateHint(BuiltInSummaryHint());
+    }
+
+    private string BuiltInSummaryHint()
+    {
+        var applied = _builtInRows.Count(r => r.State == FxPatchEngine.PatchState.Applied);
+        return applied == 0
+            ? "当前没有已启用的内置补丁，勾选后点「启用特效补丁」即可。"
+            : $"已启用 {applied} 个内置补丁，已自动勾选；需要还原直接点「恢复游戏原版」。";
+    }
+
+    /// <summary>底部输入框当前对应的待应用补丁文件完整路径；null 表示没有选择。
+    /// 输入框只显示文件名，完整路径只存在这个字段里。</summary>
+    private string? _pendingPatchFile;
+
+    /// <summary>当前输入框里的补丁文件路径（待应用）；空视为无。</summary>
+    private string? PendingPatchPath => _pendingPatchFile;
+
+    private static string PendingDisplayName(string path)
+        => Path.GetFileName(path)
+               .Replace(".patch.json", "", StringComparison.OrdinalIgnoreCase)
+               .Replace(".json", "", StringComparison.OrdinalIgnoreCase)
+               .Replace(".zip", "", StringComparison.OrdinalIgnoreCase) is { Length: > 0 } name
+            ? name
+            : path;
+
+    /// <summary>把第三方补丁渲染成与内置一致的勾选行：
+    /// 底部输入框选中的补丁文件作为「待应用」条目排在最前、默认勾选、右侧显示未启用；
+    /// 账本里已应用的条目（含整包替换型）跟随其后，显示已启用。
+    /// 勾选 = 选中它参与「启用 / 恢复 / 卸载」操作；已应用条目的操作靠账本记录的原补丁文件路径。</summary>
+    private void RenderThirdPartyList(List<FxPatchStateStore.AppliedPatch> entries)
+    {
+        if (ThirdPartyPanel is null || ThirdPartyEmpty is null)
             return;
 
-        var gameData = _gameDataPath ?? GameDataPathPreference.Get();
-        if (string.IsNullOrWhiteSpace(gameData))
+        ThirdPartyPanel.Children.Clear();
+        _thirdPartyRows.Clear();
+
+        var pending = PendingPatchPath;
+        var hasPending = pending is not null && entries.All(e =>
+            string.IsNullOrWhiteSpace(e.SourceFile)
+            || !string.Equals(Path.GetFullPath(e.SourceFile), Path.GetFullPath(pending), StringComparison.OrdinalIgnoreCase));
+
+        var extras = entries
+            .Where(e => !string.Equals(e.Kind, FxPatchStateStore.KindBuiltIn, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        ThirdPartyEmpty.Visibility = extras.Count == 0 && !hasPending ? Visibility.Visible : Visibility.Collapsed;
+
+        if (hasPending)
+        {
+            AddThirdPartyRow(
+                new FxPatchStateStore.AppliedPatch(
+                    PendingDisplayName(pending!), pending!, FxPatchStateStore.KindCustom, null,
+                    DateTimeOffset.UtcNow, pending),
+                applied: false);
+        }
+
+        foreach (var e in extras)
+            AddThirdPartyRow(e, applied: true);
+
+        // 整包替换型只允许勾一个：待应用行默认勾选，若它已勾选，把已应用的整包行让位取消。
+        var pendingRow = _thirdPartyRows.FirstOrDefault(r => r.Check.IsChecked == true && IsRawPackEntry(r.Entry));
+        if (pendingRow is not null)
+            EnforceSingleRawPack(pendingRow.Check);
+    }
+
+    /// <summary>该第三方补丁是否属于整包替换型（会整体替换 _.index.bin）。</summary>
+    private bool IsRawPackEntry(FxPatchStateStore.AppliedPatch entry)
+        => string.Equals(entry.Kind, FxPatchStateStore.KindRawPack, StringComparison.OrdinalIgnoreCase)
+           || (entry.SourceFile is not null && File.Exists(entry.SourceFile) && IsRawPackSource(entry.SourceFile));
+
+    /// <summary>整包替换型补丁互斥：多个都会整体替换 _.index.bin，同时打必然互相冲掉。
+    /// 勾选一个时自动取消其他整包行的勾选，并提示被让位的补丁。</summary>
+    private void EnforceSingleRawPack(CheckBox source)
+    {
+        if (source.IsChecked != true)
+            return;
+        var row = _thirdPartyRows.FirstOrDefault(r => ReferenceEquals(r.Check, source));
+        if (row is null || !IsRawPackEntry(row.Entry))
             return;
 
-        string resolvedGameData;
+        var yielded = _thirdPartyRows
+            .Where(r => !ReferenceEquals(r.Check, source)
+                        && r.Check.IsChecked == true
+                        && IsRawPackEntry(r.Entry))
+            .ToList();
+        if (yielded.Count == 0)
+            return;
+        foreach (var r in yielded)
+            r.Check.IsChecked = false;
+        SetStatus($"整包替换型补丁同一时间只能启用一个（都会整体替换游戏索引）：已让位 {string.Join("、", yielded.Select(r => r.Entry.Name))}。", UiStatus.Kind.Warning);
+    }
+
+    private void AddThirdPartyRow(FxPatchStateStore.AppliedPatch entry, bool applied)
+    {
+        var grid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var hasSource = !string.IsNullOrWhiteSpace(entry.SourceFile) && File.Exists(entry.SourceFile);
+        var displayName = entry.Name.Contains('/') || entry.Name.Contains('\\')
+            ? Path.GetFileNameWithoutExtension(entry.Name)
+            : entry.Name;
+        var check = new CheckBox
+        {
+            Content = $"{displayName}（{KindLabel(entry.Kind)}）",
+            VerticalContentAlignment = VerticalAlignment.Center,
+            IsChecked = !applied,
+            IsEnabled = hasSource,
+            ToolTip = applied
+                ? (hasSource
+                    ? "勾选后点「卸载已勾选补丁」即可删除这个补丁新增的文件（按应用时记录的原补丁文件执行）。"
+                    : "这条记录里没有可用的原补丁文件（旧记录或文件已移动/删除），无法勾选操作；重新应用一次即可补上记录。")
+                : "刚选择、还没有写入游戏的补丁文件；保持勾选并点「启用特效补丁」即可应用。",
+        };
+        if (IsRawPackEntry(entry))
+            check.Checked += (_, _) => EnforceSingleRawPack(check);
+
+        var stateText = new TextBlock
+        {
+            Text = applied ? "已启用" : "未启用",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0),
+            Style = FindResource("SmallText") as Style,
+        };
+        stateText.SetResourceReference(TextBlock.ForegroundProperty,
+            applied ? "SuccessBrush" : "TextSecondaryBrush");
+
+        grid.Children.Add(check);
+        grid.Children.Add(stateText);
+        Grid.SetColumn(stateText, 1);
+
+        ThirdPartyPanel.Children.Add(grid);
+        _thirdPartyRows.Add(new ThirdPartyRow { Entry = entry, Check = check });
+    }
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        FxPatchStateStore.KindCustom => "自定义补丁",
+        FxPatchStateStore.KindRawPack => "整包替换补丁",
+        _ => "内置补丁",
+    };
+
+    private void ApplyStates(
+        IReadOnlyDictionary<string, (FxPatchEngine.PatchState State, string Tip)> states,
+        bool overwriteUserSelection)
+    {
+        _suppressCheckEvents = true;
         try
         {
-            resolvedGameData = GameDataAccess.ResolvePath(gameData);
-        }
-        catch
-        {
-            // The user may still be typing or may need to browse for the game data.
-            return;
-        }
-
-        string baseline;
-        try
-        {
-            baseline = await Task.Run(() => IndexBackupService.EnsureBaselineExists(resolvedGameData));
-        }
-        catch (Exception ex)
-        {
-            FileLogger.App.Error("Failed to create original index backup for patch generation.", ex);
-            SetStatus("无法创建原始索引备份，请检查游戏目录写入权限。", UiStatus.Kind.Error);
-            return;
-        }
-
-        if (!string.Equals((_gameDataPath ?? GameDataPathPreference.Get())?.Trim(), gameData, StringComparison.Ordinal)
-            || (!_vanillaAutoSelected && DiffVanillaBox.Text.Trim().Length > 0))
-            return;
-
-        _settingVanillaDefault = true;
-        try
-        {
-            DiffVanillaBox.Text = baseline;
-            _vanillaAutoSelected = true;
+            foreach (var row in _builtInRows)
+            {
+                if (!states.TryGetValue(row.Def.Id, out var status))
+                {
+                    row.State = null;
+                    row.StateText.Text = "未知";
+                    row.StateText.ToolTip = null;
+                    continue;
+                }
+                row.State = status.State;
+                row.StateText.Text = FriendlyState(status.State);
+                row.StateText.SetResourceReference(TextBlock.ForegroundProperty, BrushKeyOf(status.State));
+                row.StateText.ToolTip = status.Tip;
+                if (overwriteUserSelection)
+                    row.Check.IsChecked = status.State == FxPatchEngine.PatchState.Applied;
+            }
         }
         finally
         {
-            _settingVanillaDefault = false;
+            _suppressCheckEvents = false;
         }
+
+        if (overwriteUserSelection)
+            _userEditedSelection = false;
+    }
+
+    private static string FriendlyState(FxPatchEngine.PatchState state) => state switch
+    {
+        FxPatchEngine.PatchState.Applied => "已启用",
+        FxPatchEngine.PatchState.NotApplied => "未启用",
+        FxPatchEngine.PatchState.Conflict => "状态异常",
+        _ => "不兼容",
+    };
+
+    private static string BrushKeyOf(FxPatchEngine.PatchState state) => state switch
+    {
+        FxPatchEngine.PatchState.Applied => "SuccessBrush",
+        FxPatchEngine.PatchState.NotApplied => "TextSecondaryBrush",
+        FxPatchEngine.PatchState.Conflict => "WarningBrush",
+        _ => "ErrorBrush",
+    };
+
+    private static string TooltipOf(FxPatchEngine.PatchState state, string detail) => state switch
+    {
+        FxPatchEngine.PatchState.Applied => "补丁已写入游戏；勾选后可执行还原或卸载。",
+        FxPatchEngine.PatchState.NotApplied => "还没启用；勾选后点「启用特效补丁」即可。",
+        FxPatchEngine.PatchState.Conflict => "改动只生效了一部分，或内容与补丁不一致，建议先「恢复游戏原版」再重新启用。"
+                                             + (detail.Length == 0 ? "" : $"\n引擎提示：{detail}"),
+        _ => "当前游戏数据与这个补丁不匹配。"
+             + (detail.Length == 0 ? "" : $"\n引擎提示：{detail}"),
+    };
+
+    private void SetStateHint(string text)
+    {
+        if (BuiltInStateHint is null)
+            return;
+        void Set() => BuiltInStateHint.Text = text;
+        if (Dispatcher.CheckAccess())
+            Set();
+        else
+            Dispatcher.BeginInvoke(Set);
     }
 
     private void BrowsePatch_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog { Title = "选择补丁描述文件", Filter = "补丁描述 (*.patch.json;*.json;*.zip)|*.patch.json;*.json;*.zip|全部文件 (*.*)|*.*" };
         if (dlg.ShowDialog() == true)
-            SetCustomPatchPath(dlg.FileName);
-    }
-
-    /// <summary>填入路径并自动切到「自定义补丁」来源——用户不必先去改下拉菜单。</summary>
-    private void SetCustomPatchPath(string path)
-    {
-        _settingPatchPath = true;
-        try
         {
-            PatchJsonBox.Text = path;
-            if (PatchSourceBox.SelectedIndex != 1)
-                PatchSourceBox.SelectedIndex = 1;
-        }
-        finally
-        {
-            _settingPatchPath = false;
+            _pendingPatchFile = dlg.FileName;
+            PatchJsonBox.Text = PendingDisplayName(dlg.FileName);
+            PatchJsonBox.ToolTip = dlg.FileName;
+            RenderThirdPartyList(CurrentLedgerEntries());
         }
     }
 
-    private void PatchJsonBox_TextChanged(object sender, TextChangedEventArgs e)
+    /// <summary>当前游戏数据对应的补丁账本；没有路径时按空账本处理。</summary>
+    private List<FxPatchStateStore.AppliedPatch> CurrentLedgerEntries()
     {
-        // 手输/粘贴路径也当作选了自定义补丁，避免「填了路径却仍在用内置补丁」
-        if (_settingPatchPath || PatchSourceBox is null)
-            return;
-        if (PatchJsonBox.Text.Trim().Length > 0 && PatchSourceBox.SelectedIndex != 1)
-            PatchSourceBox.SelectedIndex = 1;
-        UpdateCustomPathHint();
+        var path = (_gameDataPath ?? GameDataPathPreference.Get())?.Trim();
+        return string.IsNullOrWhiteSpace(path) ? [] : FxPatchStateStore.Read(path);
     }
 
-    private void PatchSource_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateCustomPathHint();
-
-    /// <summary>下拉菜单停在内置、却填着自定义路径时给一句提示，避免「填了路径却仍在用内置补丁」。</summary>
-    private void UpdateCustomPathHint()
-    {
-        if (PatchJsonBox is null || PatchSourceBox is null || CustomPathHint is null)
-            return;
-        var stale = PatchSourceBox.SelectedIndex != 1 && PatchJsonBox.Text.Trim().Length > 0;
-        CustomPathHint.Visibility = stale ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void BrowseVanilla_Click(object sender, RoutedEventArgs e)
-    {
-        var dlg = new OpenFileDialog { Title = "选择原版索引", Filter = "索引 (*.index.bin;*.bin)|*.index.bin;*.bin" };
-        if (dlg.ShowDialog() == true)
-            DiffVanillaBox.Text = dlg.FileName;
-    }
-
-    private void BrowseModified_Click(object sender, RoutedEventArgs e)
-    {
-        var dlg = new OpenFileDialog { Title = "选择修改后索引", Filter = "索引 (_.index.bin;*.bin)|_.index.bin;*.bin" };
-        if (dlg.ShowDialog() == true)
-            DiffModifiedBox.Text = dlg.FileName;
-    }
+    /// <summary>勾选的第三方补丁条目。</summary>
+    private List<FxPatchStateStore.AppliedPatch> CheckedThirdParty =>
+        _thirdPartyRows.Where(r => r.Check.IsChecked == true).Select(r => r.Entry).ToList();
 
     // ═══ 引擎调用 ═══════════════════════════════════════════════
-    private bool ValidateInputs(out string gameData, out string? patchJson)
+    private bool ValidateInputs(out string gameData, bool requireSelection = true)
     {
         gameData = (_gameDataPath ?? GameDataPathPreference.Get())?.Trim() ?? string.Empty;
-        patchJson = null;
         if (_gameKind != PoeGameKind.Poe2)
         {
             SetStatus("特效补丁仅支持 POE2 客户端。", UiStatus.Kind.Warning);
@@ -172,186 +405,309 @@ public partial class FxPatchView : UserControl
             SetStatus("请先选择游戏数据。", UiStatus.Kind.Warning);
             return false;
         }
-        if (PatchSourceBox.SelectedIndex == 1)
+
+        var custom = PendingPatchPath ?? string.Empty;
+        var builtInIds = CheckedBuiltInIds;
+        if (requireSelection && builtInIds.Count == 0 && custom.Length == 0 && CheckedThirdParty.Count == 0)
         {
-            patchJson = PatchJsonBox.Text.Trim();
-            if (patchJson.Length == 0 || !File.Exists(patchJson))
-            {
-                SetStatus("请选择有效的补丁描述文件（patch.json 或 .zip 补丁包）。", UiStatus.Kind.Warning);
-                return false;
-            }
+            SetStatus("请先勾选至少一个补丁，或选择一个自定义补丁文件。", UiStatus.Kind.Warning);
+            return false;
+        }
+        if (custom.Length > 0 && !File.Exists(custom))
+        {
+            SetStatus("自定义补丁文件不存在，请重新选择。", UiStatus.Kind.Warning);
+            return false;
         }
         return true;
     }
 
+    /// <summary>按当前来源组装引擎调用（可任意组合）：
+    /// 输入框里的自定义补丁文件 + 勾选的内置补丁 + 勾选的第三方补丁（按账本记录的原补丁文件）。
+    /// 待应用的输入框文件如果已经在第三方列表里以勾选行存在，不重复拼装。</summary>
+    private List<(string? BuiltInId, string[] Args)> BuildInvocations(string action)
+    {
+        var gameData = (_gameDataPath ?? GameDataPathPreference.Get())!.Trim();
+        var rawPack = new List<(string? BuiltInId, string[] Args)>();
+        var modifying = new List<(string? BuiltInId, string[] Args)>();
+
+        void AddSource(string? builtInId, string sourceFile, bool knownRawPack)
+        {
+            // 卸载 = 完整移除一个补丁：先 revert 撤销修改，再 purge 删除新增文件。
+            // 只跑 purge 会漏掉「只修改不新增」的补丁（引擎无事可做、账本也不清）；
+            // 整包替换型没有 purge 语义，revert 本身就是完整卸载。
+            if (action == "purge")
+            {
+                if (builtInId is not null)
+                {
+                    modifying.Add((builtInId, [gameData, builtInId, "revert"]));
+                    modifying.Add((builtInId, [gameData, builtInId, "purge"]));
+                }
+                else if (knownRawPack)
+                {
+                    rawPack.Add((null, [gameData, sourceFile, "revert"]));
+                }
+                else
+                {
+                    var isRaw = IsRawPackSource(sourceFile);
+                    var bucket = isRaw ? rawPack : modifying;
+                    if (isRaw)
+                        bucket.Add((null, [gameData, sourceFile, "revert"]));
+                    else
+                    {
+                        bucket.Add((null, [gameData, sourceFile, "revert"]));
+                        bucket.Add((null, [gameData, sourceFile, "purge"]));
+                    }
+                }
+                return;
+            }
+
+            if (builtInId is not null)
+            {
+                modifying.Add((builtInId, [gameData, builtInId, action]));
+                return;
+            }
+            var raw = knownRawPack || IsRawPackSource(sourceFile);
+            (raw ? rawPack : modifying).Add((null, [gameData, sourceFile, action]));
+        }
+
+        var checkedThirdParty = CheckedThirdParty
+            .Where(e => !string.IsNullOrWhiteSpace(e.SourceFile) && File.Exists(e.SourceFile))
+            .ToList();
+        var thirdPartyPaths = checkedThirdParty
+            .Select(e => Path.GetFullPath(e.SourceFile!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var custom = PendingPatchPath ?? string.Empty;
+        if (custom.Length > 0 && !thirdPartyPaths.Contains(Path.GetFullPath(custom)))
+            AddSource(null, custom, knownRawPack: false);
+
+        foreach (var id in CheckedBuiltInIds)
+            AddSource(id, id, knownRawPack: false);
+
+        foreach (var entry in checkedThirdParty)
+            AddSource(null, entry.SourceFile!,
+                knownRawPack: string.Equals(entry.Kind, FxPatchStateStore.KindRawPack, StringComparison.OrdinalIgnoreCase));
+
+        // 防御性兜底：整包替换型一次只能执行一个，多出的跳过（正常情况勾选层已互斥，走不到这里）。
+        if (rawPack.Count > 1)
+        {
+            SetStatus("整包替换型补丁一次只能执行一个，本次只执行第一个，其余已跳过；请逐个操作。", UiStatus.Kind.Warning);
+            rawPack.RemoveRange(1, rawPack.Count - 1);
+        }
+
+        // 顺序有讲究：整包替换型会整体换掉 _.index.bin，必须先于修改类执行，否则先改的文件被冲掉；
+        // 卸载（revert/purge）反过来：先清修改类，再换回索引。status 无所谓，按启用顺序。
+        var result = action is "apply" or "status"
+            ? rawPack.Concat(modifying)
+            : modifying.Concat(rawPack);
+        return result.ToList();
+    }
+
+    /// <summary>判断一个补丁文件是不是整包替换型（zip 里带 _.index.bin）。
+    /// 账本里已有 Kind 的直接用 Kind；待应用的 zip 打开看一眼。打不开就当普通补丁，让引擎去报错。</summary>
+    private static bool IsRawPackSource(string sourceFile)
+    {
+        if (!sourceFile.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            return false; // .patch.json 一定是走索引 op 的普通补丁
+        try
+        {
+            using var zip = System.IO.Compression.ZipFile.OpenRead(sourceFile);
+            return zip.Entries.Any(e =>
+                e.FullName.Equals("_.index.bin", StringComparison.OrdinalIgnoreCase)
+                || e.FullName.EndsWith("/_.index.bin", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>勾选的第三方补丁里有多少条缺原补丁文件（旧记录或文件已不在）；有则提示，这类无法被操作。</summary>
+    private void WarnMissingThirdPartySource(string action)
+    {
+        var missing = CheckedThirdParty
+            .Where(e => string.IsNullOrWhiteSpace(e.SourceFile) || !File.Exists(e.SourceFile))
+            .ToList();
+        if (missing.Count > 0)
+            SetStatus($"有 {missing.Count} 个第三方补丁记录里没有可用的原补丁文件（旧记录或文件已移动），无法被{action}：" +
+                      string.Join("、", missing.Select(e => e.Name)), UiStatus.Kind.Warning);
+    }
+
     private async void Status_Click(object sender, RoutedEventArgs e)
     {
-        if (!ValidateInputs(out var gameData, out var patchJson))
+        var custom = PendingPatchPath ?? string.Empty;
+        if (custom.Length > 0)
+        {
+            // 自定义补丁：仍然走引擎明细输出（记录里只有 id，没有逐项状态）。
+            if (!ValidateInputs(out _, requireSelection: false))
+                return;
+            await RunEngineAsync("刷新补丁状态", BuildInvocations("status"));
             return;
-        var builtIn = patchJson is null;
-        var args = builtIn
-            ? new[] { gameData, "status" }
-            : new[] { gameData, patchJson!, "status" };
-        await RunEngineAsync("刷新补丁状态", builtIn, args);
+        }
+
+        if (!ValidateInputs(out _, requireSelection: false))
+            return;
+        await RescanAsync(quiet: false);
+    }
+
+    /// <summary>真的打开索引核对一遍（要几秒），按结果校正补丁记录，再刷新界面与勾选。
+    /// quiet=true 时只更新界面，不往输出面板写东西（模块首次打开时建账本用）。</summary>
+    private async Task RescanAsync(bool quiet)
+    {
+        if (_refreshing)
+        {
+            if (!quiet)
+                SetStateHint("上一次核对还在进行中（打开游戏数据需要一些时间），请稍候再点刷新。");
+            return;
+        }
+
+        var path = (_gameDataPath ?? GameDataPathPreference.Get())?.Trim();
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        // 别的模块正在动游戏数据：这次不抢，先按账本显示，下次再核对。
+        if (FxEngineRunner.IsBusy)
+        {
+            LoadRecordedPatches(path, overwriteUserSelection: !_userEditedSelection);
+            return;
+        }
+
+        _refreshing = true;
+        try
+        {
+            if (!quiet)
+                SetStateHint("正在核对补丁状态（要打开游戏数据，通常需要十几秒到一分钟）……");
+            var statuses = await Task.Run(() => FxPatchEngine.QueryBuiltInStatus(path));
+            if ((_gameDataPath ?? GameDataPathPreference.Get())?.Trim() != path)
+                return;
+
+            // 账本以扫描结果为准：内置补丁按实际状态重写，自定义补丁的记录原样保留。
+            var ledger = FxPatchStateStore.Read(path)
+                .Where(e => !string.Equals(e.Kind, FxPatchStateStore.KindBuiltIn, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            foreach (var s in statuses)
+            {
+                if (s.State != FxPatchEngine.PatchState.Applied)
+                    continue;
+                ledger.Add(new FxPatchStateStore.AppliedPatch(
+                    s.Id, s.DisplayName, FxPatchStateStore.KindBuiltIn, null, DateTimeOffset.UtcNow));
+            }
+            FxPatchStateStore.SaveAll(path, ledger);
+
+            var states = new Dictionary<string, (FxPatchEngine.PatchState State, string Tip)>();
+            foreach (var s in statuses)
+                states[s.Id] = (s.State, TooltipOf(s.State, s.Detail));
+            ApplyStates(states, overwriteUserSelection: true);
+            _statusStale = false;
+            _statusLoadedPath = path;
+            RenderThirdPartyList(FxPatchStateStore.Read(path));
+            SetStateHint(BuiltInSummaryHint());
+
+            if (quiet)
+            {
+                _statusStale = false;
+                _statusLoadedPath = path;
+                LoadRecordedPatches(path, overwriteUserSelection: !_userEditedSelection);
+                return;
+            }
+
+            Output.ClearLog();
+            AppendLog("内置补丁状态（已打开游戏数据核对）：");
+            var applied = 0;
+            foreach (var row in _builtInRows)
+            {
+                var mark = row.State == FxPatchEngine.PatchState.Applied ? "☑" : row.State is null ? "?" : "☐";
+                if (row.State == FxPatchEngine.PatchState.Applied)
+                    applied++;
+                AppendLog($"  {mark} {row.Def.DisplayName}（{row.Def.Id}）—— {row.StateText.Text}");
+            }
+            AppendLog("");
+            AppendLog(applied == 0 ? "没有已启用的内置补丁。" : $"已启用 {applied} 个，已自动勾选。");
+            SetStatus("✅ 已核对补丁状态。", UiStatus.Kind.Success);
+        }
+        catch (Exception ex)
+        {
+            FileLogger.App.Error("UI 核对补丁状态失败。", ex);
+            SetStateHint("核对补丁状态失败：" + ex.Message);
+            if (!quiet)
+                SetStatus("❌ 核对补丁状态失败：" + ex.Message, UiStatus.Kind.Error);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
     private async void Apply_Click(object sender, RoutedEventArgs e)
     {
-        if (!ValidateInputs(out var gameData, out var patchJson))
+        if (!ValidateInputs(out _))
             return;
-        var builtIn = patchJson is null;
-        var args = builtIn
-            ? new[] { gameData, "apply" }
-            : new[] { gameData, patchJson!, "apply" };
-        await RunEngineAsync("启用特效补丁", builtIn, args);
+        await RunEngineAsync("启用特效补丁", BuildInvocations("apply"));
+        RefreshAfterOperation();
     }
 
+    /// <summary>恢复游戏原版 = 整体恢复：基线索引替换 + 删除全部补丁新增文件（含第三方补丁）。
+    /// 与逐补丁的「卸载已勾选补丁」相对；不可逆（想再用要重新启用补丁），所以用红色警示 + 二次确认。</summary>
     private async void Revert_Click(object sender, RoutedEventArgs e)
     {
-        if (!ValidateInputs(out var gameData, out var patchJson))
+        if (!ValidateInputs(out _, requireSelection: false))
             return;
-        var builtIn = patchJson is null;
-        var args = builtIn
-            ? new[] { gameData, "revert" }
-            : new[] { gameData, patchJson!, "revert" };
-        await RunEngineAsync("恢复游戏原版", builtIn, args);
+        var confirm = MessageBox.Show(
+            "将用备份的原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。\n\n之后想再用任何补丁，都需要重新启用。确定继续？\n（只想移除个别补丁的话，请用「卸载已勾选补丁」。）",
+            "恢复游戏原版", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK)
+            return;
+
+        var gameData = (_gameDataPath ?? GameDataPathPreference.Get())!.Trim();
+        // restore 是内置通道的动作（BuiltInId 不能为 null，否则会被当成自定义补丁路径解析）。
+        await RunEngineAsync("恢复游戏原版",
+            [(FxPatchEngine.BuiltInAll, new[] { gameData, "restore" })]);
+        RefreshAfterOperation();
     }
 
     private async void Purge_Click(object sender, RoutedEventArgs e)
     {
-        if (!ValidateInputs(out var gameData, out var patchJson))
+        if (!ValidateInputs(out _))
             return;
         var confirm = MessageBox.Show(
-            "将删除本补丁新增的文件。被补丁改动过的游戏原有文件会保留，不会弄坏客户端。\n\n删掉之后想再用，需要重新应用补丁。确定继续？\n（只是想临时关掉特效的话，请用「恢复游戏原版」。）",
-            "完全卸载补丁", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            "将完整卸载勾选的补丁：撤销它们对游戏文件的修改，并删除补丁新增的文件；其他未勾选的补丁不受影响。\n\n卸载之后想再用，需要重新应用补丁。确定继续？\n（想把游戏整体恢复原版、移除所有补丁的话，请用「恢复游戏原版」。）",
+            "卸载已勾选补丁", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.OK)
             return;
-        var builtIn = patchJson is null;
-        var args = builtIn
-            ? new[] { gameData, "purge" }
-            : new[] { gameData, patchJson!, "purge" };
-        await RunEngineAsync("完全卸载补丁", builtIn, args);
-    }
-
-    private async void Diff_Click(object sender, RoutedEventArgs e)
-    {
-        if (_gameKind != PoeGameKind.Poe2)
+        WarnMissingThirdPartySource("卸载");
+        var invocations = BuildInvocations("purge");
+        if (invocations.Count == 0)
         {
-            SetStatus("特效补丁仅支持 POE2 客户端。", UiStatus.Kind.Warning);
+            SetStatus("勾选的补丁都没有可用的执行方式（第三方补丁缺原补丁文件），请先重新应用一次补齐记录。", UiStatus.Kind.Warning);
             return;
         }
+        await RunEngineAsync("卸载已勾选补丁", invocations);
+        RefreshAfterOperation();
+    }
 
-        var vanilla = DiffVanillaBox.Text.Trim();
-        var modified = DiffModifiedBox.Text.Trim();
-        if (vanilla.Length == 0 || modified.Length == 0 || !File.Exists(vanilla) || !File.Exists(modified))
-        {
-            SetStatus("请选择有效的原版索引与修改后索引。", UiStatus.Kind.Warning);
+    /// <summary>写操作（启用 / 还原 / 卸载）完成后刷新：引擎已顺手更新补丁记录，
+    /// 直接重读这个小 json 即可，不再打开游戏数据核对（那要几秒到分钟级，还会卡住界面提示）。</summary>
+    private void RefreshAfterOperation()
+    {
+        _statusStale = false;
+        var path = (_gameDataPath ?? GameDataPathPreference.Get())?.Trim();
+        if (string.IsNullOrWhiteSpace(path))
             return;
-        }
-        // 名字留空 → 默认时间戳名（diff-年月日-时分）；有名字就用名字（非法字符已由引擎清理）
-        var patchId = FxDiff.MakePatchId(DiffNameBox.Text);
-        // 与引擎默认一致：生成物落 %LOCALAPPDATA%\PoEToolbox\patches\<patchId>\
-        var outDir = Path.Combine(ConfigService.PatchesDirectory, patchId);
-        // 不传 --bundle：引擎会从 patchId 派生 bundle 名，避免所有 diff 补丁共用一个前缀、
-        // 在同样的版本号下互相覆盖。
-        var args = new List<string>
-        {
-            "diff", vanilla, modified,
-            "-o", outDir,
-            "--id", patchId,
-        };
-        if (DiffZipCheck.IsChecked == true)
-            args.Add("--zip");
-        var target = DiffZipCheck.IsChecked == true ? outDir + ".zip" : outDir;
-        var ok = await RunEngineAsync($"生成补丁（输出到 {target}）", builtIn: false, args.ToArray(), skipGameData: true);
-        // 生成成功后打开产物所在目录并选中产物，省得自己去 %LOCALAPPDATA% 里翻
-        if (ok)
-            RevealInExplorer(target);
+        _statusLoadedPath = path;
+        LoadRecordedPatches(path, overwriteUserSelection: true);
     }
 
-    private void AdvancedToggle_Changed(object sender, RoutedEventArgs e)
-    {
-        var open = AdvancedToggle.IsChecked == true;
-        AdvancedPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        AdvancedToggle.Content = open ? "▾ 高级维护" : "▸ 高级维护";
-    }
-
-    /// <summary>在资源管理器里定位并选中产物（目录则选中该目录本身）。失败只记日志，不打断用户。</summary>
-    private static void RevealInExplorer(string path)
-    {
-        try
-        {
-            var full = Path.GetFullPath(path);
-            var reveal = File.Exists(full) || Directory.Exists(full)
-                ? full
-                : Path.GetDirectoryName(full) ?? full;
-            Process.Start(new ProcessStartInfo("explorer.exe")
-            {
-                ArgumentList = { "/select,", reveal },
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception ex)
-        {
-            FileLogger.App.Warn($"Failed to reveal patch output: {path} — {ex.Message}");
-        }
-    }
-
-    private async Task<bool> RunEngineAsync(string action, bool builtIn, string[] args, bool skipGameData = false)
-    {
-        if (_running)
-        {
-            SetStatus("已有任务在执行，请稍候。", UiStatus.Kind.Warning);
-            return false;
-        }
-        var sharedPath = _gameDataPath ?? GameDataPathPreference.Get();
-        if (!skipGameData && (string.IsNullOrWhiteSpace(sharedPath)
-            || (!File.Exists(sharedPath) && !Directory.Exists(sharedPath))))
-        {
-            SetStatus("游戏数据路径无效。", UiStatus.Kind.Warning);
-            return false;
-        }
-
-        _running = true;
-        SetButtonsEnabled(false);
-        Output.ClearLog();
-        SetStatus($"{action}……执行中（打开索引需要数秒）");
-
-        var exitCode = await Task.Run(() =>
-        {
-            FxPatchEngine.LogSink = s => AppendLog(s);
-            FxDiff.LogSink = s => AppendLog(s);
-            try
-            {
-                return FxPatchEngine.Run(args, builtIn);
-            }
-            finally
-            {
-                FxPatchEngine.LogSink = null;
-                FxDiff.LogSink = null;
-            }
-        });
-
-        _running = false;
-        SetButtonsEnabled(true);
-
-        if (exitCode == 0)
-        {
-            SetStatus($"✅ {action}成功。", UiStatus.Kind.Success);
-            FileLogger.App.Info($"UI {action}: success.");
-            AppendLog("");
-            AppendLog($"════════════ ✅ {action}成功 ════════════");
-            return true;
-        }
-        else
-        {
-            SetStatus($"❌ {action}失败（退出码 {exitCode}），详见下方引擎输出。", UiStatus.Kind.Error);
-            FileLogger.App.Error($"UI {action}: failed with exit code {exitCode}.");
-            AppendLog("");
-            AppendLog($"════════════ ❌ {action}失败（退出码 {exitCode}）════════════");
-            return false;
-        }
-    }
+    /// <summary>顺序执行一组引擎调用（内置补丁多选时逐个跑），汇总成败写入状态栏。</summary>
+    private Task<bool> RunEngineAsync(string action, List<(string? BuiltInId, string[] Args)> invocations)
+        => FxEngineRunner.RunAsync(
+            action,
+            invocations.Select(i => new FxEngineRunner.Invocation(i.BuiltInId, i.Args)).ToList(),
+            gameDataPath: _gameDataPath,
+            skipGameData: false,
+            clearLog: Output.ClearLog,
+            appendLog: AppendLog,
+            setStatus: SetStatus,
+            setBusy: SetButtonsEnabled);
 
     private void AppendLog(string line) => Output.AppendLog(line);
 
@@ -366,7 +722,6 @@ public partial class FxPatchView : UserControl
             ApplyButton.IsEnabled = enabled;
             RevertButton.IsEnabled = enabled;
             PurgeButton.IsEnabled = enabled;
-            DiffButton.IsEnabled = enabled;
         }
         if (Dispatcher.CheckAccess())
             Set();

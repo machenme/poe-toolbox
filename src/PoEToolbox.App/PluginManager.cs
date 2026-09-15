@@ -32,6 +32,8 @@ public class PluginManager
         Register(new PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin());
         Register(new PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin(EventBus));
         Register(new PoEToolbox.Plugins.FxPatch.FxPatchPlugin(EventBus));
+        Register(new PoEToolbox.Plugins.FxPatch.FxPatchCreatorPlugin(EventBus));
+        Register(new PoEToolbox.Plugins.AffixWorkbench.AffixWorkbenchPlugin(EventBus));
         // Voyager is temporarily hidden from the navigation without removing the plugin code.
     }
 

@@ -9,160 +9,110 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="360"/>
+            <ColumnDefinition Width="380"/>
             <ColumnDefinition Width="16"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- ── 左列：输入与操作 ── -->
-        <StackPanel Grid.Row="0" Grid.Column="0">
-            <Border Style="{StaticResource CardBorder}">
-                <StackPanel>
-                    <TextBlock Text="补丁来源" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
-                    <ComboBox x:Name="PatchSourceBox" Height="32" SelectionChanged="PatchSource_SelectionChanged">
-                        <ComboBoxItem Content="内置：黏油榴弹特效+地面燃烧特效（oil-grenade-fx-lite）" IsSelected="True"/>
-                        <ComboBoxItem Content="自定义补丁（patch.json / .zip 补丁包）"/>
-                    </ComboBox>
-                    <Grid Margin="0,8,0,0">
+        <!-- ── 左列：补丁来源（整列：内置列表 + 第三方补丁列表 + 自定义入口） ── -->
+        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardBorder}">
+            <DockPanel>
+                <!-- 底部：自定义补丁入口 -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                    <Separator Margin="0,0,0,8" Background="{DynamicResource BorderBrush}"/>
+                    <TextBlock Text="安装新的第三方补丁（.patch.json / .zip）" Style="{StaticResource SmallText}"
+                               ToolTip="fx-patch diff 生成的 .patch.json，或打包成 zip 的补丁包（patch.json + assets/）；也支持作者直接打包的整包替换补丁（含 _.index.bin 与 bundle 文件）——应用时会先把同名原文件备份到 backup\补丁名\ 再覆盖。一次选择并应用一个。"/>
+                    <Grid Margin="0,4,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBox x:Name="PatchJsonBox" Height="32" TextChanged="PatchJsonBox_TextChanged"
-                                 ToolTip="fx-patch diff 生成的 .patch.json，或打包成 zip 的补丁包（patch.json + assets/）；也支持作者直接打包的整包替换补丁（含 _.index.bin 与 bundle 文件）——应用时会先把同名原文件备份到 backup\补丁名\ 再覆盖。"/>
-                        <Button x:Name="BrowsePatchButton" Grid.Column="2" Content="自定义补丁"
-                                ToolTip="直接选择补丁文件（.patch.json 或 .zip 补丁包），选好会自动切到「自定义补丁」来源，不用先改上面的下拉菜单。"
+                        <TextBox x:Name="PatchJsonBox" Height="32" IsReadOnly="True"
+                                 ToolTip="fx-patch diff 生成的 .patch.json，或打包成 zip 的补丁包（patch.json + assets/）；也支持作者直接打包的整包替换补丁（含 _.index.bin 与 bundle 文件）——应用时会先把同名原文件备份到 backup\补丁名\ 再覆盖。选择后会出现在上方第三方补丁列表里，默认勾选；这里只显示名字，完整路径在悬停提示里。"/>
+                        <Button x:Name="BrowsePatchButton" Grid.Column="2" Content="选择文件"
+                                ToolTip="选择自定义补丁文件（.patch.json 或 .zip 补丁包），选完会加入上方第三方补丁列表并默认勾选。"
                                 Style="{StaticResource SecondaryButton}" Width="104"
                                 Click="BrowsePatch_Click"/>
                     </Grid>
-                    <TextBlock x:Name="CustomPathHint" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="当前来源还是内置补丁，上面填的自定义补丁路径不会生效；要用它请点「自定义补丁」重新选一次。"
-                               Style="{StaticResource SmallText}" Visibility="Collapsed"/>
                 </StackPanel>
-            </Border>
 
-            <Border Style="{StaticResource CardBorder}">
-                <StackPanel>
-                    <TextBlock Text="操作" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
-                    <Button x:Name="ApplyButton" Content="启用特效补丁"
-                            ToolTip="写入前自动备份原版索引；已经启用会自动跳过，重复执行不会出错。"
-                            Style="{StaticResource PrimaryButton}" Height="44" Click="Apply_Click"/>
-                    <TextBlock Text="把特效装进游戏，随时可以再改回来。"
-                               Style="{StaticResource SmallText}" Margin="0,4,0,0"/>
-                    <Button x:Name="RevertButton" Content="恢复游戏原版"
-                            ToolTip="撤销补丁效果，把游戏恢复成没装补丁的样子。补丁本身留在电脑里，想用随时可以再启用。"
-                            Style="{StaticResource SecondaryButton}" Height="38" Margin="0,10,0,0" Click="Revert_Click"/>
-                    <TextBlock Text="只是关掉特效，补丁文件保留，随时可以重新启用。"
-                               Style="{StaticResource SmallText}" Margin="0,4,0,0"/>
+                <!-- 上部：列表 -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="补丁来源" Style="{StaticResource SectionText}" Margin="0,0,0,4"/>
+                        <TextBlock Text="内置补丁（可勾选多个一起执行）" Style="{StaticResource SmallText}"
+                                   ToolTip="已经启用过的补丁会自动显示状态并勾选，可直接还原；取消勾选不会改动游戏，只是不参与本次操作。"/>
+                        <StackPanel x:Name="BuiltInChecksPanel" Margin="0,4,0,0"/>
+                        <TextBlock x:Name="BuiltInStateHint" Text="尚未读取补丁状态。"
+                                   Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
-                    <ToggleButton x:Name="AdvancedToggle" Content="▸ 高级维护"
-                                  Margin="0,14,0,0" Height="26" Padding="0" FontSize="12"
-                                  HorizontalAlignment="Left" HorizontalContentAlignment="Left"
-                                  Background="Transparent" BorderThickness="0"
-                                  Foreground="{DynamicResource TextSecondaryBrush}" Cursor="Hand"
-                                  Checked="AdvancedToggle_Changed" Unchecked="AdvancedToggle_Changed">
-                        <ToggleButton.Template>
-                            <ControlTemplate TargetType="ToggleButton">
-                                <Border Background="Transparent" Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                </Border>
-                            </ControlTemplate>
-                        </ToggleButton.Template>
-                    </ToggleButton>
-                    <StackPanel x:Name="AdvancedPanel" Visibility="Collapsed">
-                        <Button x:Name="StatusButton" Content="刷新补丁状态"
-                                ToolTip="只读检查，不改动任何东西：逐项列出补丁当前是已启用、还是被别的改动覆盖。"
-                                Style="{StaticResource SecondaryButton}" Height="32"
-                                HorizontalAlignment="Stretch" Click="Status_Click"/>
-                        <Button x:Name="PurgeButton" Content="完全卸载补丁（连文件一起删）"
-                                ToolTip="删除本补丁新增的文件；被补丁改动过的游戏原有文件一律保留，不会弄坏客户端。删除后要重新应用补丁才能再用。"
-                                Style="{StaticResource SecondaryButton}" Height="32" Margin="0,6,0,0"
-                                Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource ErrorBrush}"
-                                HorizontalAlignment="Stretch" Click="Purge_Click"/>
-                        <TextBlock Text="一般不需要用：只想临时关掉特效的话，用上面的「恢复游戏原版」就够了。"
-                                   Style="{StaticResource SmallText}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        <Separator Margin="0,12,0,8" Background="{DynamicResource BorderBrush}"/>
+                        <TextBlock Text="第三方补丁" Style="{StaticResource SmallText}"
+                                   ToolTip="上面的待应用条目来自底部选择的补丁文件；下面的来自补丁记录（已应用）。勾选后可用「启用 / 恢复 / 卸载」批量处理。"/>
+                        <TextBlock x:Name="ThirdPartyEmpty" Text="没有读取到已安装的第三方补丁。"
+                                   Style="{StaticResource SmallText}" Margin="0,4,0,0"/>
+                        <StackPanel x:Name="ThirdPartyPanel" Margin="0,2,0,0"/>
                     </StackPanel>
-                </StackPanel>
-            </Border>
-        </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
 
-        <!-- ── 右列：说明 / 补丁生成器 / 输出面板 ── -->
+        <!-- ── 右列：上=操作（2×2），下=引擎输出 ── -->
         <Grid Grid.Row="0" Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="16">
-                <StackPanel>
-                    <TextBlock Text="特效补丁管理" Style="{StaticResource TitleText}"/>
-                    <TextBlock Text="指令式补丁引擎：补丁 = 一份描述文件（几 KB），引擎就地修改索引，重复执行不会出错、随时可还原，与官方更新及其他补丁叠加共存。写入落在游戏索引同目录 PATCHED\ 的独立 bundle，文件名由补丁版本号决定，同一版本反复执行复用同一个文件，不会在磁盘上堆积。"
-                               Style="{StaticResource NormalText}" Margin="0,5,0,0" TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
+            <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="14"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-            <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="16">
-                <StackPanel>
-                    <TextBlock Text="补丁生成器（diff 两份索引自动生成补丁）" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="原版索引" Style="{StaticResource SmallText}" VerticalAlignment="Center"/>
-                        <TextBox x:Name="DiffVanillaBox" Grid.Column="1" Height="30" TextChanged="DiffVanillaBox_TextChanged"
-                                 ToolTip="游戏原版 _.index.bin（或备份快照）"/>
-                        <Button Grid.Column="3" Content="选择..." Style="{StaticResource SecondaryButton}"
-                                Click="BrowseVanilla_Click"/>
-                    </Grid>
-                    <Grid Margin="0,6,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="修改后索引" Style="{StaticResource SmallText}" VerticalAlignment="Center"/>
-                        <TextBox x:Name="DiffModifiedBox" Grid.Column="1" Height="30"
-                                 ToolTip="作者修改后的 _.index.bin（其 bundle 需在同目录可用）"/>
-                        <Button Grid.Column="3" Content="选择..." Style="{StaticResource SecondaryButton}"
-                                Click="BrowseModified_Click"/>
-                    </Grid>
-                    <Grid Margin="0,6,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="补丁名字" Style="{StaticResource SmallText}" VerticalAlignment="Center"/>
-                        <TextBox x:Name="DiffNameBox" Grid.Column="1" Height="30"
-                                 ToolTip="自定义补丁名字（同时作为补丁 ID、输出目录名与文件名）。留空则自动使用 diff-年月日-时分。"/>
-                    </Grid>
-                    <Grid Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="生成物默认输出到 %LOCALAPPDATA%\PoEToolbox\patches\&lt;补丁名字&gt;\。dat 表默认整表 asset，--dat-ptr 可启用逐行指针模式。"
-                                   Style="{StaticResource SmallText}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                        <CheckBox x:Name="DiffZipCheck" Grid.Column="2" Content="压缩为 zip" IsChecked="True"
-                                  VerticalAlignment="Center"
-                                  ToolTip="勾选后额外输出一个 zip 补丁包，zip 根目录就是 assets 与补丁描述 json 两项，可直接分发、直接应用。"/>
-                        <Button x:Name="DiffButton" Grid.Column="4" Content="生成补丁"
-                                Style="{StaticResource PrimaryButton}" Click="Diff_Click"/>
-                    </Grid>
+                <StackPanel Grid.Row="0" Grid.Column="0">
+                    <Button x:Name="ApplyButton" Content="启用特效补丁"
+                            ToolTip="写入前自动备份原版索引；已经启用会自动跳过，重复执行不会出错。对勾选的所有内置补丁（或所选自定义补丁）执行。"
+                            Style="{StaticResource PrimaryButton}" Height="42" Click="Apply_Click"/>
+                    <TextBlock Text="把勾选的补丁装进游戏，随时可以再改回来。"
+                               Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
-            </Border>
+                <StackPanel Grid.Row="0" Grid.Column="2">
+                    <Button x:Name="RevertButton" Content="恢复游戏原版"
+                            ToolTip="用备份的原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。整包替换型补丁覆盖的原生文件除外（需用对应补丁的还原功能）。"
+                            Style="{StaticResource SecondaryButton}" Height="42"
+                            Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource ErrorBrush}" Click="Revert_Click"/>
+                    <TextBlock Text="整体恢复原版：全部补丁（含第三方）都会被移除，之后想再用需重新启用。"
+                               Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="0">
+                    <Button x:Name="StatusButton" Content="刷新补丁状态"
+                            ToolTip="重新读取游戏数据，更新每个补丁的启用状态并同步勾选。只读检查，不改动任何东西。"
+                            Style="{StaticResource SecondaryButton}" Height="42" Click="Status_Click"/>
+                    <TextBlock Text="手动重查一遍装没装（换过游戏目录时用）。"
+                               Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="2">
+                    <Button x:Name="PurgeButton" Content="卸载已勾选补丁"
+                            ToolTip="完整卸载勾选的补丁：撤销修改并删除新增文件；其他未勾选的补丁不受影响。卸载后要重新应用补丁才能再用。想整体恢复原版用「恢复游戏原版」。"
+                            Style="{StaticResource SecondaryButton}" Height="42" Click="Purge_Click"/>
+                    <TextBlock Text="撤销修改并删除勾选补丁的文件，其他补丁不受影响；整体恢复请用「恢复游戏原版」。"
+                               Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
-            <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="12" Margin="0,0,0,0">
+            <!-- 引擎输出 -->
+            <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="12">
                 <shared:OutputPanel x:Name="Output" Title="引擎输出"/>
             </Border>
         </Grid>

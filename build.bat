@@ -9,8 +9,17 @@ if errorlevel 1 (
     goto :failed
 )
 
+rem Version single source: version.json (same as CI)
+set "APP_VERSION="
+for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "(Get-Content version.json -Raw -Encoding UTF8 | ConvertFrom-Json).version"`) do set "APP_VERSION=%%v"
+if "%APP_VERSION%"=="" (
+    echo [ERROR] Failed to read version from version.json.
+    goto :failed
+)
+echo Version: %APP_VERSION%
+
 echo Publishing PoEToolbox...
-dotnet publish "src\PoEToolbox.App\PoEToolbox.App.csproj" -c Release -r win-x64 --self-contained false -o "publish" -p:DebugSymbols=false -p:DebugType=None -p:GenerateDocumentationFile=false
+dotnet publish "src\PoEToolbox.App\PoEToolbox.App.csproj" -c Release -r win-x64 --self-contained false -o "publish" -p:Version=%APP_VERSION% -p:DebugSymbols=false -p:DebugType=None -p:GenerateDocumentationFile=false
 if errorlevel 1 (
     goto :failed
 )

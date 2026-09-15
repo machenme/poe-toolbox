@@ -26,7 +26,7 @@ public class PriceTaggerPlugin : IPlugin
     }
 
     public string Name => UILabels.Get("PluginPriceTagger");
-    public string IconGlyph => ""; // chart glyph
+    public string IconGlyph => "\uE8EC"; // Segoe MDL2 Assets: Tag（标签，贴合「价格标签」）
     public int Order => 0;
 
     public UserControl CreateView() => _view ??= new PriceTaggerView(_eventBus);

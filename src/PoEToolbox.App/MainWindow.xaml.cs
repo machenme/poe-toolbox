@@ -33,6 +33,9 @@ public partial class MainWindow : Window
         _pluginManager.EventBus.Subscribe<GameContextChanged>(OnGameContextChanged);
         _pluginManager.EventBus.Subscribe<LeagueChanged>(OnLeagueChanged);
         GameDataAccess.LocksChanged += OnGameDataLocksChanged;
+        // 引擎执行前广播释放所有插件的游戏数据句柄（只读映射会阻塞引擎替换 _.index.bin）
+        FxEngineRunner.ReleaseExternalLocks = () =>
+            _pluginManager.EventBus.Publish(new ReleaseGameDataLocksRequested());
         _pluginManager.RegisterAll();
         NavList.ItemsSource = CreateNavigationView();
         ApplyLocalization();
@@ -282,8 +285,8 @@ public partial class MainWindow : Window
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "选择游戏数据文件",
-            Filter = "游戏数据文件|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|索引文件|_.index.bin|全部文件|*.*",
+            Title = UILabels.Get("SelectGameDataTitle"),
+            Filter = UILabels.Get("GameDataFilter"),
             CheckFileExists = true,
         };
         if (dialog.ShowDialog() != true)
@@ -327,6 +330,8 @@ public partial class MainWindow : Window
             try
             {
                 IndexBackupService.EnsureBaselineExists(path, openContainerIfNeeded);
+                // 游戏更新检测：客户端干净且索引与基线不一致时，把基线刷新为当前版本
+                IndexBackupService.RefreshBaselineIfStale(path);
             }
             catch (Exception ex)
             {
@@ -342,7 +347,7 @@ public partial class MainWindow : Window
     private void UpdateGameDataPathDisplay(string? path)
     {
         var hasPath = !string.IsNullOrWhiteSpace(path);
-        GameDataPathDisplay.Text = hasPath ? path : "未选择游戏数据";
+        GameDataPathDisplay.Text = hasPath ? path : UILabels.Get("NoGameDataSelected");
         GameDataPathDisplay.ScrollToEnd();
         GameDataPathDisplay.ToolTip = GameDataPathDisplay.Text;
         UpdateGameDataSelectionHighlight(!hasPath);
@@ -531,8 +536,9 @@ public partial class MainWindow : Window
             ? "POE1"
             : plugin is PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin
                 || plugin is PoEToolbox.Plugins.FxPatch.FxPatchPlugin
+                || plugin is PoEToolbox.Plugins.FxPatch.FxPatchCreatorPlugin
                 ? "POE2"
-            : "通用";
+            : "菜单";
 
     private static bool IsPluginAvailable(IPlugin? plugin, PoeGameKind game)
         => plugin switch
@@ -540,6 +546,7 @@ public partial class MainWindow : Window
             PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin => game == PoeGameKind.Poe1,
             PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin => game == PoeGameKind.Poe2,
             PoEToolbox.Plugins.FxPatch.FxPatchPlugin => game == PoeGameKind.Poe2,
+            PoEToolbox.Plugins.FxPatch.FxPatchCreatorPlugin => game == PoeGameKind.Poe2,
             _ => plugin is not null,
         };
 
@@ -563,19 +570,83 @@ public partial class MainWindow : Window
         public bool IsEnabled => IsPluginAvailable(Plugin, GameProvider());
     }
 
-    // ═══ Global log dock ═══════════════════════════════════
+    // ═══ 恢复游戏原版（全局兜底入口，与「特效补丁」页的恢复共用同一引擎通道） ═══
+    private async void RestoreBaselineButton_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = MessageBox.Show(
+            "将用备份的原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。\n\n之后想再用任何补丁，都需要重新启用。确定继续？\n（只想移除个别补丁的话，请到「特效补丁」页用「卸载已勾选补丁」。）",
+            "恢复游戏原版", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK)
+            return;
+
+        // 引擎输出写进全局日志，展开面板让用户直接看到执行流水。
+        if (GlobalLogPanel.Visibility != Visibility.Visible)
+        {
+            GlobalLogPanel.Visibility = Visibility.Visible;
+            GlobalLogToggle.Content = UILabels.Get("CollapseLog");
+        }
+
+        var gameData = GameDataPathPreference.Get()?.Trim();
+        await FxEngineRunner.RunAsync(
+            "恢复游戏原版",
+            [new FxEngineRunner.Invocation(FxPatchEngine.BuiltInAll, [gameData ?? "", "restore"])],
+            gameDataPath: gameData,
+            skipGameData: false,
+            clearLog: () => GlobalLogBox.Document.Blocks.Clear(),
+            appendLog: AppendGlobalLogLine,
+            setStatus: (text, _) => StatusLabel.Text = text,
+            setBusy: SetRestoreBaselineBusy);
+    }
+
+    /// <summary>引擎执行期间只锁兜底按钮本身；其他模块仍可查看，但引擎有进程级 busy 防重入。</summary>
+    private void SetRestoreBaselineBusy(bool enabled)
+    {
+        void Set() => RestoreBaselineButton.IsEnabled = enabled;
+        if (Dispatcher.CheckAccess())
+            Set();
+        else
+            Dispatcher.Invoke(Set);
+    }
+
+    /// <summary>往全局日志追加一行引擎输出（普通文本，与文件日志镜像同容器）。</summary>
+    private void AppendGlobalLogLine(string line)
+    {
+        if (GlobalLogBox is null)
+            return;
+        void Append()
+        {
+            try
+            {
+                var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 2) };
+                paragraph.Inlines.Add(new Run(line));
+                GlobalLogBox.Document.Blocks.Add(paragraph);
+                while (GlobalLogBox.Document.Blocks.Count > 800)
+                    GlobalLogBox.Document.Blocks.Remove(GlobalLogBox.Document.Blocks.FirstBlock);
+                GlobalLogBox.ScrollToEnd();
+            }
+            catch
+            {
+                // The dispatcher may be shutting down.
+            }
+        }
+        if (!Dispatcher.CheckAccess())
+            Dispatcher.BeginInvoke(Append);
+        else
+            Append();
+    }
+
     private void GlobalLogToggle_Click(object sender, RoutedEventArgs e)
     {
         var show = GlobalLogPanel.Visibility != Visibility.Visible;
         GlobalLogPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        GlobalLogToggle.Content = show ? "▤ 收起日志" : "▤ 输出日志";
+        GlobalLogToggle.Content = show ? UILabels.Get("CollapseLog") : UILabels.Get("ShowLog");
         if (show) GlobalLogBox.ScrollToEnd();
     }
 
     private void HideGlobalLogButton_Click(object sender, RoutedEventArgs e)
     {
         GlobalLogPanel.Visibility = Visibility.Collapsed;
-        GlobalLogToggle.Content = "▤ 输出日志";
+        GlobalLogToggle.Content = UILabels.Get("ShowLog");
     }
 
     private void ClearGlobalLogButton_Click(object sender, RoutedEventArgs e)
@@ -613,7 +684,12 @@ public partial class MainWindow : Window
 
         if (!Dispatcher.CheckAccess())
         {
-            try { Dispatcher.BeginInvoke(Append); } catch { }
+            try { Dispatcher.BeginInvoke(Append); }
+            catch (Exception dispatchEx)
+            {
+                // Dispatcher 关闭中无法再排 UI 任务，留痕到文件日志
+                FileLogger.App.Debug($"Log append dispatch failed (dispatcher shutting down?): {dispatchEx.Message}");
+            }
             return;
         }
         Append();

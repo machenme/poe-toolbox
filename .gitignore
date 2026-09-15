@@ -56,8 +56,12 @@ AUDIT_SPEC.md
 TODO.md
 tests/**/bin/
 tests/**/obj/
-Directory.Build.props
 
+# Extracted game data (FxPatchCreator debug leftovers)
+miscanimated.json
+
+# Local assistant workspace
+.workbuddy/
 
 # Mise
 .python-version

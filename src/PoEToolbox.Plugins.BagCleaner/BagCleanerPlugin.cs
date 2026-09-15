@@ -13,7 +13,7 @@ namespace PoEToolbox.Plugins.BagCleaner;
 public class BagCleanerPlugin : IPlugin
 {
     public string Name => "背包清理";
-    public string IconGlyph => "";
+    public string IconGlyph => "\uE894"; // Segoe MDL2 Assets: Clear（清除，贴合「背包清理」）
     public int Order => 10;
 
     private BagCleanerView? _view;

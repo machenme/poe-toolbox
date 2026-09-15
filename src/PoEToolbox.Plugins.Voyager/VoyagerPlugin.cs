@@ -13,7 +13,7 @@ namespace PoEToolbox.Plugins.Voyager;
 public class VoyagerPlugin : IPlugin
 {
     public string Name => "航海助手";
-    public string IconGlyph => "";
+    public string IconGlyph => "\uE7E3"; // Segoe MDL2 Assets: Ferry（船，贴合「航海助手」）
     public int Order => 20;
 
     private VoyagerView? _view;

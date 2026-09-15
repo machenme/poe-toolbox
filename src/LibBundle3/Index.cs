@@ -148,85 +148,86 @@ public class Index : IDisposable {
 	/// restored copy of e.g. <c>data/balance/miscanimated.datc64</c> into the patch bundle, so removing
 	/// that record would drop the table from the index entirely instead of restoring it.
 	/// </para></param>
-	public virtual int PurgeCustomBundles(string pathPrefix, IReadOnlySet<string> ownedPaths, bool saveIndex = true) {
+	public virtual int PurgeCustomBundles(string pathPrefix, IReadOnlySet<string> ownedPaths, bool saveIndex = true)
+		=> PurgeCustomBundles([pathPrefix], ownedPaths, saveIndex);
+
+	/// <inheritdoc cref="PurgeCustomBundles(string, IReadOnlySet{string}, bool)"/>
+	/// <param name="pathPrefixes">Bundle path prefixes identifying the patch family; a bundle matching any of them is scanned.</param>
+	public virtual int PurgeCustomBundles(IEnumerable<string> pathPrefixes, IReadOnlySet<string> ownedPaths, bool saveIndex = true) {
 		ArgumentNullException.ThrowIfNull(ownedPaths);
-		ArgumentException.ThrowIfNullOrWhiteSpace(pathPrefix);
+		ArgumentNullException.ThrowIfNull(pathPrefixes);
+		var prefixes = pathPrefixes as IReadOnlyList<string> ?? pathPrefixes.ToArray();
+		if (prefixes.Count == 0)
+			throw new ArgumentException("At least one prefix is required.", nameof(pathPrefixes));
+		foreach (var prefix in prefixes)
+			ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
 		lock (this) {
 			EnsureNotDisposed();
 			var bundles = CustomBundles
-				.Where(b => b._Path.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase))
+				.Where(b => b._Path is { } p && prefixes.Any(pre => p.StartsWith(pre, StringComparison.OrdinalIgnoreCase)))
 				.ToArray();
 			var removed = 0;
+			var removedPaths = new HashSet<string>(StringComparer.Ordinal);
 			foreach (var bundle in bundles)
 				foreach (var file in bundle._Files.ToArray()) {
 					if (file.Path is null || !ownedPaths.Contains(file.Path))
 						continue;
 					bundle._Files.Remove(file);
 					_Files.Remove(file.PathHash);
+					removedPaths.Add(file.Path);
 					++removed;
 				}
 			if (removed == 0)
 				return 0;
+			// ⚠ 目录表绝对不能整表重建：客户端按「目录记录 + 路径条目」构建文件系统视图，
+			// 重建（坍缩成单条根记录）会让客户端无法按路径解析任何文件，启动即崩。
+			// 2026-09-13 事故：purge 后目录记录 94924 -> 1，游戏打不开，只能从基线索引恢复。
+			// 只做外科手术式收缩：精确摘除被删文件的路径条目，其余字节与目录记录原样保留。
 			_Root = null;
-			RebuildDirectoryTable();
+			RemoveDirectoryEntries(removedPaths);
 			if (saveIndex)
 				Save();
 			return removed;
 		}
 	}
 
-	private static bool IsCustomBundlePath(string path)
-		=> path.StartsWith(CUSTOM_BUNDLE_BASE_PATH, StringComparison.OrdinalIgnoreCase)
-			|| path.StartsWith("PATCHED/", StringComparison.OrdinalIgnoreCase);
-
-	private void RebuildDirectoryTable() {
-		// The first directory record stores the name-hash algorithm marker. Keep it
-		// when rebuilding after purge; pre-3.21 indexes use FNV instead of Murmur.
-		var rootHash = _Directories.Length > 0
-			? _Directories[0].PathHash
-			: 0xF42A94E69CFF42FEul;
-		var paths = ExtractExistingDirectoryPaths();
-		using var directory = new MemoryStream();
-		foreach (var path in paths.OrderBy(p => p, StringComparer.Ordinal)) {
-			directory.Write(0);
-			directory.Write(0);
-			directory.Write(1);
-			directory.Write(Encoding.UTF8.GetBytes(path));
-			directory.Write((byte)0);
-		}
-		var data = directory.ToArray();
-		using var bundleStream = new MemoryStream();
-		using (var bundle = new Bundle(bundleStream, (BundleRecord?)null))
-			bundle.Save(data);
-		directoryBundleData = bundleStream.ToArray();
-		_Directories = [new DirectoryRecord(rootHash, 0, data.Length, data.Length)];
-	}
-
 	/// <summary>
-	/// Reconstructs the full paths represented by the original directory bundle.
-	/// This preserves records whose <see cref="FileRecord.Path"/> could not be
-	/// resolved by <see cref="ParsePaths"/> but whose raw path entry is valid.
+	/// Surgically removes the raw path entries of <paramref name="removedPaths"/> from the directory
+	/// table: every other byte, directory record and their order are preserved untouched, only the
+	/// affected spans shrink and records whose whole span was removed are dropped (the first record
+	/// is always kept — its PathHash marks the name-hash algorithm).
 	/// </summary>
-	private List<string> ExtractExistingDirectoryPaths() {
+	/// <remarks>The caller must have removed the matching file records already, and hold the lock.</remarks>
+	private void RemoveDirectoryEntries(IReadOnlySet<string> removedPaths) {
+		if (_Directories.Length == 0 || removedPaths.Count == 0)
+			return;
+		var targets = new HashSet<string>(removedPaths, StringComparer.OrdinalIgnoreCase);
 		ReadOnlyMemory<byte> directory;
 		using (var bundle = new Bundle(new MemoryStream(directoryBundleData), false))
 			directory = bundle.ReadWithoutCache();
+		var bytes = directory.Span;
 
-		var paths = new List<string>(_Files.Count);
-		var seen = new HashSet<ulong>();
-		foreach (var record in _Directories) {
+		// Pass 1: locate the byte ranges to remove, per record. Entry layout per the client's
+		// parser: an int32 — 0 toggles prefix/base mode, anything else references a prefix and
+		// is followed by a null-terminated path suffix.
+		var removeRanges = new List<(int Start, int End)>();
+		for (var i = 0; i < _Directories.Length; i++) {
+			var record = _Directories[i];
 			if (record.Offset < 0 || record.Size < 0 || record.Offset > directory.Length - record.Size)
-				throw new InvalidDataException("Directory table contains an invalid range; refusing to purge.");
+				throw new InvalidDataException("Directory table contains an invalid range; refusing to edit.");
 
-			var bytes = directory.Span;
-			var cursor = record.Offset;
 			var end = record.Offset + record.Size;
+			var cursor = record.Offset;
 			var prefixes = new List<byte[]>();
 			var baseMode = false;
+			var prefixUsed = false;
+			var fileEntries = 0;
+			var removedEntries = new List<(int Start, int End)>();
 			while (cursor <= end - sizeof(int)) {
-				var index = BitConverter.ToInt32(bytes[cursor..]);
+				var entryStart = cursor;
+				var prefixRef = BitConverter.ToInt32(bytes[cursor..]);
 				cursor += sizeof(int);
-				if (index == 0) {
+				if (prefixRef == 0) {
 					baseMode = !baseMode;
 					if (baseMode)
 						prefixes.Clear();
@@ -235,30 +236,90 @@ public class Index : IDisposable {
 
 				var terminator = bytes[cursor..end].IndexOf((byte)0);
 				if (terminator < 0)
-					throw new InvalidDataException("Directory table contains an unterminated path; refusing to purge.");
+					throw new InvalidDataException("Directory table contains an unterminated path; refusing to edit.");
 				var suffix = bytes.Slice(cursor, terminator).ToArray();
 				cursor += terminator + 1;
-				var prefixIndex = index - 1;
+				var prefixIndex = prefixRef - 1;
 				byte[] path;
 				if (prefixIndex >= 0 && prefixIndex < prefixes.Count) {
+					prefixUsed = true;
 					path = GC.AllocateUninitializedArray<byte>(prefixes[prefixIndex].Length + suffix.Length);
 					prefixes[prefixIndex].CopyTo(path, 0);
 					suffix.CopyTo(path, prefixes[prefixIndex].Length);
-				} else {
+				} else
 					path = suffix;
-				}
-
-				if (baseMode) {
+				// Prefix entries are shared definitions — never remove them, only file entries.
+				if (baseMode)
 					prefixes.Add(path);
-				} else {
-					var hash = NameHash(path);
-					if (_Files.ContainsKey(hash) && seen.Add(hash))
-						paths.Add(Encoding.UTF8.GetString(path));
+				else {
+					++fileEntries;
+					if (targets.Contains(Encoding.UTF8.GetString(path)))
+						removedEntries.Add((entryStart, cursor));
 				}
 			}
+			if (removedEntries.Count == 0)
+				continue;
+			// When nothing survives in the record — no prefix definitions or references, and
+			// every file entry removed — the remaining mode toggles are a no-op husk. Remove
+			// the whole span so the record can be dropped entirely (the exact inverse of how
+			// AddFile appends a record + entry), instead of leaving an empty shell behind.
+			if (!prefixUsed && removedEntries.Count == fileEntries)
+				removeRanges.Add((record.Offset, end));
+			else
+				removeRanges.AddRange(removedEntries);
 		}
-		return paths;
+		if (removeRanges.Count == 0)
+			return;
+
+		int RemovedBefore(int position) {
+			var count = 0;
+			foreach (var (start, end) in removeRanges) {
+				if (end > position)
+					break;
+				count += end - start;
+			}
+			return count;
+		}
+		int RemovedWithin(int start, int end) {
+			var count = 0;
+			foreach (var (rangeStart, rangeEnd) in removeRanges)
+				if (rangeStart >= start && rangeEnd <= end)
+					count += rangeEnd - rangeStart;
+			return count;
+		}
+
+		// Copy the blob without the removed ranges; every kept byte keeps its relative order.
+		var kept = new MemoryStream(bytes.Length);
+		var copied = 0;
+		foreach (var (start, end) in removeRanges) {
+			kept.Write(bytes[copied..start]);
+			copied = end;
+		}
+		kept.Write(bytes[copied..]);
+
+		var dirs = new List<DirectoryRecord>(_Directories.Length);
+		for (var i = 0; i < _Directories.Length; i++) {
+			var r = _Directories[i];
+			var size = r.Size - RemovedWithin(r.Offset, r.Offset + r.Size);
+			var recursive = r.RecursiveSize - RemovedWithin(r.Offset, r.Offset + r.RecursiveSize);
+			// A record whose whole span was removed has no purpose left, and the client
+			// mis-reads zero spans; drop it. The first record is exempt (algorithm marker).
+			if (size == 0 && i != 0)
+				continue;
+			dirs.Add(new DirectoryRecord(r.PathHash, r.Offset - RemovedBefore(r.Offset), size, recursive));
+		}
+
+		using var bundleStream = new MemoryStream();
+		using (var newBundle = new Bundle(bundleStream, (BundleRecord?)null))
+			newBundle.Save(kept.ToArray());
+		directoryBundleData = bundleStream.ToArray();
+		_Directories = dirs.ToArray();
 	}
+
+	private static bool IsCustomBundlePath(string path)
+		=> path.StartsWith(CUSTOM_BUNDLE_BASE_PATH, StringComparison.OrdinalIgnoreCase)
+			|| path.StartsWith("PATCHED/", StringComparison.OrdinalIgnoreCase);
+
 	/// <summary>
 	/// Files with their <see cref="FileRecord.PathHash"/> as key.
 	/// </summary>

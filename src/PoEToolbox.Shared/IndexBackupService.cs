@@ -27,6 +27,72 @@ public static class IndexBackupService
     private const int CopyBufferSize = 1024 * 1024;
 
     /// <summary>
+    /// 游戏更新检测：客户端干净（无任何已应用补丁、PATCHED 目录无 bundle）且当前索引与基线不一致时，
+    /// 基线已过期（游戏更新所致）——自动把基线刷新为当前索引，避免之后任何「恢复原版/还原基线」
+    /// 把旧版文件写回新客户端。客户端有补丁时不动：此时索引与基线的差异来自补丁，属正常。
+    /// 差异也可能来自外部工具改动；客户端干净的前提下接受其为新基线（外部改动本就不在本工具管辖内）。
+    /// </summary>
+    public static void RefreshBaselineIfStale(string gameDataPath)
+    {
+        try
+        {
+            var resolved = GameDataAccess.ResolvePath(gameDataPath);
+            var baselinePath = GetBaselinePath(resolved);
+            if (!File.Exists(baselinePath))
+                return; // EnsureBaselineExists 负责首次创建
+            if (FilesEqual(resolved, baselinePath))
+                return; // 索引与基线一致，无需处理
+            if (!IsClientClean(Path.GetDirectoryName(resolved)!))
+            {
+                FileLogger.App.Info("游戏索引与原始基线不一致，但客户端存在已应用补丁：基线保持不变。");
+                return;
+            }
+            File.Copy(resolved, baselinePath, overwrite: true);
+            FileLogger.App.Info(
+                $"游戏索引已更新且客户端无补丁：原始索引基线已刷新为当前版本（{new FileInfo(resolved).Length:N0} bytes）。");
+        }
+        catch (Exception ex)
+        {
+            FileLogger.App.Error("检查/刷新原始索引基线失败（不影响游戏数据）。", ex);
+        }
+    }
+
+    private static bool FilesEqual(string a, string b)
+    {
+        var fileA = new FileInfo(a);
+        var fileB = new FileInfo(b);
+        if (fileA.Length != fileB.Length)
+            return false;
+        using var streamA = fileA.OpenRead();
+        using var streamB = fileB.OpenRead();
+        var bufferA = new byte[CopyBufferSize];
+        var bufferB = new byte[CopyBufferSize];
+        int read;
+        while ((read = streamA.Read(bufferA, 0, bufferA.Length)) > 0)
+        {
+            if (streamB.Read(bufferB, 0, bufferB.Length) != read)
+                return false;
+            for (var i = 0; i < read; i++)
+            {
+                if (bufferA[i] != bufferB[i])
+                    return false;
+            }
+        }
+        return streamB.Read(bufferB, 0, 1) == 0;
+    }
+
+    /// <summary>客户端是否处于「无补丁」状态：补丁账本为空/缺失，且 PATCHED 目录没有 bundle。</summary>
+    private static bool IsClientClean(string indexDirectory)
+    {
+        var gameDataPath = Path.Combine(indexDirectory, "_.index.bin");
+        if (FxPatchStateStore.Read(gameDataPath).Count > 0)
+            return false;
+        var patchedDirectory = Path.Combine(indexDirectory, "PATCHED");
+        return !Directory.Exists(patchedDirectory)
+            || !Directory.EnumerateFiles(patchedDirectory, "*.bundle.bin").Any();
+    }
+
+    /// <summary>
     /// Ensures the original index is retained before a game-data mutation starts.
     /// </summary>
     public static IndexBackupSession Begin(GameDataAccess gameData)
@@ -75,6 +141,8 @@ public static class IndexBackupService
 
         FileLogger.App.Info($"Restoring baseline index from {baselinePath}");
         gameData.WriteIndexBytesFrom(baselinePath);
+        // 回到原版索引 = 之前打的补丁全都没了，账本要一并清空，否则界面还会显示它们已启用。
+        FxPatchStateStore.Clear(gameData.GameDataPath);
         Complete(gameData, session, "restore-baseline");
     }
 

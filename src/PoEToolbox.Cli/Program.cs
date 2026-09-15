@@ -37,8 +37,8 @@ try
         "cmp" => CmdCmp(remaining),
         "copy-file" => CmdCopyFile(remaining),
         "restore" => CmdRestore(remaining),
-        "fx-oilmod" => FxPatchEngine.Run(remaining, builtInPatch: true),
-        "fx-patch" => FxPatchEngine.Run(remaining, builtInPatch: false),
+        "fx-oilmod" => FxPatchEngine.Run(remaining, FxPatchEngine.BuiltInAll),
+        "fx-patch" => FxPatchEngine.Run(remaining, builtInPatchId: null),
         "help" or "-h" or "--help" => Help(),
         _ => Unknown(command),
     };
@@ -264,26 +264,19 @@ static int CmdLang(string[] a)
         var dat = new DatContainer(langFr.Read().ToArray(), "Languages.dat");
         Console.WriteLine($"Languages.dat: {dat.FieldDatas.Count} rows");
 
-        // Find French and TC
-        int frn = -1, tch = -1;
-        for (var i = 0; i < dat.FieldDatas.Count; ++i)
+        int frn, tch;
+        try
         {
-            var name = (string)dat.FieldDatas[i][1].Value;
-            if (name == "French") frn = i;
-            else if (name == "Traditional Chinese") tch = i;
+            (frn, tch) = EditTools.SwapFrenchTraditionalChinese(dat);
         }
-        if (frn < 0 || tch < 0) { Console.Error.WriteLine("French or TC not found"); return 1; }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
 
-        var rowFrn = dat.FieldDatas[frn];
-        var rowTch = dat.FieldDatas[tch];
-        Console.WriteLine($"  Before: French[{frn}] Id={rowFrn[1].Value}, Text={rowFrn[2].Value}");
-        Console.WriteLine($"  Before: TC[{tch}] Id={rowTch[1].Value}, Text={rowTch[2].Value}");
-
-        (rowTch[1], rowFrn[1]) = (rowFrn[1], rowTch[1]);
-        (rowTch[2], rowFrn[2]) = (rowFrn[2], rowTch[2]);
-
-        Console.WriteLine($"  After:  French[{frn}] Id={rowFrn[1].Value}, Text={rowFrn[2].Value}");
-        Console.WriteLine($"  After:  TC[{tch}] Id={rowTch[1].Value}, Text={rowTch[2].Value}");
+        Console.WriteLine($"  French[{frn}] Id={dat.FieldDatas[frn][1].Value}, Text={dat.FieldDatas[frn][2].Value}");
+        Console.WriteLine($"  TC[{tch}] Id={dat.FieldDatas[tch][1].Value}, Text={dat.FieldDatas[tch][2].Value}");
 
         var backup = IndexBackupService.Begin(gd);
         langFr.Write(dat.Save(false, false));
@@ -310,23 +303,18 @@ static int CmdUI(string[] a)
         if (!gd.Index.TryGetFile("Art/UIImages1.txt", out var ff))
         { Console.WriteLine("  UIImages1.txt not found!"); return 1; }
         var fd = ff.Read().ToArray();
-        var txt = System.Text.Encoding.Unicode.GetString(fd);
-        var fr = txt.IndexOf("Common/FlagIcons/fr\"");
-        var cn = txt.IndexOf("Common/FlagIcons/zhCN\"");
-        var fc = txt.IndexOf("1.dds\" ", fr) + 7;
-        var cc = txt.IndexOf("1.dds\" ", cn) + 7;
-        if (fr > 0 && cn > fr && fc > 7 && cc > 7)
-        {
-            var fb = fc * 2; var cb = cc * 2;
-            var tmp = fd[fb..(fb + 26)].ToArray();
-            Array.Copy(fd, cb, fd, fb, 26);
-            Array.Copy(tmp, 0, fd, cb, 26);
+        var swapped = EditTools.TrySwapFlagCoords(fd);
+        if (swapped)
             Console.WriteLine("  Swapped");
+        else
+            Console.WriteLine("  Flag markers not found, flag swap skipped.");
+        if (swapped)
+        {
+            var flagBackup = IndexBackupService.Begin(gd);
+            ff.Write(fd);
+            gd.Save();
+            IndexBackupService.Complete(gd, flagBackup, "cli-ui-flag-swap");
         }
-        var flagBackup = IndexBackupService.Begin(gd);
-        ff.Write(fd);
-        gd.Save();
-        IndexBackupService.Complete(gd, flagBackup, "cli-ui-flag-swap");
 
         // Lang swap: French <-> TC
         Console.WriteLine("[2] Lang swap French <-> TC...");
@@ -336,15 +324,16 @@ static int CmdUI(string[] a)
         if (!gd.Index.TryGetFile("Data/Languages.dat", out var lf))
         { Console.WriteLine("  Languages.dat not found!"); return 1; }
         var dat = new DatContainer(lf.Read().ToArray(), "Languages.dat");
-        int frn = -1, tch = -1;
-        for (var i = 0; i < dat.FieldDatas.Count; ++i)
+        int frn, tch;
+        try
         {
-            var nm = (string)dat.FieldDatas[i][1].Value;
-            if (nm == "French") frn = i;
-            else if (nm == "Traditional Chinese") tch = i;
+            (frn, tch) = EditTools.SwapFrenchTraditionalChinese(dat);
         }
-        (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
-        (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"  {ex.Message}");
+            return 1;
+        }
         Console.WriteLine($"  French[{frn}] Id={dat.FieldDatas[frn][1].Value}, Text={dat.FieldDatas[frn][2].Value}");
         Console.WriteLine($"  TC[{tch}] Id={dat.FieldDatas[tch][1].Value}, Text={dat.FieldDatas[tch][2].Value}");
         var languageBackup = IndexBackupService.Begin(gd);
@@ -394,12 +383,13 @@ static int CmdExtract(string[] a)
     var table = a.Length > 1 ? a[1] : "BaseItemTypes";
     var lang = a.Length > 2 ? a[2] : "traditional chinese";
 
+    var datFileName = table.ToLowerInvariant() + ".datc64";
     var bundlePath = lang.ToLowerInvariant() switch
     {
-        "en" => "data/baseitemtypes.datc64",
-        "simplified chinese" => "data/balance/simplified chinese/baseitemtypes.datc64",
-        "traditional chinese" => "data/traditional chinese/baseitemtypes.datc64",
-        _ => $"data/{lang}/baseitemtypes.datc64"
+        "en" => $"data/{datFileName}",
+        "simplified chinese" => $"data/balance/simplified chinese/{datFileName}",
+        "traditional chinese" => $"data/traditional chinese/{datFileName}",
+        _ => $"data/{lang}/{datFileName}"
     };
     var outPath = $"work/{table}_{lang}.json";
 
@@ -425,7 +415,7 @@ static int CmdExtract(string[] a)
         {
             Console.Error.WriteLine($"  Not found: {bundlePath}");
             foreach (var candidate in gameData.Index.Files.Values
-                         .Where(x => x.Path?.Contains("baseitemtypes", StringComparison.OrdinalIgnoreCase) == true)
+                         .Where(x => x.Path?.Contains(table, StringComparison.OrdinalIgnoreCase) == true)
                          .Select(x => x.Path)
                          .Order())
                 Console.Error.WriteLine($"  Candidate: {candidate}");
@@ -649,21 +639,10 @@ static int CmdPatch(string[] a)
         if (!gd.Index.TryGetFile("Art/UIImages1.txt", out var flagFile))
         { Console.WriteLine("  UIImages1.txt not found!"); return 1; }
         var flagData = flagFile.Read().ToArray();
-        var text = System.Text.Encoding.Unicode.GetString(flagData);
-
-        // 1x: swap coords
-        var fr1x = text.IndexOf("Common/FlagIcons/fr\"");
-        var cn1x = text.IndexOf("Common/FlagIcons/zhCN\"");
-        var fc = text.IndexOf("1.dds\" ", fr1x) + 7;
-        var cc = text.IndexOf("1.dds\" ", cn1x) + 7;
-        if (fr1x > 0 && cn1x > fr1x && fc > 7 && cc > 7)
-        {
-            var fb = fc * 2; var cb = cc * 2;
-            var tmp = flagData[fb..(fb + 26)].ToArray();
-            Array.Copy(flagData, cb, flagData, fb, 26);
-            Array.Copy(tmp, 0, flagData, cb, 26);
+        if (EditTools.TrySwapFlagCoords(flagData))
             Console.WriteLine("  1x coords swapped");
-        }
+        else
+            Console.WriteLine("  Flag markers not found, flag swap skipped.");
         var patchFlagBackup = IndexBackupService.Begin(gd);
         flagFile.Write(flagData);
         gd.Save(); // Flush bundle so next write can read it
@@ -678,17 +657,16 @@ static int CmdPatch(string[] a)
         if (!gd.Index.TryGetFile("Data/Languages.dat", out var langFile))
         { Console.WriteLine("  Languages.dat not found!"); return 1; }
         var dat = new DatContainer(langFile.Read().ToArray(), "Languages.dat");
-        int frn = -1, tch = -1;
-        for (var i = 0; i < dat.FieldDatas.Count; ++i)
+        int frn, tch;
+        try
         {
-            var name = (string)dat.FieldDatas[i][1].Value;
-            if (name == "French") frn = i;
-            else if (name == "Traditional Chinese") tch = i;
+            (frn, tch) = EditTools.SwapFrenchTraditionalChinese(dat);
         }
-        if (frn < 0 || tch < 0) { Console.WriteLine("  French or TC not found!"); return 1; }
-        // Swap Id[1] and Text[2] only (PoeChinese3 approach)
-        (dat.FieldDatas[tch][1], dat.FieldDatas[frn][1]) = (dat.FieldDatas[frn][1], dat.FieldDatas[tch][1]);
-        (dat.FieldDatas[tch][2], dat.FieldDatas[frn][2]) = (dat.FieldDatas[frn][2], dat.FieldDatas[tch][2]);
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"  {ex.Message}");
+            return 1;
+        }
         Console.WriteLine($"  French[{frn}] Id={dat.FieldDatas[frn][1].Value}, Text={dat.FieldDatas[frn][2].Value}");
         Console.WriteLine($"  TC[{tch}] Id={dat.FieldDatas[tch][1].Value}, Text={dat.FieldDatas[tch][2].Value}");
         Console.WriteLine("  => In game menu, select the option showing TC text (繁體中文)");
@@ -874,7 +852,7 @@ static void PrintUsage()
     Console.WriteLine("  cmp <file>     Round-trip encoder test");
     Console.WriteLine("  copy-file <game-data> <src-path> <dest-path> Copy a file to a new path (isolated)");
     Console.WriteLine("  restore <game-data> Restore the original baseline index");
-    Console.WriteLine("  fx-oilmod <game-data> <status|apply|revert|cleanup|purge> 黏油榴弹特效+地面燃烧特效补丁（内置补丁，PATCHED 独立 bundle）");
+    Console.WriteLine("  fx-oilmod <game-data> [patch-id|all] <status|apply|revert|cleanup|purge> 内置特效补丁（地面燃烧特效 oil-ground-fx-lite / 黏油榴弹特效 oil-grenade-fx-lite，省略 patch-id 或用 all 对两者执行）");
     Console.WriteLine("  fx-patch <game-data> <patch.json|patch.zip> <status|apply|revert|cleanup|purge> 通用补丁引擎（执行 .patch.json 描述）");
 }
 static int Help() { PrintUsage(); return 0; }

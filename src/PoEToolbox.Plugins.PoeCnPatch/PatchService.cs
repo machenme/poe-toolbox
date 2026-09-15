@@ -105,7 +105,8 @@ internal static class PatchService
             foreach (var update in updates.Where(update => changedFiles.Contains(update.Target)))
             {
                 try { WriteTextAtomically(update.Target, update.Original); }
-                catch { }
+                catch (Exception rollbackEx)
+                { FileLogger.App.Warn($"汉化补丁回滚写入失败（{update.Target}）: {rollbackEx.Message}"); }
             }
             throw;
         }
@@ -140,7 +141,8 @@ internal static class PatchService
                 foreach (var target in restoredFiles)
                 {
                     try { WriteTextAtomically(target, originals[target]); }
-                    catch { }
+                    catch (Exception rollbackEx)
+                    { FileLogger.App.Warn($"汉化补丁还原回滚写入失败（{target}）: {rollbackEx.Message}"); }
                 }
                 throw;
             }

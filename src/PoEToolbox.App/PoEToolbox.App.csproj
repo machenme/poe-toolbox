@@ -9,7 +9,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>PoEToolbox.App</RootNamespace>
     <AssemblyName>PoEToolbox</AssemblyName>
-    <Version>0.1.9</Version>
+    <!-- 版本号唯一来源是根目录 version.json：CI 与 build.bat 都会以 /p:Version 覆盖 -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -28,6 +28,7 @@
     <ProjectReference Include="..\PoEToolbox.Plugins.Poe2Font\PoEToolbox.Plugins.Poe2Font.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.FxPatch\PoEToolbox.Plugins.FxPatch.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.TermTranslator\PoEToolbox.Plugins.TermTranslator.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Plugins.AffixWorkbench\PoEToolbox.Plugins.AffixWorkbench.csproj" />
   </ItemGroup>
 
   <ItemGroup>

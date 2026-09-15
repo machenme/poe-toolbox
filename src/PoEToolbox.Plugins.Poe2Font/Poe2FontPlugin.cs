@@ -13,8 +13,8 @@ public sealed class Poe2FontPlugin : IPlugin
         => _eventBus = eventBus ?? new EventBus();
 
     public string Name => "自定义字体";
-    public string IconGlyph => "";
-    public int Order => 10;
+    public string IconGlyph => "\uE8D2"; // Segoe MDL2 Assets: Font（字体，贴合「自定义字体」；与 GGPK 浏览共用 Folder 太含糊）
+    public int Order => 11;
 
     public UserControl CreateView() => _view ??= new Poe2FontView(_eventBus);
     public void OnActivated() { }

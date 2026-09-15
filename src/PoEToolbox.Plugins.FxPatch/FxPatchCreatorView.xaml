@@ -1,0 +1,97 @@
+<UserControl x:Class="PoEToolbox.Plugins.FxPatch.FxPatchCreatorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shared="clr-namespace:PoEToolbox.Shared;assembly=PoEToolbox.Shared"
+             Background="{DynamicResource WindowBgBrush}">
+    <Grid Margin="0,8,0,8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="380"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ── 上方整行：补丁生成器（占满整行宽度，索引路径完整可见） ── -->
+        <Border Grid.Row="0" Grid.ColumnSpan="3" Style="{StaticResource CardBorder}" Padding="16">
+            <StackPanel>
+                <TextBlock Text="补丁生成器（diff 两份索引自动生成补丁）" Style="{StaticResource SectionText}" Margin="0,0,0,8"/>
+                <TextBlock Text="原版索引" Style="{StaticResource SmallText}"/>
+                <Grid Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="DiffVanillaBox" Height="30" TextChanged="DiffVanillaBox_TextChanged"
+                             ToolTip="游戏原版 _.index.bin（或备份快照）"/>
+                    <Button Grid.Column="2" Content="选择..." Style="{StaticResource SecondaryButton}"
+                            Click="BrowseVanilla_Click"/>
+                </Grid>
+                <TextBlock Text="修改后索引" Style="{StaticResource SmallText}" Margin="0,6,0,0"/>
+                <Grid Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="DiffModifiedBox" Height="30"
+                             ToolTip="作者修改后的 _.index.bin（其 bundle 需在同目录可用）"/>
+                    <Button Grid.Column="2" Content="选择..." Style="{StaticResource SecondaryButton}"
+                            Click="BrowseModified_Click"/>
+                </Grid>
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="补丁名字" Style="{StaticResource SmallText}" VerticalAlignment="Center"/>
+                    <TextBox x:Name="DiffNameBox" Grid.Column="1" Height="30"
+                             ToolTip="自定义补丁名字（同时作为补丁 ID、输出目录名与文件名）。留空则自动使用 diff-年月日-时分。"/>
+                </Grid>
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="生成物默认输出到 %LOCALAPPDATA%\PoEToolbox\patches\&lt;补丁名字&gt;\。dat 表默认整表 asset，--dat-ptr 可启用逐行指针模式。"
+                               Style="{StaticResource SmallText}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                    <CheckBox x:Name="DiffZipCheck" Grid.Column="2" Content="压缩为 zip" IsChecked="True"
+                              VerticalAlignment="Center"
+                              ToolTip="勾选后额外输出一个 zip 补丁包，zip 根目录就是 assets 与补丁描述 json 两项，可直接分发、直接应用。"/>
+                    <Button x:Name="DiffButton" Grid.Column="4" Content="生成补丁"
+                            Style="{StaticResource PrimaryButton}" Click="Diff_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ── 左下：模块介绍 ── -->
+        <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource CardBorder}" Padding="16" VerticalAlignment="Stretch">
+            <StackPanel>
+                <TextBlock Text="特效补丁管理" Style="{StaticResource TitleText}"/>
+                <TextBlock Text="指令式补丁引擎：补丁 = 一份描述文件（几 KB），引擎就地修改索引，重复执行不会出错、随时可还原，与官方更新及其他补丁叠加共存。写入落在游戏索引同目录 PATCHED\ 的独立 bundle，文件名由补丁版本号决定，同一版本反复执行复用同一个文件，不会在磁盘上堆积。"
+                           Style="{StaticResource NormalText}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                <TextBlock Text="用法：选好原版索引与修改后索引，点「生成补丁」。生成物可 zip 打包分发；拿到补丁的人在本工具「特效补丁」页面用「选择文件」应用即可。"
+                           Style="{StaticResource SmallText}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ── 右下：输出面板 ── -->
+        <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource CardBorder}" Padding="12">
+            <shared:OutputPanel x:Name="Output" Title="引擎输出"/>
+        </Border>
+
+        <Border Grid.Row="2" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                Padding="8,5" Background="{DynamicResource SurfaceBrush}" CornerRadius="4">
+            <TextBlock Text="提示：仅支持 POE2 客户端；生成前会先在游戏目录留一份原版索引。" Style="{StaticResource SmallText}"/>
+        </Border>
+    </Grid>
+</UserControl>

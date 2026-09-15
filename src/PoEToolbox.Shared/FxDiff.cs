@@ -12,19 +12,27 @@ using System.IO;
 /// </summary>
 public static class FxDiff
 {
-    /// <summary>UI 日志钩子：设置后所有输出同时流入该回调。</summary>
-    public static Action<string>? LogSink;
+    private static readonly AsyncLocal<Action<string>?> LogSinkCurrent = new();
+
+    /// <summary>UI 日志钩子：设置后所有输出同时流入该回调。按异步流隔离，并发执行互不覆盖。</summary>
+    public static Action<string>? LogSink
+    {
+        get => LogSinkCurrent.Value;
+        set => LogSinkCurrent.Value = value;
+    }
 
     private static void Log(string msg)
     {
         LogSink?.Invoke(msg);
         Console.WriteLine(msg);
+        FileLogger.App.Info($"[fx-patch diff] {msg}");
     }
 
     private static void LogErr(string msg)
     {
         LogSink?.Invoke("[错误] " + msg);
         Console.Error.WriteLine(msg);
+        FileLogger.App.Error($"[fx-patch diff] {msg}");
     }
 
     public static int Run(string[] args)
@@ -51,9 +59,7 @@ public static class FxDiff
             LogErr("Usage: fx-patch diff <原版index.bin> <修改后index.bin> [-o 输出目录] [--id patchId] [--bundle bundleName] [--version 版本] [--zip]");
             return 2;
         }
-        outDir ??= "fx-patch-out";
         patchId ??= DefaultPatchId();
-        version ??= "1";
         // bundle 名不能用一个固定值：多个补丁共用前缀时，相同版本号会互相覆盖
         bundleName ??= SanitizeBundleName(patchId);
 
@@ -99,7 +105,7 @@ public static class FxDiff
         }
     }
 
-    private static int Diff(GameDataAccess gdA, GameDataAccess gdB, string outDir, string patchId, string bundleName, string version, bool datPtr)
+    private static int Diff(GameDataAccess gdA, GameDataAccess gdB, string outDir, string patchId, string bundleName, string? version, bool datPtr)
     {
         Log($"原版  : {gdA.GameDataPath}");
         Log($"修改后: {gdB.GameDataPath}");
@@ -229,8 +235,10 @@ public static class FxDiff
             la = FxPatchEngine.ParseLayout(oldB);
             lb = FxPatchEngine.ParseLayout(newB);
         }
-        catch
+        catch (Exception ex)
         {
+            // 布局解析失败按"无法逐行 diff"回退整表 asset，但留下日志便于区分引擎缺陷与真实布局差异
+            FileLogger.App.Debug($"TryDatDiff 布局解析失败（{path}），回退整表 asset: {ex.Message}");
             return null;
         }
         if (la.RowCount != lb.RowCount || la.RowLen != lb.RowLen || la.DataOffset != lb.DataOffset)
