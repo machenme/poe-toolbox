@@ -788,6 +788,22 @@ public static class FxPatchEngine
         }
 
         FxPatchStateStore.MarkRemoved(resolved, pack.PatchId);
+
+        // 快照可能早于其他补丁的卸载：还原出的索引也许还引用已被删除的 PATCHED bundle（悬空）。
+        // 不修的话，之后任何打开游戏数据的操作（词缀上色连接、游戏读文件）都会直接失败。
+        // 就地按基线把悬空引用归位到原版位置，悬空 bundle 由索引孤儿清理移除。
+        // 修复是尽力而为：索引打不开（损坏 / 测试夹具的假索引）只告警，不让还原本身报失败。
+        try
+        {
+            var repaired = PatchBundleRepair.RepairIfBroken(resolved, Log);
+            if (repaired > 0)
+                Log($"[修复] 还原的索引里有 {repaired} 个文件指向已丢失的补丁 bundle，已按原版基线归位。");
+        }
+        catch (Exception ex)
+        {
+            LogErr($"[警告] 还原后自检悬空补丁引用未完成：{ex.Message}");
+        }
+
         Log($"[成功] {pack.PatchId} 还原完成。");
         return 0;
     }

@@ -103,9 +103,9 @@
                 </StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="2">
                     <Button x:Name="PurgeButton" Content="卸载已勾选补丁"
-                            ToolTip="完整卸载勾选的补丁：撤销修改并删除新增文件；其他未勾选的补丁不受影响。卸载后要重新应用补丁才能再用。想整体恢复原版用「恢复游戏原版」。"
+                            ToolTip="完整卸载勾选的补丁：撤销修改并删除新增文件；其他未勾选的补丁不受影响。注意：勾选了整包替换型补丁（含 _.index.bin 的 zip）时会连带卸载全部补丁，弹窗会再确认。卸载后要重新应用补丁才能再用。想整体恢复原版用「恢复游戏原版」。"
                             Style="{StaticResource SecondaryButton}" Height="42" Click="Purge_Click"/>
-                    <TextBlock Text="撤销修改并删除勾选补丁的文件，其他补丁不受影响；整体恢复请用「恢复游戏原版」。"
+                    <TextBlock Text="撤销修改并删除勾选补丁的文件，其他补丁不受影响；整包替换型补丁除外（卸载它会连带卸载全部补丁）。整体恢复请用「恢复游戏原版」。"
                                Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>

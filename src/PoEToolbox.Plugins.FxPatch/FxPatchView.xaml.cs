@@ -266,7 +266,9 @@ public partial class FxPatchView : UserControl
             IsEnabled = hasSource,
             ToolTip = applied
                 ? (hasSource
-                    ? "勾选后点「卸载已勾选补丁」即可删除这个补丁新增的文件（按应用时记录的原补丁文件执行）。"
+                    ? (IsRawPackEntry(entry)
+                        ? "整包替换型补丁：它修改了游戏索引（_.index.bin），卸载它会把索引整体换回官方原版，其他所有已启用的补丁都会被连带卸载。"
+                        : "勾选后点「卸载已勾选补丁」即可删除这个补丁新增的文件（按应用时记录的原补丁文件执行）。")
                     : "这条记录里没有可用的原补丁文件（旧记录或文件已移动/删除），无法勾选操作；重新应用一次即可补上记录。")
                 : "刚选择、还没有写入游戏的补丁文件；保持勾选并点「启用特效补丁」即可应用。",
         };
@@ -423,8 +425,9 @@ public partial class FxPatchView : UserControl
 
     /// <summary>按当前来源组装引擎调用（可任意组合）：
     /// 输入框里的自定义补丁文件 + 勾选的内置补丁 + 勾选的第三方补丁（按账本记录的原补丁文件）。
-    /// 待应用的输入框文件如果已经在第三方列表里以勾选行存在，不重复拼装。</summary>
-    private List<(string? BuiltInId, string[] Args)> BuildInvocations(string action)
+    /// 待应用的输入框文件如果已经在第三方列表里以勾选行存在，不重复拼装。
+    /// uninstallAll=true 时（卸载整包替换型补丁的连带卸载）不看勾选，改用账本里全部已启用的补丁。</summary>
+    private List<(string? BuiltInId, string[] Args)> BuildInvocations(string action, bool uninstallAll = false)
     {
         var gameData = (_gameDataPath ?? GameDataPathPreference.Get())!.Trim();
         var rawPack = new List<(string? BuiltInId, string[] Args)>();
@@ -470,7 +473,11 @@ public partial class FxPatchView : UserControl
             (raw ? rawPack : modifying).Add((null, [gameData, sourceFile, action]));
         }
 
-        var checkedThirdParty = CheckedThirdParty
+        // 连带卸载全部补丁：来源从「勾选的」换成「账本里全部已启用的」（内置 + 第三方）。
+        var ledger = uninstallAll ? CurrentLedgerEntries() : null;
+        var checkedThirdParty = (ledger is not null
+                ? ledger.Where(e => !string.Equals(e.Kind, FxPatchStateStore.KindBuiltIn, StringComparison.OrdinalIgnoreCase))
+                : CheckedThirdParty)
             .Where(e => !string.IsNullOrWhiteSpace(e.SourceFile) && File.Exists(e.SourceFile))
             .ToList();
         var thirdPartyPaths = checkedThirdParty
@@ -481,7 +488,11 @@ public partial class FxPatchView : UserControl
         if (custom.Length > 0 && !thirdPartyPaths.Contains(Path.GetFullPath(custom)))
             AddSource(null, custom, knownRawPack: false);
 
-        foreach (var id in CheckedBuiltInIds)
+        var builtInIds = ledger is not null
+            ? ledger.Where(e => string.Equals(e.Kind, FxPatchStateStore.KindBuiltIn, StringComparison.OrdinalIgnoreCase))
+                    .Select(e => e.Id).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+            : CheckedBuiltInIds;
+        foreach (var id in builtInIds)
             AddSource(id, id, knownRawPack: false);
 
         foreach (var entry in checkedThirdParty)
@@ -495,12 +506,11 @@ public partial class FxPatchView : UserControl
             rawPack.RemoveRange(1, rawPack.Count - 1);
         }
 
-        // 顺序有讲究：整包替换型会整体换掉 _.index.bin，必须先于修改类执行，否则先改的文件被冲掉；
-        // 卸载（revert/purge）反过来：先清修改类，再换回索引。status 无所谓，按启用顺序。
-        var result = action is "apply" or "status"
-            ? rawPack.Concat(modifying)
-            : modifying.Concat(rawPack);
-        return result.ToList();
+        // 顺序有讲究：整包替换型会整体换掉 _.index.bin，必须先于修改类执行，否则先改的文件被冲掉。
+        // 卸载同样是整包先行：它备份的索引快照里带着其他补丁 PATCHED bundle 的引用，
+        // 若先卸载其他补丁（bundle 被删）再还原快照，索引就会引用已删除的 bundle；
+        // 先还原快照（此刻 bundle 还在，快照自洽），再逐个 revert+purge，最终索引才干净。
+        return rawPack.Concat(modifying).ToList();
     }
 
     /// <summary>判断一个补丁文件是不是整包替换型（zip 里带 _.index.bin）。
@@ -522,14 +532,19 @@ public partial class FxPatchView : UserControl
         }
     }
 
-    /// <summary>勾选的第三方补丁里有多少条缺原补丁文件（旧记录或文件已不在）；有则提示，这类无法被操作。</summary>
-    private void WarnMissingThirdPartySource(string action)
+    /// <summary>勾选的第三方补丁里有多少条缺原补丁文件（旧记录或文件已不在）；有则提示，这类无法被操作。
+    /// uninstallAll=true 时改为检查账本里全部第三方条目（连带卸载的来源不是勾选）。</summary>
+    private void WarnMissingThirdPartySource(string action, bool uninstallAll = false)
     {
-        var missing = CheckedThirdParty
+        var source = uninstallAll
+            ? CurrentLedgerEntries().Where(e =>
+                !string.Equals(e.Kind, FxPatchStateStore.KindBuiltIn, StringComparison.OrdinalIgnoreCase))
+            : CheckedThirdParty;
+        var missing = source
             .Where(e => string.IsNullOrWhiteSpace(e.SourceFile) || !File.Exists(e.SourceFile))
             .ToList();
         if (missing.Count > 0)
-            SetStatus($"有 {missing.Count} 个第三方补丁记录里没有可用的原补丁文件（旧记录或文件已移动），无法被{action}：" +
+            SetStatus($"有 {missing.Count} 个第三方补丁记录里没有可用的原补丁文件（旧记录或文件已移动），无法被{action}，将跳过：" +
                       string.Join("、", missing.Select(e => e.Name)), UiStatus.Kind.Warning);
     }
 
@@ -669,19 +684,41 @@ public partial class FxPatchView : UserControl
     {
         if (!ValidateInputs(out _))
             return;
-        var confirm = MessageBox.Show(
-            "将完整卸载勾选的补丁：撤销它们对游戏文件的修改，并删除补丁新增的文件；其他未勾选的补丁不受影响。\n\n卸载之后想再用，需要重新应用补丁。确定继续？\n（想把游戏整体恢复原版、移除所有补丁的话，请用「恢复游戏原版」。）",
-            "卸载已勾选补丁", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.OK)
-            return;
-        WarnMissingThirdPartySource("卸载");
-        var invocations = BuildInvocations("purge");
+
+        // 整包替换型补丁（zip 带 _.index.bin）修改了游戏索引本体：卸载它 = 索引整体换回原版，
+        // 其他所有补丁都会因此失效，所以要连带卸载全部补丁，并在弹窗里明说。
+        // 不含索引的普通补丁没有这个问题，仍可单独卸载。
+        var involvesRawPack = CheckedThirdParty.Any(e =>
+            string.Equals(e.Kind, FxPatchStateStore.KindRawPack, StringComparison.OrdinalIgnoreCase));
+        var uninstallAll = false;
+        if (involvesRawPack)
+        {
+            var confirm = MessageBox.Show(
+                "勾选的补丁里包含整包替换型补丁——它修改了游戏索引（_.index.bin）。\n\n" +
+                "卸载它会把索引整体换回官方原版，其他所有已启用的补丁都会因此失效，" +
+                "所以本次将连带卸载全部补丁，而不是只卸载勾选的那一个。\n\n" +
+                "不含索引的普通补丁不受此限制，随时可以单独卸载。\n\n确定继续？",
+                "卸载整包替换型补丁", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.OK)
+                return;
+            uninstallAll = true;
+        }
+        else
+        {
+            var confirm = MessageBox.Show(
+                "将完整卸载勾选的补丁：撤销它们对游戏文件的修改，并删除补丁新增的文件；其他未勾选的补丁不受影响。\n\n卸载之后想再用，需要重新应用补丁。确定继续？\n（想把游戏整体恢复原版、移除所有补丁的话，请用「恢复游戏原版」。）",
+                "卸载已勾选补丁", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.OK)
+                return;
+        }
+        WarnMissingThirdPartySource("卸载", uninstallAll);
+        var invocations = BuildInvocations("purge", uninstallAll);
         if (invocations.Count == 0)
         {
             SetStatus("勾选的补丁都没有可用的执行方式（第三方补丁缺原补丁文件），请先重新应用一次补齐记录。", UiStatus.Kind.Warning);
             return;
         }
-        await RunEngineAsync("卸载已勾选补丁", invocations);
+        await RunEngineAsync(uninstallAll ? "卸载全部补丁（连带整包替换型）" : "卸载已勾选补丁", invocations);
         RefreshAfterOperation();
     }
 

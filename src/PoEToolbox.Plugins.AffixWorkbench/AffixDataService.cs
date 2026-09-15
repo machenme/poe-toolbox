@@ -155,9 +155,11 @@ public sealed class AffixDataService : IDisposable
         {
             ConnectGameData(resolved);
         }
-        catch (FileNotFoundException ex) when (IsMissingPatchBundle(ex))
+        catch (Exception ex) when (IsMissingPatchBundle(ex) || ex is DirectoryNotFoundException)
         {
-            // 索引引用的 PATCHED bundle 文件丢失：尝试从基线备份自动修复后重连一次。
+            // 索引引用的 PATCHED bundle 文件丢失：文件级丢的是 FileNotFoundException；
+            // 整个 PATCHED 目录被删时抛 DirectoryNotFoundException（找不到路径的一部分）。
+            // 两种都先尝试从基线备份自动修复，修不动再把原异常抛出去。
             FileLogger.App.Warn($"读取游戏数据失败（补丁 bundle 文件丢失）：{ex.Message}");
             var repaired = PatchBundleRepair.RepairIfBroken(resolved, msg => _connectNotes.Add(msg));
             if (repaired <= 0)
@@ -167,8 +169,8 @@ public sealed class AffixDataService : IDisposable
     }
 
     /// <summary>异常是否指向丢失的 PATCHED bundle 文件（读取时才打开 bundle，索引本身能正常加载）。</summary>
-    private static bool IsMissingPatchBundle(FileNotFoundException ex)
-        => ex.FileName is { } missing
+    private static bool IsMissingPatchBundle(Exception ex)
+        => ex is FileNotFoundException { FileName: { } missing }
            && missing.EndsWith(".bundle.bin", StringComparison.OrdinalIgnoreCase)
            && Path.GetFileName(Path.GetDirectoryName(missing))?.Equals("PATCHED", StringComparison.OrdinalIgnoreCase) == true;
 

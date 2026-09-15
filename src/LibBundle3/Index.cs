@@ -30,11 +30,14 @@ namespace LibBundle3;
 /// Class to handle the _.index.bin file.
 /// </summary>
 public class Index : IDisposable {
-	protected internal readonly IBundleFactory bundleFactory;
+	// PoEToolbox 修订：原为 readonly；原因同 baseBundle（初始化提取到 Initialize()）。
+	protected internal IBundleFactory bundleFactory;
 	/// <summary>
 	/// <see cref="Bundle"/> instance of "_.index.bin"
 	/// </summary>
-	protected readonly Bundle baseBundle;
+	// PoEToolbox 修订：原为 readonly；初始化提取到 Initialize() 以便字符串构造函数在
+	// 流初始化失败时关闭文件句柄，因此这两个字段需要在构造函数外赋值一次。
+	protected Bundle baseBundle;
 	/// <summary>
 	/// Data for <see cref="ParsePaths"/>
 	/// </summary>
@@ -42,7 +45,7 @@ public class Index : IDisposable {
 
 	protected BundleRecord[] _Bundles;
 	protected internal DirectoryRecord[] _Directories;
-	protected readonly Dictionary<ulong, FileRecord> _Files;
+	protected Dictionary<ulong, FileRecord> _Files;
 
 	/// <summary>
 	/// Bundles ceated by this library for writing modfied files.
@@ -452,12 +455,18 @@ public class Index : IDisposable {
 	/// </param>
 	/// <param name="bundleFactory">Factory to handle .bin files of <see cref="Bundle"/></param>
 	/// <exception cref="FileNotFoundException" />
-	public Index(string filePath, bool parsePaths = true, IBundleFactory? bundleFactory = null, bool readOnly = false) : this(
-			  File.Open(filePath = Utils.ExpandPath(filePath), FileMode.Open, readOnly ? FileAccess.Read : FileAccess.ReadWrite, FileShare.ReadWrite),
-			  false,
-			  parsePaths,
-			  bundleFactory ?? new DriveBundleFactory(Path.GetDirectoryName(Path.GetFullPath(filePath))!)
-		) { }
+	public Index(string filePath, bool parsePaths = true, IBundleFactory? bundleFactory = null, bool readOnly = false) {
+		filePath = Utils.ExpandPath(filePath);
+		var stream = File.Open(filePath, FileMode.Open, readOnly ? FileAccess.Read : FileAccess.ReadWrite, FileShare.ReadWrite);
+		try {
+			// 手动展开初始化而不是链式构造：流构造失败（索引损坏等）时必须关掉已打开的
+			// 文件句柄，否则文件会一直被占用，直到 GC 终结器才释放（PoEToolbox 修订）。
+			Initialize(stream, false, parsePaths, bundleFactory ?? new DriveBundleFactory(Path.GetDirectoryName(Path.GetFullPath(filePath))!));
+		} catch {
+			stream.Dispose();
+			throw;
+		}
+	}
 
 	/// <summary>
 	/// Initialize with <paramref name="stream"/>.
@@ -476,6 +485,10 @@ public class Index : IDisposable {
 	/// </remarks>
 	public unsafe Index(Stream stream, bool leaveOpen = false, bool parsePaths = true, IBundleFactory? bundleFactory = null) {
 		ArgumentNullException.ThrowIfNull(stream);
+		Initialize(stream, leaveOpen, parsePaths, bundleFactory);
+	}
+
+	private unsafe void Initialize(Stream stream, bool leaveOpen, bool parsePaths, IBundleFactory? bundleFactory) {
 		this.bundleFactory = bundleFactory ?? new DriveBundleFactory(string.Empty);
 		lock (this) {
 			baseBundle = new(stream, leaveOpen);

@@ -29,10 +29,8 @@ public static class PatchBundleRepair
         if (bundleDir is null || !File.Exists(resolved))
             return 0;
 
-        // 快速预检：PATCHED 目录不存在就一定没有悬空引用，不必开索引。
-        if (!Directory.Exists(Path.Combine(bundleDir, "PATCHED")))
-            return 0;
-
+        // 注意：不能拿「PATCHED 目录不存在」当免检依据——目录整体被删时索引同样可能悬空引用
+        // （2026-09-16 词缀上色 bug 即此形态），悬空与否必须开索引对着 bundle 清单核对。
         return GameDataLoader.Use(resolved, GameDataMode.ReadWrite, gd =>
         {
             var dangling = FindDanglingBundles(gd, bundleDir);
