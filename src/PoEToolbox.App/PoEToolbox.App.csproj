@@ -1,5 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    版本号唯一来源是根目录 version.json：
+    - CI / build.bat 以 /p:Version 显式传入；
+    - 本地直接 dotnet build/publish 时由下面这段自动读取，不再落到默认的 1.0.0。
+  -->
+  <PropertyGroup Condition="'$(Version)' == ''">
+    <RepoRoot>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), 'version.json'))</RepoRoot>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(RepoRoot)\version.json')), '&quot;version&quot;\s*:\s*&quot;([^&quot;]+)&quot;').Groups[1].Value)</Version>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -9,7 +19,6 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>PoEToolbox.App</RootNamespace>
     <AssemblyName>PoEToolbox</AssemblyName>
-    <!-- 版本号唯一来源是根目录 version.json：CI 与 build.bat 都会以 /p:Version 覆盖 -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
