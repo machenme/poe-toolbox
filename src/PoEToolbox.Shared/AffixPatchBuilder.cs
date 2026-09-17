@@ -23,7 +23,9 @@ public static class AffixPatchBuilder
         [property: JsonPropertyOrder(0)] string PatchId,
         [property: JsonPropertyOrder(1)] string BundleName,
         [property: JsonPropertyOrder(2)] string Version,
-        [property: JsonPropertyOrder(3)] List<OpJson> Operations);
+        [property: JsonPropertyOrder(3)] List<OpJson> Operations,
+        [property: JsonPropertyName("_comment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? Comment = null);
 
     private sealed record OpJson(
         [property: JsonPropertyOrder(0)] string Op,
@@ -84,6 +86,35 @@ public static class AffixPatchBuilder
         {
             return 1; // 旧描述损坏时从 v1 重建；引擎 apply 前的完整性校验仍会拦截不一致
         }
+    }
+
+    /// <summary>把方案变更生成为**可分发的独立补丁**（别人不需要装本工具也能用）：
+    /// <c>&lt;outputDir&gt;/&lt;patchId&gt;/&lt;patchId&gt;.patch.json + assets/</c>，颜色定义（uisettings.xml 变更）
+    /// 无条件包含——分发对象客户端上很可能还没有这些颜色。返回补丁描述文件完整路径（zip 时以该目录为根）。</summary>
+    public static string BuildExport(IReadOnlyList<FileChange> changes, string outputDir, string patchId, string? comment = null)
+    {
+        if (changes.Count == 0)
+            throw new ArgumentException("没有可写入的文件变更。", nameof(changes));
+
+        var dir = Path.Combine(outputDir, patchId);
+        var assetsDir = Path.Combine(dir, "assets");
+        Directory.CreateDirectory(assetsDir);
+
+        var ops = new List<OpJson>();
+        for (var i = 0; i < changes.Count; i++)
+        {
+            var change = changes[i];
+            var assetName = $"{i:D4}_{AssetStem(change.GamePath, changes, i)}";
+            var assetPath = Path.Combine(assetsDir, assetName);
+            File.WriteAllBytes(assetPath, change.Modified);
+            File.WriteAllBytes(assetPath + ".orig", change.Original);
+            ops.Add(new OpJson("addfile-asset", change.GamePath, [], $"assets/{assetName}", $"assets/{assetName}.orig"));
+        }
+
+        var patch = new PatchJson(patchId, patchId, "1", ops, comment);
+        var jsonPath = Path.Combine(dir, patchId + ".patch.json");
+        File.WriteAllText(jsonPath, JsonSerializer.Serialize(patch, JsonOpts));
+        return jsonPath;
     }
 
     /// <summary>资产文件名 = 文件名主体；同目录内重名时补上级目录名避免覆盖。</summary>

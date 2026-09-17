@@ -81,6 +81,7 @@ internal static class FxEngineRunner
         setStatus($"{action}……执行中（打开索引需要数秒）", UiStatus.Kind.Neutral);
 
         var failed = 0;
+        var failedNames = new List<string>();
         var lastExitCode = 0;
         Exception? engineFailure = null;
         await Task.Run(() =>
@@ -96,7 +97,10 @@ internal static class FxEngineRunner
                         appendLog($"──── {invocation.BuiltInId ?? Path.GetFileName(invocation.Args[1])} ────");
                     lastExitCode = FxPatchEngine.Run(invocation.Args, invocation.BuiltInId);
                     if (lastExitCode != 0)
+                    {
                         failed++;
+                        failedNames.Add(invocation.BuiltInId ?? Path.GetFileName(invocation.Args[1]));
+                    }
                 }
             }
             catch (Exception ex)
@@ -131,7 +135,7 @@ internal static class FxEngineRunner
         }
 
         var detail = invocations.Count > 1
-            ? $"（成功 {invocations.Count - failed} 个，失败 {failed} 个）"
+            ? $"（成功 {invocations.Count - failed} 个，失败 {failed} 个：{string.Join("、", failedNames)}）"
             : $"（退出码 {lastExitCode}，详见下方引擎输出）";
         setStatus($"❌ {action}未完成{detail}。", UiStatus.Kind.Error);
         FileLogger.App.Error($"UI {action}: {failed}/{invocations.Count} invocation(s) failed.");

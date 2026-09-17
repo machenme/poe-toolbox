@@ -128,8 +128,11 @@ public sealed record AffixColorDef(string Id, byte R, byte G, byte B, byte A = 2
 /// <summary>关键词规则组：按包含匹配批量命中词缀（P1 不做正则，PRD 约束）。</summary>
 public sealed record AffixRuleGroup(string Id, string Name, string ColorId, string Pattern, bool Enabled);
 
-/// <summary>手动指派：某文件里的某个 stat 上某色。</summary>
-public sealed record AffixAssignment(string StatKey, string FilePath, string ColorId);
+/// <summary>手动指派：某文件里的某个 stat 上某色。
+/// <paramref name="LineText"/> 非空时只作用于显示文本与之相同的那些行——同一条 stat 常有
+/// 多行变体（如「提高/降低」两个方向），行级指派可以把它们分开各上各的色。
+/// 行匹配用剥离标签后的纯文本精确比对；空串 = 整条 stat（旧行为）。</summary>
+public sealed record AffixAssignment(string StatKey, string FilePath, string ColorId, string LineText = "");
 
 /// <summary>色阶：一组按档位从高到低排列的颜色 id（由颜色命名推断，见 <see cref="FromColors"/>）。
 /// 用于"按数值分档染色"：区间最高的行用第一个颜色，依次往下。</summary>

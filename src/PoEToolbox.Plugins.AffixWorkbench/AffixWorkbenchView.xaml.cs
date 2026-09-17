@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,42 +26,41 @@ public partial class AffixWorkbenchView : UserControl
         public EntryVm(
             AffixDataService.AffixEntry entry,
             string? colorId,
+            IReadOnlyDictionary<string, string>? lineColors,
             bool colorValueOnly,
             IReadOnlyList<IReadOnlyList<CsdTextSegment>>? previewOverride,
             string clientLanguage,
             HashSet<(string StatKey, string GamePath)> checkedKeys,
-            Action onCheckedChanged)
+            Action onCheckedChanged,
+            CsdDocument? sourceDoc = null)
         {
             Entry = entry;
             ColorId = colorId;
+            _lineColors = lineColors;
+            _sourceDoc = sourceDoc;
+            _clientLanguage = clientLanguage;
+            _colorValueOnly = colorValueOnly;
 
-            IReadOnlyList<IReadOnlyList<CsdTextSegment>> lines;
             if (previewOverride is not null)
             {
-                // 预览模式：行与分段来自模拟应用后的文档（含按档拆行与真实颜色标签）
-                lines = previewOverride;
+                // 预览模式：行与分段来自模拟应用后的文档（含按档拆行与真实颜色标签，行级指派天然逐行准确）
+                _lines = previewOverride;
                 PreviewColored = previewOverride.Any(line => line.Any(s => s.ColorId is not null));
+            }
+            else if (sourceDoc is not null)
+            {
+                // 游戏文件里已经有颜色标签（第三方补丁打的）：列表按文件里的真实分段呈现。
+                // 不改变预览标记——排序在 ApplyFilter 里统一做（PreviewColored || HasColorTag）。
+                _lines = null; // 首次显示时才解析，列表虚拟化下只有可见条目会算
+                PreviewColored = colorId is not null || (lineColors?.Count ?? 0) > 0;
             }
             else
             {
-                // 少数词缀（如镜像珠宝变体）有多达数十行显示文本，全渲染会把行撑到几百像素高；
-                // 列表只展示前几行，其余归入折叠提示
-                var text = entry.Lines;
-                if (text.Count > MaxPreviewLines)
-                    text = [.. text.Take(MaxPreviewLines),
-                        $"……其余 {text.Count - MaxPreviewLines} 行是同一词缀的其他变体/档位"];
-                // 色阶（分档）指派与游戏内一致：只有数值变色、词缀名保持默认色；单色指派是整行变色
-                lines = [.. text.Select(line => colorValueOnly
-                    ? CsdMarkup.ParseValueOnly(line, colorId)
-                    : (IReadOnlyList<CsdTextSegment>)[new CsdTextSegment(line, colorId)])];
-                PreviewColored = colorId is not null;
+                _lines = null; // 统一走惰性构建（BuildCore 会逐行套用行级颜色）
+                PreviewColored = colorId is not null || (lineColors?.Count ?? 0) > 0;
             }
 
-            if (lines.Count > MaxPreviewLines)
-                lines = [.. lines.Take(MaxPreviewLines),
-                    (IReadOnlyList<CsdTextSegment>)[new CsdTextSegment($"……其余 {lines.Count - MaxPreviewLines} 行是同一词缀的其他变体/档位", null)]];
-            PreviewLines = lines;
-
+            // 色阶（分档）指派与游戏内一致：只有数值变色、词缀名保持默认色；单色指派是整行变色
             LanguageLabel = entry.Language == clientLanguage ? "" : ToDisplayName(entry.Language);
             PlaceholderNote = CsdMarkup.IsPlaceholderOnly(entry.DisplayText) ? "由前后缀组合，游戏内填充" : "";
             _checkedKeys = checkedKeys;
@@ -68,20 +68,90 @@ public partial class AffixWorkbenchView : UserControl
             _isChecked = checkedKeys.Contains((entry.StatKey, entry.GamePath));
         }
 
+        public AffixDataService.AffixEntry Entry { get; }
+        public string StatKey => Entry.StatKey;
+        public string DisplayText => Entry.DisplayText;
+        public string? ColorId { get; }
+
         /// <summary>该词缀在当前方案/预览下会变色（预览模式下排在列表前面）。</summary>
         public bool PreviewColored { get; }
 
         /// <summary>列表预览最多显示的行数。</summary>
         private const int MaxPreviewLines = 4;
 
-        public AffixDataService.AffixEntry Entry { get; }
-        public string StatKey => Entry.StatKey;
-        public string DisplayText => Entry.DisplayText;
-        public string? ColorId { get; }
+        private readonly CsdDocument? _sourceDoc;
+        private readonly string _clientLanguage;
+        private readonly bool _colorValueOnly;
+        private readonly IReadOnlyDictionary<string, string>? _lineColors;
+        private IReadOnlyList<IReadOnlyList<CsdTextSegment>>? _lines;
 
         /// <summary>按显示行拆开的预览（每行一个分段列表）：一条词缀常有多行文本
-        /// （"提高/降低"两个方向、或不同档位），游戏按数值只显示其中一行。</summary>
-        public IReadOnlyList<IReadOnlyList<CsdTextSegment>> PreviewLines { get; }
+        /// （"提高/降低"两个方向、或不同档位），游戏按数值只显示其中一行。
+        /// 延迟到首次显示才解析——列表虚拟化下只有可见条目会付这个开销。</summary>
+        public IReadOnlyList<IReadOnlyList<CsdTextSegment>> PreviewLines
+        {
+            get
+            {
+                if (_lines is null)
+                    _lines = BuildCore();
+                return CapPreviewLines(_lines);
+            }
+        }
+
+        /// <summary>不分行的完整预览（检查器逐行上色用，不做 4 行截断）。</summary>
+        public IReadOnlyList<IReadOnlyList<CsdTextSegment>> FullPreviewLines => _lines ??= BuildCore();
+
+        private static IReadOnlyList<IReadOnlyList<CsdTextSegment>> CapPreviewLines(IReadOnlyList<IReadOnlyList<CsdTextSegment>> lines)
+        {
+            if (lines.Count <= MaxPreviewLines)
+                return lines;
+            return [.. lines.Take(MaxPreviewLines),
+                (IReadOnlyList<CsdTextSegment>)[new CsdTextSegment($"……其余 {lines.Count - MaxPreviewLines} 行是同一词缀的其他变体/档位", null)]];
+        }
+
+        private IReadOnlyList<IReadOnlyList<CsdTextSegment>> BuildCore()
+        {
+            if (_sourceDoc is { } doc)
+            {
+                var segments = doc.GetPreviewLines(Entry.StatKey, _clientLanguage);
+                if (segments.Count == 0)
+                    return BuildFromPlainText(Entry.Lines, ColorId, _lineColors, _colorValueOnly);
+                // 方案管了这条词缀时以方案为准（用户主动改优先），否则显示文件里本来的颜色；
+                // 行级指派只覆盖对应的那几行（按剥离标签后的纯文本匹配）
+                return ColorId is null && (_lineColors is null || _lineColors.Count == 0)
+                    ? segments
+                    : [.. segments.Select(line => OverlayPerLine(line, ColorId, _lineColors, _colorValueOnly))];
+            }
+            return BuildFromPlainText(Entry.Lines, ColorId, _lineColors, _colorValueOnly);
+        }
+
+        /// <summary>纯文本行 × 当前方案 → 预览分段（原列表行为，文件里没有标签时走这条）。</summary>
+        private static IReadOnlyList<IReadOnlyList<CsdTextSegment>> BuildFromPlainText(
+            IReadOnlyList<string> text, string? colorId, IReadOnlyDictionary<string, string>? lineColors, bool colorValueOnly)
+            => [.. text.Select(line =>
+            {
+                var lineColor = lineColors is not null && lineColors.TryGetValue(line, out var lc) ? lc : null;
+                var effective = lineColor ?? colorId;
+                return effective is null
+                    ? (IReadOnlyList<CsdTextSegment>)[new CsdTextSegment(line, null)]
+                    : colorValueOnly && lineColor is null
+                        ? CsdMarkup.ParseValueOnly(line, effective)
+                        : (IReadOnlyList<CsdTextSegment>)[new CsdTextSegment(line, effective)];
+            })];
+
+        /// <summary>在已有分段（可能带外来颜色）上叠加方案色：整条色覆盖所有行，行级色只覆盖匹配的行。</summary>
+        private static IReadOnlyList<CsdTextSegment> OverlayPerLine(
+            IReadOnlyList<CsdTextSegment> line, string? colorId, IReadOnlyDictionary<string, string>? lineColors, bool colorValueOnly)
+        {
+            var plain = string.Concat(line.Select(s => s.Text));
+            var lineColor = lineColors is not null && lineColors.TryGetValue(plain, out var lc) ? lc : null;
+            var effective = lineColor ?? colorId;
+            if (effective is null)
+                return line;
+            return colorValueOnly && lineColor is null
+                ? CsdMarkup.ParseValueOnly(plain, effective)
+                : [new CsdTextSegment(plain, effective)];
+        }
 
         /// <summary>显示文本不是客户端语言时标出实际语言（与客户端一致时不标，避免整列刷屏）。</summary>
         public string LanguageLabel { get; }
@@ -250,6 +320,8 @@ public partial class AffixWorkbenchView : UserControl
             _groupFilter = null;
             _checked.Clear(); // 换了客户端/重新连接：勾选重置
             SourceTree.ItemsSource = BuildSourceTree(_service.Sources);
+            // 游戏里已有的颜色（含第三方补丁定义的）登记进调色板，列表才能把它们的标签渲染出来
+            WorkbenchPalette.SetExternal(_service.ExternalColors);
             RebuildEntryList();
             RefreshCheckedSummary();
             Output.SetStatus($"已连接：{_service.Sources.Count} 个数据源，{_service.Entries.Count} 条词缀（客户端语言：{ToDisplayName(_service.ClientLanguage)}）。", UiStatus.Kind.Success);
@@ -293,12 +365,16 @@ public partial class AffixWorkbenchView : UserControl
         _allEntries = _service.Entries
             .Select(e =>
             {
-                var colorId = AffixDataService.EffectiveColorId(_scheme, e);
+                var (colorId, lineColors) = AffixDataService.EffectiveMatch(_scheme, e);
                 var previewOverride = _service.TryGetPreviewDoc(e.GamePath) is { } previewDoc
                     ? previewDoc.GetPreviewLines(e.StatKey, _service.ClientLanguage)
                     : null;
-                return new EntryVm(e, colorId, colorId is not null && _scheme.IsRampId(colorId),
-                    previewOverride, _service.ClientLanguage, _checked, RefreshCheckedSummary);
+                // 文件里已有第三方标签、且没在预览模式时，把源文档给视图模型让它按真实分段渲染
+                var sourceDoc = previewOverride is null && e.HasColorTag
+                    ? _service.TryGetDoc(e.GamePath)
+                    : null;
+                return new EntryVm(e, colorId, lineColors, colorId is not null && _scheme.IsRampId(colorId),
+                    previewOverride, _service.ClientLanguage, _checked, RefreshCheckedSummary, sourceDoc);
             })
             .ToList();
         SourceSummary.Text = $"{_service.Sources.Count} 个数据源 · {_service.Entries.Count} 条词缀 · {ToDisplayName(_service.ClientLanguage)}";
@@ -327,11 +403,9 @@ public partial class AffixWorkbenchView : UserControl
         }
 
         var list = query.ToList();
-        if (_service.PreviewActive)
-        {
-            // 预览模式：会把色的词缀排在最前面，方便先检查效果（其余保持原顺序）
-            list = [.. list.OrderByDescending(vm => vm.PreviewColored)];
-        }
+        // 有颜色的词缀排前面，其余保持原顺序（OrderByDescending 稳定排序）。「有颜色」按条判定：
+        // 方案已指派（预览模式下含模拟应用结果）或该条显示行里真的有颜色标签（第三方补丁打的）。
+        list = [.. list.OrderByDescending(vm => vm.PreviewColored || vm.Entry.HasColorTag)];
         EntryList.ItemsSource = list;
 
         var scope = _sourceFilter is not null
@@ -372,6 +446,7 @@ public partial class AffixWorkbenchView : UserControl
 
     private void CheckAll_Click(object sender, RoutedEventArgs e)
     {
+        CheckMenu.IsOpen = false; // 菜单项点击后收起
         _bulkChecking = true;
         try
         {
@@ -387,6 +462,7 @@ public partial class AffixWorkbenchView : UserControl
 
     private void InvertCheck_Click(object sender, RoutedEventArgs e)
     {
+        CheckMenu.IsOpen = false; // 菜单项点击后收起
         _bulkChecking = true;
         try
         {
@@ -402,6 +478,7 @@ public partial class AffixWorkbenchView : UserControl
 
     private void ClearCheck_Click(object sender, RoutedEventArgs e)
     {
+        CheckMenu.IsOpen = false; // 菜单项点击后收起
         _bulkChecking = true;
         try
         {
@@ -434,7 +511,8 @@ public partial class AffixWorkbenchView : UserControl
         var colorId = colorLabel.Split('　')[0];
         foreach (var vm in targets)
         {
-            _scheme.Assignments.RemoveAll(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath);
+            // 只替换整条指派，行级指派（LineText 非空）保留——它们是更精确的意图
+            _scheme.Assignments.RemoveAll(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath && a.LineText.Length == 0);
             _scheme.Assignments.Add(new AffixAssignment(vm.StatKey, vm.Entry.GamePath, colorId));
         }
         Output.AppendLog($"批量上色：{targets.Count} 条勾选词缀 → {colorId}");
@@ -616,7 +694,6 @@ public partial class AffixWorkbenchView : UserControl
         var vm = EntryList.SelectedItem as EntryVm;
         InspectorPanel.Visibility = vm is null ? Visibility.Collapsed : Visibility.Visible;
         InspectorStatKey.Text = vm?.StatKey ?? "未选择词缀";
-        ApplyColorButton.IsEnabled = RemoveColorButton.IsEnabled = vm is not null;
         ApplyRampButton.IsEnabled = vm is not null && RampCombo.Items.Count > 0;
 
         InspectorColorCombo.ItemsSource = _scheme.Colors
@@ -625,30 +702,68 @@ public partial class AffixWorkbenchView : UserControl
         var index = _scheme.Colors.ToList().FindIndex(c => c.Id == effective);
         InspectorColorCombo.SelectedIndex = index;
 
-        var brush = WorkbenchPalette.TryGet(effective, out var color)
-            ? new SolidColorBrush(color)
-            : Brushes.Transparent;
-        EffectiveColorSwatch.Background = brush;
-
-        LivePreview.ItemsSource = vm is not null && _service.TryGetDoc(vm.Entry.GamePath) is { } doc
-            ? doc.GetPreviewLines(vm.Entry.StatKey, _service.ClientLanguage)
-            : null;
+        // 游戏内文本逐行预览（含方案行级颜色），每行带「只上色这一行」操作——
+        // 同一条 stat 的多行变体（如"提高/降低"）可以分开各上各色
+        LinePreview.ItemsSource = vm is null ? null : BuildLineVms(vm);
         RefreshRampPreview();
     }
 
-    private void ApplyColor_Click(object sender, RoutedEventArgs e)
+    /// <summary>检查器里的一行文本：分段（带生效颜色）+ 是否有行级指派（决定移除按钮显隐）。</summary>
+    private sealed class LineVm
     {
-        if (EntryList.SelectedItem is not EntryVm vm)
+        public LineVm(IReadOnlyList<CsdTextSegment> segments, bool hasOwnAssignment)
+        {
+            Segments = segments;
+            PlainText = string.Concat(segments.Select(s => s.Text));
+            HasOwnAssignment = hasOwnAssignment;
+        }
+
+        public IReadOnlyList<CsdTextSegment> Segments { get; }
+        public string PlainText { get; }
+        public bool HasOwnAssignment { get; }
+        public System.Windows.Visibility RemoveVisibility
+            => HasOwnAssignment ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+    }
+
+    private List<LineVm> BuildLineVms(EntryVm vm)
+    {
+        var ownLines = _scheme.Assignments
+            .Where(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath && a.LineText.Length > 0)
+            .Select(a => a.LineText)
+            .ToHashSet(StringComparer.Ordinal);
+        return [.. vm.FullPreviewLines.Select(line => new LineVm(line, ownLines.Contains(string.Concat(line.Select(s => s.Text)))))];
+    }
+
+    /// <summary>只给「游戏内当前文本」里对应的那一行上色（用检查器选中的颜色）：
+    /// 同一条 stat 的其他行（如"降低"方向）不受影响。</summary>
+    private void ApplyLineColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (EntryList.SelectedItem is not EntryVm vm || sender is not FrameworkElement { DataContext: LineVm line })
             return;
         if (InspectorColorCombo.SelectedItem is not string colorLabel)
         {
-            Output.SetStatus("请先选择颜色。", UiStatus.Kind.Warning);
+            Output.SetStatus("请先在上方选择颜色。", UiStatus.Kind.Warning);
             return;
         }
         var colorId = colorLabel.Split('　')[0];
-        _scheme.Assignments.RemoveAll(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath);
-        _scheme.Assignments.Add(new AffixAssignment(vm.StatKey, vm.Entry.GamePath, colorId));
-        Output.AppendLog($"上色：{vm.StatKey} → {colorId}");
+        _scheme.Assignments.RemoveAll(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath && a.LineText == line.PlainText);
+        _scheme.Assignments.Add(new AffixAssignment(vm.StatKey, vm.Entry.GamePath, colorId, line.PlainText));
+        Output.AppendLog($"行级上色：{vm.StatKey} 的「{line.PlainText}」行 → {colorId}");
+        RefreshPreview();
+        RebuildEntryList();
+        RefreshInspector();
+    }
+
+    /// <summary>移除某一行的行级指派（整条指派与规则不受影响）。</summary>
+    private void RemoveLineColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (EntryList.SelectedItem is not EntryVm vm || sender is not FrameworkElement { DataContext: LineVm line })
+            return;
+        var removed = _scheme.Assignments.RemoveAll(
+            a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath && a.LineText == line.PlainText);
+        Output.AppendLog(removed > 0
+            ? $"移除行级指派：{vm.StatKey} 的「{line.PlainText}」行"
+            : $"该行没有行级指派：{line.PlainText}");
         RefreshPreview();
         RebuildEntryList();
         RefreshInspector();
@@ -718,7 +833,8 @@ public partial class AffixWorkbenchView : UserControl
         var colorId = negative is null ? ramp.Prefix : $"{ramp.Prefix}|{negative.Prefix}";
         foreach (var vm in targets)
         {
-            _scheme.Assignments.RemoveAll(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath);
+            // 只替换整条指派，行级指派（LineText 非空）保留
+            _scheme.Assignments.RemoveAll(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath && a.LineText.Length == 0);
             _scheme.Assignments.Add(new AffixAssignment(vm.StatKey, vm.Entry.GamePath, colorId));
         }
         var detail = negative is null ? "按数值区间分档" : $"按数值区间分档 + 正负拆分（负向 {negative.Prefix}）";
@@ -755,17 +871,6 @@ public partial class AffixWorkbenchView : UserControl
             return;
         }
         combo.SelectedIndex = Math.Max(0, index);
-    }
-
-    private void RemoveColor_Click(object sender, RoutedEventArgs e)
-    {
-        if (EntryList.SelectedItem is not EntryVm vm)
-            return;
-        var removed = _scheme.Assignments.RemoveAll(a => a.StatKey == vm.StatKey && a.FilePath == vm.Entry.GamePath);
-        Output.AppendLog(removed > 0 ? $"移除指派：{vm.StatKey}" : $"该词缀没有手动指派（规则命中不受影响）：{vm.StatKey}");
-        RefreshPreview();
-        RebuildEntryList();
-        RefreshInspector();
     }
 
     // ═══ 方案管理 ═══════════════════════════════════════════════
@@ -825,6 +930,7 @@ public partial class AffixWorkbenchView : UserControl
 
     private void SaveScheme_Click(object sender, RoutedEventArgs e)
     {
+        SchemeMenu.IsOpen = false; // 菜单项点击后收起
         try
         {
             _scheme.Save();
@@ -839,6 +945,7 @@ public partial class AffixWorkbenchView : UserControl
 
     private void DeleteScheme_Click(object sender, RoutedEventArgs e)
     {
+        SchemeMenu.IsOpen = false; // 菜单项点击后收起
         var name = SchemeCombo.SelectedItem as string;
         if (name is null)
             return;
@@ -863,6 +970,7 @@ public partial class AffixWorkbenchView : UserControl
 
     private void ImportScheme_Click(object sender, RoutedEventArgs e)
     {
+        SchemeMenu.IsOpen = false; // 菜单项点击后收起
         var dlg = new OpenFileDialog { Title = "导入上色方案", Filter = "上色方案 (*.json)|*.json" };
         if (dlg.ShowDialog() != true)
             return;
@@ -889,6 +997,7 @@ public partial class AffixWorkbenchView : UserControl
 
     private void ExportScheme_Click(object sender, RoutedEventArgs e)
     {
+        SchemeMenu.IsOpen = false; // 菜单项点击后收起
         var dlg = new SaveFileDialog { Title = "导出上色方案", FileName = _scheme.Name, Filter = "上色方案 (*.json)|*.json" };
         if (dlg.ShowDialog() != true)
             return;
@@ -905,7 +1014,8 @@ public partial class AffixWorkbenchView : UserControl
 
     private void ColorEditor_Click(object sender, RoutedEventArgs e)
     {
-        var window = new ColorEditorWindow(_scheme) { Owner = Window.GetWindow(this) };
+        SchemeMenu.IsOpen = false; // 菜单项点击后收起
+        var window = new ColorEditorWindow(_scheme, _service.ReferencedExternalColors) { Owner = Window.GetWindow(this) };
         if (window.ShowDialog() == true)
         {
             WorkbenchPalette.Update(_scheme.Colors);
@@ -937,6 +1047,21 @@ public partial class AffixWorkbenchView : UserControl
         }
     }
 
+    /// <summary>恢复默认：回到刚打开游戏数据的状态——清除方案的应用后模拟预览，
+    /// 列表按游戏文件当前的真实内容显示（已打进文件里的颜色仍然可见）。不写盘、不动方案。</summary>
+    private void RestorePreview_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_service.IsConnected)
+        {
+            Output.SetStatus("请先连接游戏文件。", UiStatus.Kind.Warning);
+            return;
+        }
+        _service.ClearPreview();
+        RebuildEntryList();
+        RefreshInspector();
+        Output.SetStatus("已恢复默认显示：列表按游戏文件当前内容展示（方案预览已清除，改动方案后会自动重算）。", UiStatus.Kind.Neutral);
+    }
+
     private async void Apply_Click(object sender, RoutedEventArgs e)
     {
         if (!RequirePoe2() || !_service.IsConnected)
@@ -946,17 +1071,22 @@ public partial class AffixWorkbenchView : UserControl
         }
         await RunBusyAsync("应用词缀修改", async () =>
         {
-            var mismatched = _service.VerifyUnchanged();
+            IReadOnlyList<string> mismatched;
+            try
+            {
+                mismatched = _service.VerifyUnchanged();
+            }
+            catch (Exception ex) when (AffixDataService.IsMissingPatchBundle(ex) || ex is DirectoryNotFoundException)
+            {
+                // 连接后补丁 bundle 被外部删了（恢复默认游戏数据/客户端校验）：修复索引并重连，
+                // 而不是把「找不到路径」的英文异常甩给用户。
+                return await RecoverBrokenPatchBundleAsync(ex);
+            }
             if (mismatched.Count > 0)
             {
                 return $"游戏文件与连接时不一致（{string.Join("、", mismatched)}），" +
                        "可能被其他补丁或外部工具修改过。请点击「打开游戏文件」重读后再试。";
             }
-
-            // 从原始索引基线提取真原版（约 10~30 秒）：即使客户端被历史坏补丁污染，
-            // 本次应用的原版备份也是真原版，之后「恢复原版」才能回到干净状态
-            Output.AppendLog("正在提取原始索引基线中的原版文件（首次约 10~30 秒）……");
-            await Task.Run(() => _service.LoadTrueOriginals());
 
             IReadOnlyList<AffixPatchBuilder.FileChange> changes;
             try
@@ -995,6 +1125,30 @@ public partial class AffixWorkbenchView : UserControl
         });
     }
 
+    /// <summary>连接后补丁 bundle 被外部删除（恢复默认游戏数据、客户端校验、手动清理）：
+    /// 读取游戏文件会抛「找不到路径的一部分」。释放句柄 → 按基线修复悬空索引 → 重新连接，
+    /// 让用户重按一次「应用」即可继续；修不动时给出下一步指引，不甩英文异常。</summary>
+    private async Task<string> RecoverBrokenPatchBundleAsync(Exception cause)
+    {
+        Output.AppendLog($"[修复] 读取游戏数据失败：{cause.Message}");
+        Output.AppendLog("[修复] 补丁文件在连接后被外部删除，连接基线已失效。正在修复索引并重新连接……");
+        _service.ReleaseFileLocks();
+        try
+        {
+            PatchBundleRepair.RepairIfBroken(_gameDataPath!, msg => Output.AppendLog(msg));
+            await _service.ConnectAsync(_gameDataPath);
+        }
+        catch (Exception ex)
+        {
+            FileLogger.App.Error("词缀上色自动修复失败。", ex);
+            throw new InvalidOperationException(
+                "自动修复未完成：请先退出游戏，到「特效补丁」页执行「恢复游戏原版」后再回来重新连接。", ex);
+        }
+        return _service.IsConnected
+            ? "索引已修复并重新连接。刚才的「应用」未写入任何内容，请再次点击「应用词缀修改」。"
+            : "自动修复未完成，请重新连接游戏文件后重试。";
+    }
+
     private async void Revert_Click(object sender, RoutedEventArgs e)
     {
         var jsonPath = Path.Combine(ConfigService.PatchesDirectory, AffixPatchBuilder.PatchId, AffixPatchBuilder.PatchId + ".patch.json");
@@ -1031,12 +1185,76 @@ public partial class AffixWorkbenchView : UserControl
         });
     }
 
+    /// <summary>把当前方案导出为可分发的独立补丁 zip：csd/uisettings 变更 + 颜色定义一起带走，
+    /// 对方不装本工具、在「特效补丁」页选这个 zip 即可应用。应用顺序同样是「最后再上色」。</summary>
+    private async void ExportSchemePatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (!RequirePoe2() || !_service.IsConnected)
+        {
+            Output.SetStatus("请先连接游戏。", UiStatus.Kind.Warning);
+            return;
+        }
+        var dlg = new SaveFileDialog
+        {
+            Title = "导出词缀补丁",
+            FileName = $"{_scheme.Name}.zip",
+            Filter = "补丁包 (*.zip)|*.zip",
+        };
+        if (dlg.ShowDialog(Window.GetWindow(this)) != true)
+            return;
+
+        await RunBusyAsync("导出词缀补丁", async () =>
+        {
+            IReadOnlyList<AffixPatchBuilder.FileChange> changes;
+            try
+            {
+                changes = _service.ComputeChanges(_scheme, forExport: true);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ex.Message;
+            }
+            if (changes.Count == 0)
+                return "当前方案没有产生任何变更，无需导出。";
+
+            // 方案名 → 合法补丁 id（只留 ASCII 字母数字，太长截断）
+            var stem = new string(_scheme.Name.Where(char.IsAsciiLetterOrDigit).Take(24).ToArray());
+            var patchId = "affix-" + (stem.Length == 0 ? "scheme" : stem.ToLowerInvariant());
+
+            var stage = Path.Combine(Path.GetTempPath(), "poetoolbox-affix-export-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var jsonPath = await Task.Run(() => AffixPatchBuilder.BuildExport(changes, stage, patchId,
+                    comment: "由 PoEToolbox「词缀上色」导出的方案补丁：整文件替换词缀描述并附带颜色定义（uisettings.xml）。"
+                             + "请先应用其他补丁、最后应用本补丁；之后可在「词缀上色」页重连接管重涂。"));
+                var patchDir = Path.GetDirectoryName(jsonPath)!;
+                if (File.Exists(dlg.FileName))
+                    File.Delete(dlg.FileName);
+                await Task.Run(() => ZipFile.CreateFromDirectory(patchDir, dlg.FileName));
+                Output.AppendLog($"补丁标识：{patchId}，变更文件 {changes.Count} 个（含颜色定义）。");
+                return $"✅ 词缀补丁已导出：{dlg.FileName}";
+            }
+            finally
+            {
+                try { Directory.Delete(stage, recursive: true); } catch (IOException) { /* 临时目录尽力清理 */ }
+            }
+        });
+    }
+
     // ═══ 通用 ═══════════════════════════════════════════════════
+
+    /// <summary>下拉菜单收纳的低频操作：菜单项点击后收起菜单（Popup 点内部不会自动关）。</summary>
+    private void SchemeMenu_Closed(object? sender, EventArgs e) => SchemeMenuToggle.IsChecked = false;
+    private void CheckMenu_Closed(object? sender, EventArgs e) => CheckMenuToggle.IsChecked = false;
+
+    /// <summary>点「方案维护 / 勾选」按钮开合对应下拉菜单（勾选状态与 Popup 开合同步）。</summary>
+    private void SchemeMenuToggle_Changed(object sender, RoutedEventArgs e) => SchemeMenu.IsOpen = SchemeMenuToggle.IsChecked == true;
+    private void CheckMenuToggle_Changed(object sender, RoutedEventArgs e) => CheckMenu.IsOpen = CheckMenuToggle.IsChecked == true;
 
     private void SetEngineBusy(bool busy)
     {
         _busy = busy;
-        ApplyButton.IsEnabled = RevertButton.IsEnabled = ConnectButton.IsEnabled = !busy;
+        ApplyButton.IsEnabled = RevertButton.IsEnabled = ConnectButton.IsEnabled = ExportPatchButton.IsEnabled = !busy;
     }
 
     private async Task RunBusyAsync(string action, Func<Task<string>> work)

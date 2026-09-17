@@ -137,4 +137,41 @@ public sealed class AffixColorSchemeTests : IDisposable
         Assert.Equal(255, color.A);
         Assert.False(color.HasAlpha);
     }
+
+    /// <summary>行级指派（LineText 非空）完整往返；旧文件没有 LineText 字段时按空串处理（= 整条指派）。</summary>
+    [Fact]
+    public void SaveLoad_RoundTrip_PreservesLineScopedAssignment()
+    {
+        var scheme = new AffixColorScheme
+        {
+            Name = "行级",
+            Colors = [new AffixColorDef("VeryLucky", 180, 50, 255)],
+            Assignments =
+            [
+                new AffixAssignment("stat_a", "data/x.csd", "VeryLucky", "提高 {0}%"),
+                new AffixAssignment("stat_b", "data/x.csd", "VeryLucky"),
+            ],
+        };
+        scheme.Save();
+
+        var loaded = AffixColorScheme.Load("行级");
+        Assert.Equal(
+            [new AffixAssignment("stat_a", "data/x.csd", "VeryLucky", "提高 {0}%")],
+            loaded.Assignments.Where(a => a.LineText.Length > 0).ToList());
+        // 无 LineText 的指派读回为空串 = 整条指派
+        Assert.Equal("", loaded.Assignments.Single(a => a.StatKey == "stat_b").LineText);
+    }
+
+    /// <summary>旧版方案 JSON（指派没有 LineText 字段）导入后仍是整条指派。</summary>
+    [Fact]
+    public void Load_LegacyJsonWithoutLineText_AssignmentIsWholeStat()
+    {
+        var path = Path.Combine(_dir, "legacy-assign.json");
+        File.WriteAllText(path,
+            """{"SchemaVersion":1,"Name":"legacy","Colors":[{"Id":"Lucky","R":10,"G":20,"B":30}],"Rules":[],"Assignments":[{"StatKey":"stat_a","FilePath":"data/x.csd","ColorId":"Lucky"}]}""");
+
+        var loaded = AffixColorScheme.Import(path);
+        var assignment = Assert.Single(loaded.Assignments);
+        Assert.Equal("", assignment.LineText);
+    }
 }

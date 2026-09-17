@@ -22,7 +22,14 @@
                                 Height="36" IsEnabled="False" Click="LoadButton_Click"/>
                         <Button x:Name="ApplyButton" Content="写入地图标签" Style="{StaticResource PrimaryButton}"
                                 Height="48" FontSize="15" IsEnabled="False" Margin="0,8,0,0" Click="ApplyButton_Click"/>
-                        <TextBlock Text="写入前会自动保存当前索引快照。"
+                        <TextBlock Text="第一次写入前会自动保存当前地图文件，之后可一键撤回。"
+                                   Style="{StaticResource SmallText}" TextAlignment="Center"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        <Button x:Name="RestoreButton" Content="恢复到上一次改动前" Style="{StaticResource SecondaryButton}"
+                                Height="34" IsEnabled="False" Margin="0,16,0,0"
+                                Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource ErrorBrush}"
+                                Click="RestoreButton_Click"/>
+                        <TextBlock x:Name="RestoreHint" Text="把地图数字与低 mip 恢复到第一次写入地图标签之前的样子。"
                                    Style="{StaticResource SmallText}" TextAlignment="Center"
                                    TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>

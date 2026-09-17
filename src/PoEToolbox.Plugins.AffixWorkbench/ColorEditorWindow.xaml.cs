@@ -30,19 +30,41 @@ public partial class ColorEditorWindow : Window
         public Brush Swatch => new SolidColorBrush(Color.FromArgb(A, R, G, B));
 
         public string Hex => A == 255 ? $"#{R:X2}{G:X2}{B:X2}" : $"#{A:X2}{R:X2}{G:X2}{B:X2}";
+
+        /// <summary>游戏文件里的原始写法（<c>R,G,B</c> 或 <c>A,R,G,B</c>），只在只读的「游戏已有颜色」里用。</summary>
+        public string Note { get; set; } = "";
     }
 
     private readonly AffixColorScheme _scheme;
     private readonly List<Row> _rows = [];
+    /// <summary>游戏里已经在用的颜色（只读展示，不进方案）：id 集合用于阻止用户重名。</summary>
+    private readonly List<Row> _gameRows = [];
     private bool _updatingSliders;
     private bool _saved;
 
-    public ColorEditorWindow(AffixColorScheme scheme)
+    /// <param name="scheme">上色方案（增删改都写回它）。</param>
+    /// <param name="gameColors">游戏里已经被词缀引用到的外来颜色定义（第三方补丁 / 游戏自带）。</param>
+    public ColorEditorWindow(AffixColorScheme scheme, IEnumerable<AffixColorDef>? gameColors = null)
     {
         _scheme = scheme;
         InitializeComponent();
         _rows.AddRange(scheme.Colors.Select(c => new Row { Id = c.Id, R = c.R, G = c.G, B = c.B, A = c.A }));
+        var taken = _rows.Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
+        _gameRows.AddRange(
+            (gameColors ?? [])
+            .Where(c => !taken.Contains(c.Id))
+            .Select(c => new Row
+            {
+                Id = c.Id,
+                R = c.R,
+                G = c.G,
+                B = c.B,
+                A = c.A,
+                Note = c.A == 255 ? $"{c.R},{c.G},{c.B}" : $"{c.A},{c.R},{c.G},{c.B}",
+            }));
         ColorList.ItemsSource = _rows;
+        ExternalList.ItemsSource = _gameRows;
+        ExternalEmpty.Visibility = _gameRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         SliderPanel.IsEnabled = false;
     }
 
@@ -104,6 +126,54 @@ public partial class ColorEditorWindow : Window
         var next = (int.Parse(digits, CultureInfo.InvariantCulture) + 1)
             .ToString("D" + digits.Length, CultureInfo.InvariantCulture);
         return prefix + next;
+    }
+
+    /// <summary>照抄游戏里已有的某个颜色，做成属于自己的新颜色：id 自动避开同名。
+    /// 为什么要避开：用自己的颜色和游戏里那个颜色同名的话，应用时会被当成"接管那套配色"，
+    /// 引用它的所有词缀（可能是几百条）会一起被重涂；改一条的设计是换一个新 id 单独指派。</summary>
+    private void Take_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Row source)
+            return;
+        var row = new Row
+        {
+            Id = SuggestId(source.Id),
+            R = source.R,
+            G = source.G,
+            B = source.B,
+            A = source.A,
+        };
+        _rows.Add(row);
+        ColorList.Items.Refresh();
+        ColorList.SelectedItem = row;
+        EditingLabel.Text = $"已照抄 {source.Id} → 新建 {row.Id}（可改 id / 颜色，确定后就能指派给词缀）";
+    }
+
+    /// <summary>给照抄来的颜色起一个新 id：原 id + Mine（必要时截断到 16 字符），撞了就加数字。</summary>
+    private string SuggestId(string sourceId)
+    {
+        var taken = _rows.Select(r => r.Id).Concat(_gameRows.Select(r => r.Id)).ToHashSet(StringComparer.Ordinal);
+        var stem = new string(sourceId.Where(char.IsAsciiLetterOrDigit).ToArray());
+        if (stem.Length == 0)
+            stem = "Custom";
+        foreach (var candidate in CandidateIds(stem))
+        {
+            if (!taken.Contains(candidate) && CsdDocument.ColorIdPattern.IsMatch(candidate))
+                return candidate;
+        }
+        return "CustomColor1";
+    }
+
+    private static IEnumerable<string> CandidateIds(string stem)
+    {
+        for (var i = 1; i <= 9; i++)
+        {
+            var suffix = i == 1 ? "Mine" : "Mine" + i.ToString(CultureInfo.InvariantCulture);
+            var combined = stem.Length + suffix.Length > 16
+                ? stem[..Math.Max(1, 16 - suffix.Length)]
+                : stem;
+            yield return combined + suffix;
+        }
     }
 
     private void ColorList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -192,6 +262,17 @@ public partial class ColorEditorWindow : Window
         if (duplicated is not null)
         {
             MessageBox.Show(Window.GetWindow(this)!, $"颜色 id 重复：{duplicated.Key}", "无法保存", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        // 与游戏里已有的颜色同名 = 接管那套配色的全部引用（可能几百条），不是"改一条"的用法
+        var colliding = _rows.FirstOrDefault(r => _gameRows.Any(g => g.Id == r.Id));
+        if (colliding is not null)
+        {
+            MessageBox.Show(Window.GetWindow(this)!,
+                $"颜色 {colliding.Id} 与游戏里已有的一个颜色同名。\n\n" +
+                "用了同名就等于接管那个颜色——引用它的所有词缀（可能是几百条）会一起按你的颜色重涂，不再是只改你指派的那几条。\n\n" +
+                "请换一个 id（例如改成别的前缀），或者点「照抄这个颜色」自动生成新 id。",
+                "无法保存", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 

@@ -6,6 +6,36 @@
              Background="{DynamicResource WindowBgBrush}">
     <UserControl.Resources>
         <local:AffixColorBrushConverter x:Key="AffixBrush"/>
+        <!-- 低频操作收纳：下拉开关（ToggleButton + Popup，不用 Expander） -->
+        <Style x:Key="MenuToggle" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"
+                                Padding="10,4">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BorderBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BorderBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="MenuItemButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Margin" Value="0,1"/>
+        </Style>
     </UserControl.Resources>
     <Grid Margin="0,8,0,8">
         <Grid.RowDefinitions>
@@ -29,13 +59,34 @@
                                VerticalAlignment="Center" Margin="12,0,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="ApplyRampAllButton" Content="一键上色" Style="{StaticResource SecondaryButton}"
+                            Click="ApplyRampToAllTiered_Click"
+                            ToolTip="给所有带档位阶梯的装备词缀（约 600 个）一键指派当前色阶：应用后每个词缀按数值拆成 T1~T5 五档、全部上色，只染数值不改文本；没有色阶时自动创建默认绿色阶"/>
+                    <Button x:Name="RestorePreviewButton" Content="恢复默认" Style="{StaticResource SecondaryButton}" Margin="8,0,14,0"
+                            Click="RestorePreview_Click"
+                            ToolTip="回到刚打开游戏数据的状态：清除方案的应用后模拟预览，列表按游戏文件当前的真实内容显示（已打进文件里的颜色仍然可见）。改动方案后会自动重算预览，想看未模拟的状态时点这个。"/>
                     <TextBlock Text="方案" Style="{StaticResource SmallText}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="SchemeCombo" Width="150" Height="30" SelectionChanged="SchemeCombo_SelectionChanged"/>
-                    <Button x:Name="SaveSchemeButton" Content="保存方案" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="SaveScheme_Click"/>
-                    <Button x:Name="DeleteSchemeButton" Content="删除" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="DeleteScheme_Click"/>
-                    <Button x:Name="ImportSchemeButton" Content="导入" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="ImportScheme_Click"/>
-                    <Button x:Name="ExportSchemeButton" Content="导出" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="ExportScheme_Click"/>
-                    <Button x:Name="ColorButton" Content="颜色修改" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Click="ColorEditor_Click"/>
+                    <ToggleButton x:Name="SchemeMenuToggle" Content="方案维护 ▾" Style="{StaticResource MenuToggle}" Height="30" Margin="8,0,0,0"
+                                  Checked="SchemeMenuToggle_Changed" Unchecked="SchemeMenuToggle_Changed"
+                                  ToolTip="保存 / 删除 / 导入 / 导出上色方案，以及颜色修改。"/>
+                    <Popup x:Name="SchemeMenu" PlacementTarget="{Binding ElementName=SchemeMenuToggle}" Placement="Bottom"
+                           StaysOpen="False" AllowsTransparency="True" Closed="SchemeMenu_Closed">
+                        <Border Background="{DynamicResource WindowBgBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,4,12,12" MinWidth="150">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <Button Content="保存方案" Style="{StaticResource MenuItemButton}" Click="SaveScheme_Click"/>
+                                <Button Content="删除方案" Style="{StaticResource MenuItemButton}" Click="DeleteScheme_Click"/>
+                                <Button Content="导入方案" Style="{StaticResource MenuItemButton}" Click="ImportScheme_Click"/>
+                                <Button Content="导出方案" Style="{StaticResource MenuItemButton}" Click="ExportScheme_Click"/>
+                                <Separator Margin="2,4" Background="{DynamicResource BorderBrush}"/>
+                                <Button Content="颜色修改" Style="{StaticResource MenuItemButton}" Click="ColorEditor_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
                 </StackPanel>
             </Grid>
         </Border>
@@ -98,37 +149,39 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <CheckBox x:Name="RegexToggle" Content="正则" VerticalAlignment="Center"
                                   Checked="RegexToggle_Changed" Unchecked="RegexToggle_Changed"
                                   ToolTip="搜索框按正则表达式匹配（例如 ^local_.*_\+%$）"/>
-                        <Button Grid.Column="1" x:Name="CheckAllButton" Content="全选" Style="{StaticResource SecondaryButton}"
-                                Margin="10,0,0,0" Padding="10,3" Click="CheckAll_Click"
-                                ToolTip="勾选当前列表里的全部条目"/>
-                        <Button Grid.Column="2" x:Name="InvertCheckButton" Content="反选" Style="{StaticResource SecondaryButton}"
-                                Margin="6,0,0,0" Padding="10,3" Click="InvertCheck_Click"
-                                ToolTip="勾选状态取反（只作用于当前列表）"/>
-                        <Button Grid.Column="3" x:Name="ClearCheckButton" Content="清空勾选" Style="{StaticResource SecondaryButton}"
-                                Margin="6,0,0,0" Padding="10,3" Click="ClearCheck_Click"/>
-                        <TextBlock Grid.Column="4" x:Name="CheckedSummary" Style="{StaticResource SmallText}"
+                        <ToggleButton Grid.Column="1" x:Name="CheckMenuToggle" Content="勾选 ▾" Style="{StaticResource MenuToggle}"
+                                      Height="28" Margin="10,0,0,0" Checked="CheckMenuToggle_Changed" Unchecked="CheckMenuToggle_Changed"
+                                      ToolTip="全选 / 反选 / 清空当前筛选结果的勾选。"/>
+                        <Popup Grid.Column="1" x:Name="CheckMenu" PlacementTarget="{Binding ElementName=CheckMenuToggle}" Placement="Bottom"
+                               StaysOpen="False" AllowsTransparency="True" Closed="CheckMenu_Closed">
+                            <Border Background="{DynamicResource WindowBgBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,4,12,12" MinWidth="130">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+                                </Border.Effect>
+                                <StackPanel>
+                                    <Button Content="全选" Style="{StaticResource MenuItemButton}" Click="CheckAll_Click"/>
+                                    <Button Content="反选" Style="{StaticResource MenuItemButton}" Click="InvertCheck_Click"/>
+                                    <Button Content="清空勾选" Style="{StaticResource MenuItemButton}" Click="ClearCheck_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                        <TextBlock Grid.Column="2" x:Name="CheckedSummary" Style="{StaticResource SmallText}"
                                    VerticalAlignment="Center" Margin="10,0,0,0"/>
-                        <Button Grid.Column="5" x:Name="ApplyCheckedButton" Content="给勾选项上色"
+                        <Button Grid.Column="3" x:Name="ApplyCheckedButton" Content="给勾选项上色"
                                 Style="{StaticResource SecondaryButton}" Padding="10,3" Click="ApplyColorToChecked_Click"
-                                ToolTip="用右侧「条目检查器」里选中的颜色，一次给所有勾选的词缀上色"/>
-                        <Button Grid.Column="6" x:Name="ApplyRampCheckedButton" Content="勾选项按数值分档"
+                                ToolTip="用「游戏内当前文本」右侧选中的颜色，一次给所有勾选的词缀上色"/>
+                        <Button Grid.Column="4" x:Name="ApplyRampCheckedButton" Content="勾选项按数值分档"
                                 Style="{StaticResource SecondaryButton}" Padding="10,3" Margin="6,0,0,0"
                                 Click="ApplyRampToChecked_Click"
                                 ToolTip="用右侧「条目检查器」里选中的色阶，按每行的数值区间自动分档染色（只染数字）"/>
-                        <Button Grid.Column="7" x:Name="ApplyRampAllButton" Content="一键上色"
-                                Style="{StaticResource SecondaryButton}" Padding="10,3" Margin="6,0,0,0"
-                                Click="ApplyRampToAllTiered_Click"
-                                ToolTip="给所有带档位阶梯的装备词缀（约 600 个）一键指派当前色阶：应用后每个词缀按数值拆成 T1~T5 五档、全部上色，只染数值不改文本；没有色阶时自动创建默认绿色阶"/>
                     </Grid>
                     <ListBox x:Name="EntryList" Background="Transparent" BorderThickness="0"
                              HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -195,12 +248,6 @@
                         <StackPanel x:Name="InspectorPanel">
                             <TextBlock x:Name="InspectorStatKey" Text="未选择词缀" Style="{StaticResource SmallText}" TextWrapping="Wrap"/>
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <ComboBox x:Name="InspectorColorCombo" Width="140" Height="30"
-                                          ToolTip="整条上色用的颜色"/>
-                                <Button x:Name="ApplyColorButton" Content="上色" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="ApplyColor_Click"/>
-                                <Button x:Name="RemoveColorButton" Content="移除颜色" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="RemoveColor_Click"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                 <ComboBox x:Name="RampCombo" Width="140" Height="30" DisplayMemberPath="Label"
                                           SelectionChanged="RampCombo_SelectionChanged"
                                           ToolTip="数值分档色阶（正向）：由颜色命名自动分组，如 AT1/AT2/AT3 合成为 AT。上色时只染数值占位符，档位越高的行用越靠前的颜色"/>
@@ -212,7 +259,8 @@
                                           ToolTip="色阶档位数：选择后按比例从 T1 颜色渐变到最深色，自动生成 Tier1~TierN（覆盖原有各档）；生成后可在「颜色修改」里逐档自定义颜色"/>
                                 <TextBlock Text="档" Style="{StaticResource SmallText}" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <!-- 负向色阶：暂从界面隐藏（代码保留，需要时把下面这行的 Collapsed 改回 Visible） -->
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Visibility="Collapsed">
                                 <ComboBox x:Name="NegativeRampCombo" Width="140" Height="30" DisplayMemberPath="Label"
                                           ToolTip="（可选）负向色阶：把带正负号的词缀拆成「提高 / 降低」两行时，降低的那行用它；不选则沿用正向色阶最暗的一档"/>
                                 <TextBlock Text="负向色阶（可选）" Style="{StaticResource SmallText}" VerticalAlignment="Center" Margin="8,0,0,0"/>
@@ -238,26 +286,41 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Text="当前生效颜色" Style="{StaticResource SmallText}" Margin="0,10,0,2"/>
-                            <Border x:Name="EffectiveColorSwatch" Height="18" CornerRadius="3" Background="Transparent"
-                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
-                            <TextBlock Text="游戏内当前文本" Style="{StaticResource SmallText}" Margin="0,10,0,2"/>
-                            <ItemsControl x:Name="LivePreview">
+                            <DockPanel Margin="0,10,0,2">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="上色颜色" Style="{StaticResource SmallText}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="InspectorColorCombo" Width="140" Height="26"
+                                              ToolTip="「只上此行」「给勾选项上色」用的颜色"/>
+                                </StackPanel>
+                                <TextBlock Text="游戏内当前文本" Style="{StaticResource SmallText}"
+                                           ToolTip="每行可单独上色：同一条词缀的多行变体（如「提高/降低」）可以各上各的色"/>
+                            </DockPanel>
+                            <ItemsControl x:Name="LinePreview">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <ItemsControl ItemsSource="{Binding}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Horizontal"/>
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Style="{StaticResource NormalText}"
-                                                               Foreground="{Binding ColorId, Converter={StaticResource AffixBrush}}"/>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                        <DockPanel Margin="0,3,0,0">
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                <Button Content="只上此行" Style="{StaticResource SecondaryButton}" Padding="6,1" FontSize="11"
+                                                        Click="ApplyLineColor_Click"
+                                                        ToolTip="只给这一行上色（用上方选中的颜色）；同一条词缀的其他行不受影响"/>
+                                                <Button Content="✕" Style="{StaticResource SecondaryButton}" Padding="6,1" FontSize="11" Margin="4,0,0,0"
+                                                        Visibility="{Binding RemoveVisibility}" Click="RemoveLineColor_Click"
+                                                        ToolTip="移除这一行的单独指派（整条指派与规则不受影响）"/>
+                                            </StackPanel>
+                                            <ItemsControl ItemsSource="{Binding Segments}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Style="{StaticResource NormalText}"
+                                                                   Foreground="{Binding ColorId, Converter={StaticResource AffixBrush}}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </DockPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -279,11 +342,15 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="8"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="只改显示颜色，不改词缀数值；按当前客户端的语言（简体中文 / 繁体中文 / 英文）上色。补丁含原版备份，可随时恢复；与特效补丁共用执行通道，同一时间只运行一个。"
+                <TextBlock Text="词缀修改请放在最后一步：先在「特效补丁」页打完其他补丁（含整包替换型），再回本页应用。只改显示颜色，不改词缀数值；按当前客户端语言上色；补丁含原版备份，可随时恢复。"
                            Style="{StaticResource SmallText}" VerticalAlignment="Center" TextWrapping="Wrap"/>
-                <Button x:Name="RevertButton" Grid.Column="1" Content="恢复原版" Style="{StaticResource SecondaryButton}" Click="Revert_Click"/>
-                <Button x:Name="ApplyButton" Grid.Column="3" Content="应用词缀修改" Style="{StaticResource PrimaryButton}" Click="Apply_Click"/>
+                <Button x:Name="ExportPatchButton" Grid.Column="1" Content="导出补丁" Style="{StaticResource SecondaryButton}" Click="ExportSchemePatch_Click"
+                        ToolTip="把当前方案生成一个可分发的独立补丁 zip（描述文件 + 全部变更文件 + 颜色定义）；别人不装本工具也能用特效补丁页应用。"/>
+                <Button x:Name="RevertButton" Grid.Column="3" Content="恢复原版" Style="{StaticResource SecondaryButton}" Click="Revert_Click"/>
+                <Button x:Name="ApplyButton" Grid.Column="5" Content="应用词缀修改" Style="{StaticResource PrimaryButton}" Click="Apply_Click"/>
             </Grid>
         </Border>
     </Grid>

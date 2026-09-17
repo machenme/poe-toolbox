@@ -54,6 +54,37 @@ public sealed class UISettingsDoc
         return dict;
     }
 
+    /// <summary>解析一个颜色值：游戏原生 <c>r,g,b</c> 三段，或带透明度的 <c>a,r,g,b</c> 四段
+    /// （第三方配色补丁普遍用四段，如 <c>255,231,179,37</c>）。id 不合法或数值不可解析时返回 null。</summary>
+    public static AffixColorDef? TryParseColor(string id, string value)
+    {
+        if (!CsdDocument.ColorIdPattern.IsMatch(id))
+            return null;
+        var parts = value.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length is < 3 or > 4)
+            return null;
+        byte alpha = 255;
+        if (parts.Length == 4 && !byte.TryParse(parts[0], out alpha))
+            return null;
+        var rgb = parts.Length == 4 ? parts[1..] : parts;
+        if (!byte.TryParse(rgb[0], out var r) || !byte.TryParse(rgb[1], out var g) || !byte.TryParse(rgb[2], out var b))
+            return null;
+        return new AffixColorDef(id, r, g, b, alpha);
+    }
+
+    /// <summary>文件内的全部颜色定义解析成颜色表（无法解析的条目跳过）。
+    /// 用于把「游戏里已经存在的颜色」喂给界面预览——第三方补丁的上色靠它才能在列表里显示出来。</summary>
+    public IReadOnlyList<AffixColorDef> GetColorDefs()
+    {
+        var defs = new List<AffixColorDef>();
+        foreach (var pair in GetColors())
+        {
+            if (TryParseColor(pair.Key, pair.Value) is { } def)
+                defs.Add(def);
+        }
+        return defs;
+    }
+
     /// <summary>写入颜色定义：先剥离同 id 的既有定义，再在根元素结束标签前注入。幂等。
     /// alpha = 255 时写游戏原生的 <c>r,g,b</c> 三段格式，否则写 <c>a,r,g,b</c> 四段（游戏两种都认）。</summary>
     public void SetColors(IEnumerable<(string Id, byte R, byte G, byte B, byte A)> colors)

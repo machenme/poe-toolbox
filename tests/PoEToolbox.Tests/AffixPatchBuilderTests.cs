@@ -125,4 +125,43 @@ public sealed class AffixPatchBuilderTests : IDisposable
         Assert.Equal("2", json.GetProperty("Version").GetString());
         Assert.Equal("affix-workbench", json.GetProperty("BundleName").GetString());
     }
+
+    [Fact]
+    public void BuildExport_ProducesDistributableLayoutConsumableByEngine()
+    {
+        var changes = new[]
+        {
+            new AffixPatchBuilder.FileChange(CsdPath, OriginalCsd(), ModifiedCsd()),
+            new AffixPatchBuilder.FileChange(UiPath, OriginalUi(), ModifiedUi()),
+        };
+
+        var stage = Path.Combine(_root, "export-stage");
+        var jsonPath = AffixPatchBuilder.BuildExport(changes, stage, "affix-demo",
+            comment: "测试导出：颜色定义随包分发。");
+
+        // 布局：<stage>/affix-demo/{affix-demo.patch.json, assets/}，zip 时以 affix-demo 为根即可直接被引擎消费
+        Assert.Equal(Path.Combine(stage, "affix-demo", "affix-demo.patch.json"), jsonPath);
+        Assert.True(File.Exists(Path.Combine(stage, "affix-demo", "assets", "0000_map_stat_descriptions.csd")));
+        Assert.True(File.Exists(Path.Combine(stage, "affix-demo", "assets", "0001_uisettings.xml.orig")));
+
+        var json = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(jsonPath));
+        Assert.Equal("affix-demo", json.GetProperty("PatchId").GetString());
+        Assert.Equal("affix-demo", json.GetProperty("BundleName").GetString());
+        Assert.Equal("1", json.GetProperty("Version").GetString());
+        Assert.Equal(2, json.GetProperty("Operations").GetArrayLength());
+        Assert.Contains("颜色定义", json.GetProperty("_comment").GetString());
+
+        // 引擎全链路可消费：status / apply / revert
+        RunEngine(_root, jsonPath, "apply");
+        using (var game = GameDataAccess.OpenReadOnlyMapped(_root))
+        {
+            Assert.Equal(ModifiedCsd(), game.ReadFile(CsdPath));
+            Assert.Equal(ModifiedUi(), game.ReadFile(UiPath));
+        }
+        RunEngine(_root, jsonPath, "revert");
+        using (var game = GameDataAccess.OpenReadOnlyMapped(_root))
+        {
+            Assert.Equal(OriginalCsd(), game.ReadFile(CsdPath));
+        }
+    }
 }

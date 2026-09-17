@@ -39,6 +39,7 @@ public sealed class CsdDocument
     public static readonly Regex ColorIdPattern = new("^[A-Za-z][A-Za-z0-9]{0,15}$", RegexOptions.Compiled);
 
     private static readonly Regex LangLineRegex = new("""^\t*lang\s+"([^"]*)"\s*$""", RegexOptions.Compiled);
+    private static readonly Regex AnyColorTagRegex = new("<([A-Za-z][A-Za-z0-9]{0,15})>\\{\\{", RegexOptions.Compiled);
     private static readonly Regex QuotedRegex = new("\"([^\"]*)\"", RegexOptions.Compiled);
     private static readonly Regex IdentifierRegex = new("^[A-Za-z_][A-Za-z0-9_%+.-]*$", RegexOptions.Compiled);
 
@@ -151,6 +152,67 @@ public sealed class CsdDocument
                 wrapped++;
         }
         return wrapped > 0;
+    }
+
+    /// <summary>只给显示文本与 <paramref name="lineText"/> 相同的行包裹颜色标签（整行变色，同 <see cref="TryApplyColor"/>）。
+    /// 同一条 stat 常有多行变体（如「提高/降低」两个方向），这个重载把它们分开——只染用户指定的那一行。
+    /// 行匹配用剥离标签与 [Tag|x] 标记后的纯文本精确比对（与列表预览的分行文本同源）。</summary>
+    /// <returns>false = stat 不存在、没有显示行、或没有文本与之相同的行。</returns>
+    public bool TryApplyColorToLine(string statKey, string colorId, string lineText, string? preferredLanguage = null)
+    {
+        if (!ColorIdPattern.IsMatch(colorId))
+            throw new ArgumentException($"颜色标签 id 不合法：{colorId}", nameof(colorId));
+        var stat = FindStat(statKey);
+        if (stat is null || lineText.Length == 0)
+            return false;
+
+        var wrapped = 0;
+        foreach (var lineIndex in ResolveLinesByPlainText(stat, lineText, preferredLanguage))
+        {
+            var replaced = QuotedRegex.Replace(_lines[lineIndex], match =>
+            {
+                var text = match.Groups[1].Value;
+                if (text.Contains('<') && text.Contains("{{"))
+                    return match.Value; // 已是标签包裹（含外来标签），不动
+                wrapped++;
+                return $"\"<{colorId}>{{{{{text}}}}}\"";
+            });
+            _lines[lineIndex] = replaced;
+        }
+        return wrapped > 0;
+    }
+
+    /// <summary>只剥离<strong>显示文本与 <paramref name="lineText"/> 相同的行</strong>的颜色标签——
+    /// 行级指派「改掉第三方已上色的那一行」用：不动同一条 stat 的其他行。返回剥离的标签数。</summary>
+    public int StripColorsOfLine(string statKey, string lineText, IReadOnlyCollection<string> colorIds, string? preferredLanguage = null)
+    {
+        var stat = FindStat(statKey);
+        if (stat is null || lineText.Length == 0)
+            return 0;
+        var ids = colorIds.Where(i => ColorIdPattern.IsMatch(i)).Distinct().ToList();
+        var total = 0;
+        foreach (var lineIndex in ResolveLinesByPlainText(stat, lineText, preferredLanguage))
+        {
+            foreach (var id in ids)
+                total += StripTagInLine(lineIndex, id);
+        }
+        return total;
+    }
+
+    /// <summary>按「剥离标签后的显示纯文本」找出 stat 的显示行（与 GetPreviewLines 的分行文本同源）。</summary>
+    private IEnumerable<int> ResolveLinesByPlainText(CsdStat stat, string lineText, string? preferredLanguage)
+    {
+        foreach (var lineIndex in stat.ResolveLines(preferredLanguage))
+        {
+            var sb = new StringBuilder();
+            foreach (Match m in QuotedRegex.Matches(_lines[lineIndex]))
+                sb.Append(m.Groups[1].Value);
+            if (sb.Length == 0)
+                continue;
+            var plain = string.Concat(CsdMarkup.Parse(sb.ToString()).Select(s => s.Text));
+            if (string.Equals(plain, lineText, StringComparison.Ordinal))
+                yield return lineIndex;
+        }
     }
 
     /// <summary>按行首数值区间从高到低依次使用色阶颜色，且只给数值占位符染色；
@@ -570,28 +632,63 @@ public sealed class CsdDocument
         return lower != "#" && long.TryParse(lower, out var value) ? value : long.MinValue;
     }
 
+    /// <summary>文件里出现过的全部颜色标签 id（含第三方补丁写的）：接管别人的配色前先要知道对方用了哪些 id。</summary>
+    public IReadOnlyCollection<string> CollectColorIds()
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var line in _lines)
+        {
+            if (!line.Contains('<'))
+                continue;
+            foreach (Match m in AnyColorTagRegex.Matches(line))
+                ids.Add(m.Groups[1].Value);
+        }
+        return ids;
+    }
+
     /// <summary>全文档剥离指定颜色标签（只动方案拥有的 id，外来标签保留）。返回剥离的标签数。
     /// 同时认两种写法：<c>&lt;X&gt;{{...}}&lt;/X&gt;</c>（本工具生成）与 <c>&lt;X&gt;{{...}}</c>（外部补丁常用的无闭合形式）。</summary>
     public int StripColors(IReadOnlyCollection<string> colorIds)
     {
         var total = 0;
-            foreach (var id in colorIds.Where(i => ColorIdPattern.IsMatch(i)).Distinct())
-            {
-                var marker = "<" + id + ">";
-                // 内容按「非花括号字符或完整花括号组」匹配，避免懒惰匹配吞掉数值占位符的右括号
-                var regex = new Regex(
-                    Regex.Escape(marker) + "\\{\\{((?:[^{}]|\\{[^{}]*\\})*)\\}\\}(?:" + Regex.Escape("</" + id + ">") + ")?",
-                    RegexOptions.Compiled);
+        foreach (var id in colorIds.Where(i => ColorIdPattern.IsMatch(i)).Distinct())
+        {
             for (var i = 0; i < _lines.Count; i++)
-            {
-                if (!_lines[i].Contains(marker))
-                    continue;
-                var count = 0;
-                _lines[i] = regex.Replace(_lines[i], m => { count++; return m.Groups[1].Value; });
-                total += count;
-            }
+                total += StripTagInLine(i, id);
         }
         return total;
+    }
+
+    /// <summary>只剥离<strong>某一条词缀</strong>的颜色标签——「改掉第三方已上色的那一条」用这个：
+    /// 全文档剥离会把别人的其余词缀一并抹掉，这里只动该 stat 在指定语言段的显示行。
+    /// 只剥文本、不增删行，因此数量行无需同步。</summary>
+    public int StripColorsOf(string statKey, IEnumerable<string> colorIds, string? preferredLanguage = null)
+    {
+        var stat = FindStat(statKey);
+        if (stat is null)
+            return 0;
+        var ids = colorIds.Where(i => ColorIdPattern.IsMatch(i)).Distinct().ToList();
+        var total = 0;
+        foreach (var lineIndex in stat.ResolveLines(preferredLanguage))
+        {
+            foreach (var id in ids)
+                total += StripTagInLine(lineIndex, id);
+        }
+        return total;
+    }
+
+    private int StripTagInLine(int lineIndex, string id)
+    {
+        var marker = "<" + id + ">";
+        if (!_lines[lineIndex].Contains(marker, StringComparison.Ordinal))
+            return 0;
+        // 内容按「非花括号字符或完整花括号组」匹配，避免懒惰匹配吞掉数值占位符的右括号
+        var regex = new Regex(
+            Regex.Escape(marker) + "\\{\\{((?:[^{}]|\\{[^{}]*\\})*)\\}\\}(?:" + Regex.Escape("</" + id + ">") + ")?",
+            RegexOptions.Compiled);
+        var count = 0;
+        _lines[lineIndex] = regex.Replace(_lines[lineIndex], m => { count++; return m.Groups[1].Value; });
+        return count;
     }
 
     /// <summary>按语言优先级取显示文本做预览分段（颜色标签分段 + [Tag|文本] 解析为文本）；
@@ -644,6 +741,35 @@ public sealed class CsdDocument
                 if (ColorIdPattern.IsMatch(id) && line.Contains("<" + id + ">", StringComparison.Ordinal))
                     return true;
             }
+        }
+        return false;
+    }
+
+    /// <summary>文档里是否存在任意形态的颜色标签（含第三方补丁写的）：一次判断，
+    /// 决定该文件的列表预览要不要按「分段」渲染（否则永远按纯文本重建，外来颜色看不见）。</summary>
+    public bool ContainsAnyColorTag()
+    {
+        foreach (var line in _lines)
+        {
+            if (line.Contains('<') && AnyColorTagRegex.IsMatch(line))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary><strong>这一条</strong> stat 的显示行里是否真的带颜色标签（含第三方补丁写的）。
+    /// 文件级判断（<see cref="ContainsAnyColorTag"/>）区分不了同文件里着色与未着色的条目，
+    /// 列表「有颜色的排前面」必须按条判定。只扫该 stat 解析出的显示行，开销可忽略。</summary>
+    public bool StatHasColorTag(string statKey, string? preferredLanguage = null)
+    {
+        var stat = FindStat(statKey);
+        if (stat is null)
+            return false;
+        foreach (var lineIndex in stat.ResolveLines(preferredLanguage))
+        {
+            var line = _lines[lineIndex];
+            if (line.Contains('<') && AnyColorTagRegex.IsMatch(line))
+                return true;
         }
         return false;
     }

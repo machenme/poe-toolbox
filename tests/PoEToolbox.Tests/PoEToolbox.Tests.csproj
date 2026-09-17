@@ -28,6 +28,7 @@
     <ProjectReference Include="../../src/PoEToolbox.Plugins.DataBrowser/PoEToolbox.Plugins.DataBrowser.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.BagCleaner/PoEToolbox.Plugins.BagCleaner.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.PoeCnPatch/PoEToolbox.Plugins.PoeCnPatch.csproj" />
+    <ProjectReference Include="../../src/PoEToolbox.Plugins.AffixWorkbench/PoEToolbox.Plugins.AffixWorkbench.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Shared/PoEToolbox.Shared.csproj" />
   </ItemGroup>
 </Project>

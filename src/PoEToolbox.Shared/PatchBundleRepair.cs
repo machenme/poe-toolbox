@@ -25,8 +25,12 @@ public static class PatchBundleRepair
     public static int RepairIfBroken(string gameDataPath, Action<string>? log = null)
     {
         var resolved = GameDataAccess.ResolvePath(gameDataPath);
+        // 只对 Bundles2 形态（索引为独立 _.index.bin 文件）有意义；GGPK 客户端没有 PATCHED bundle 目录，
+        // 打开它只为空转一趟全量加载。
+        if (!resolved.EndsWith(".index.bin", StringComparison.OrdinalIgnoreCase) || !File.Exists(resolved))
+            return 0;
         var bundleDir = Path.GetDirectoryName(resolved);
-        if (bundleDir is null || !File.Exists(resolved))
+        if (bundleDir is null)
             return 0;
 
         // 注意：不能拿「PATCHED 目录不存在」当免检依据——目录整体被删时索引同样可能悬空引用
@@ -60,20 +64,34 @@ public static class PatchBundleRepair
                 foreach (var br in gd.Index.Bundles.Span)
                     liveBundles[br.Path] = br;
 
+                // 基线本身可能是被污染的（在补丁已应用时创建/刷新，同样指向 PATCHED bundle）。
+                // 把文件重定向回这样的 bundle 等于原地打转：修复"成功"了 N 个文件，悬空依旧，
+                // 之后每次重连都会重复同一轮假修复。目标也在悬空集合里的一律视为无法恢复。
+                var danglingPaths = dangling.Select(br => br.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
                 var baselineFiles = baseline.Index.Files;
                 var repaired = 0;
                 var unrestorable = 0;
+                var poisonedBaselineFiles = 0;
                 var restoredBundlePaths = new List<string>();
                 foreach (var br in dangling)
                 {
                     var bundleEmptied = true;
-                    foreach (var fr in br.Files)
+                    // Redirect 会把文件记录从 br.Files 挪进目标 bundle，必须物化快照再枚举
+                    foreach (var fr in br.Files.ToList())
                     {
-                        // 补丁自己新增的文件基线里没有原始位置，留给用户用「清理/还原补丁」处理。
+                        // 补丁自己新增的文件基线里没有原始位置，留给用户用「清理/还原补丁」处理；
+                        // 基线也指向已丢失 bundle 的（基线被污染）同样无处可去。
                         if (!baselineFiles.TryGetValue(fr.PathHash, out var original)
                             || !liveBundles.TryGetValue(original.BundleRecord.Path, out var target))
                         {
                             unrestorable++;
+                            bundleEmptied = false;
+                            continue;
+                        }
+                        if (danglingPaths.Contains(target.Path))
+                        {
+                            poisonedBaselineFiles++;
                             bundleEmptied = false;
                             continue;
                         }
@@ -86,15 +104,22 @@ public static class PatchBundleRepair
 
                 if (repaired == 0)
                 {
-                    log?.Invoke($"丢失的 bundle 里有 {unrestorable} 个补丁新增文件，备份中没有原始位置，无法自动恢复。");
+                    log?.Invoke(poisonedBaselineFiles > 0
+                        ? $"原始索引备份里这些文件也指向已丢失的补丁 bundle（备份是在补丁应用状态下创建的，已被污染），"
+                          + $"共 {poisonedBaselineFiles} 个文件无法自动恢复。请用启动器的「验证/修复游戏文件」恢复官方索引。"
+                        : $"丢失的 bundle 里有 {unrestorable} 个补丁新增文件，备份中没有原始位置，无法自动恢复。");
                     return 0;
                 }
 
                 // 悬空 bundle 变空后由孤儿清理移除，索引与文件状态一起归位。
                 gd.Save();
                 PruneLedger(resolved, restoredBundlePaths);
-                log?.Invoke($"已修复 {repaired} 个文件的索引引用（回到原版内容）。" +
-                            (unrestorable > 0 ? $"另有 {unrestorable} 个补丁新增文件无法自动恢复。" : ""));
+                log?.Invoke($"已修复 {repaired} 个文件的索引引用（回到原版内容）。"
+                            + (unrestorable > 0 ? $"另有 {unrestorable} 个补丁新增文件无法自动恢复。" : "")
+                            + (poisonedBaselineFiles > 0
+                                ? $"另有 {poisonedBaselineFiles} 个文件连备份里也指向丢失的补丁 bundle（备份被污染），"
+                                  + "请用启动器的「验证/修复游戏文件」恢复。"
+                                : ""));
                 return repaired;
             }
             finally

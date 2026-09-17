@@ -574,4 +574,136 @@ public sealed class CsdDocumentTests
         Assert.Equal("VeryLucky", segments[1].ColorId);
         Assert.Equal("后缀", segments[2].Text);
     }
+
+    // ═══ 接管第三方配色 ═════════════════════════════════════════
+    // 场景：客户端里已打过第三方配色补丁（100 条词缀带 AT1/DA1… 标签），
+    // 用户只想改掉其中一条——只清空那一条的标签再换成自己的，其余 99 条原样。
+
+    private static byte[] ForeignColoredDoc() => Doc(
+        "description",
+        "\t1 stat_a",
+        "\t1",
+        "\t\t1 \"<AT1>{{增加 {0} 点}}\"",
+        "\t1 stat_b",
+        "\t1",
+        "\t\t1 \"<AT2>{{减少 {0} 点}}\"");
+
+    [Fact]
+    public void CollectColorIds_IncludesForeignIds()
+    {
+        var doc = CsdDocument.Parse(ForeignColoredDoc());
+
+        Assert.Equal(new[] { "AT1", "AT2" }, doc.CollectColorIds().OrderBy(id => id));
+        Assert.True(doc.ContainsAnyColorTag());
+        Assert.False(doc.ContainsAnyColorTag(["Own1"])); // 本方案的标签一个都没有
+    }
+
+    /// <summary>只清空指定词缀的外来标签：同文件里其他词缀的第三方配色一个都不动。</summary>
+    [Fact]
+    public void StripColorsOf_SingleStat_LeavesOtherStatsIntact()
+    {
+        var doc = CsdDocument.Parse(ForeignColoredDoc());
+
+        Assert.Equal(1, doc.StripColorsOf("stat_a", ["AT1", "AT2"]));
+
+        var text = TextOf(doc.Serialize());
+        Assert.Contains("\t\t1 \"增加 {0} 点\"", text);       // stat_a：标签已清空、文本完好
+        Assert.DoesNotContain("<AT1>", text);
+        Assert.Contains("<AT2>{{减少 {0} 点}}", text);   // stat_b：第三方配色原样
+    }
+
+    /// <summary>清空后再上自己的色：同一条词缀最终只剩本方案的标签（覆盖，不叠加）。</summary>
+    [Fact]
+    public void StripColorsOf_ThenApplyColor_ReplacesForeignColor()
+    {
+        var doc = CsdDocument.Parse(ForeignColoredDoc());
+
+        Assert.Equal(1, doc.StripColorsOf("stat_a", ["AT1", "AT2"]));
+        Assert.True(doc.TryApplyColor("stat_a", "Own1"));
+
+        var text = TextOf(doc.Serialize());
+        Assert.Contains("\t\t1 \"<Own1>{{增加 {0} 点}}\"", text);
+        Assert.DoesNotContain("<AT1>", text);
+        Assert.Contains("<AT2>{{减少 {0} 点}}", text);   // 其余词缀不受影响
+    }
+
+    /// <summary>只剥文本不增删行 ⇒ 段数量行保持原值（游戏靠它校验，写错会报 unexpected marker）。</summary>
+    [Fact]
+    public void StripColorsOf_DoesNotChangeLineCount()
+    {
+        var before = TextOf(ForeignColoredDoc()).Split("\r\n").Length;
+        var doc = CsdDocument.Parse(ForeignColoredDoc());
+
+        doc.StripColorsOf("stat_a", ["AT1", "AT2"]);
+
+        Assert.Equal(before, TextOf(doc.Serialize()).Split("\r\n").Length);
+    }
+
+    // ═══ 行级上色（同一条 stat 的多行变体分开各上各色）═══
+
+    /// <summary>行级上色：只包显示文本匹配的那一行，同一条 stat 的另一行（降低方向）与其他语言段不动。</summary>
+    [Fact]
+    public void ApplyColorToLine_WrapsOnlyMatchingLine()
+    {
+        var doc = CsdDocument.Parse(FixtureBytes());
+
+        Assert.True(doc.TryApplyColorToLine(
+            "map_item_drop_rarity_+%", "LuckyPurple", "该区域内物品稀有度提高 {0}%", CsdDocument.TargetLanguage));
+
+        var text = TextOf(doc.Serialize());
+        Assert.Contains("\"<LuckyPurple>{{该区域内物品[Rarity|稀有度]提高 {0}%}}\"", text);
+        Assert.Contains("\"该区域内物品[Rarity|稀有度]降低 {0}%\"", text);      // 降低行原样
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Count(text, "<LuckyPurple>"));
+        Assert.Contains("\"{0}% increased [Rarity] of Items found in this Area\"", text); // 英文段不动
+    }
+
+    /// <summary>行级接管：与整条上色一致，已带外来标签的行要先剥再打（TryApplyColorToLine 跳过带标签行，
+    /// 分层共栖）——RebuildCsd 的真实顺序就是 StripColorsOfLine → TryApplyColorToLine。</summary>
+    [Fact]
+    public void ApplyColorToLine_StripsForeignThenApplies_TakesOverSingleLine()
+    {
+        var doc = CsdDocument.Parse(Doc(
+            "description",
+            "\t1 stat_a",
+            "\t1",
+            "\t\t\"<AT1>{{提高 {0}%}}\"",
+            "\t\t\"<AT1>{{降低 {0}%}}\""));
+
+        // 行匹配按剥离标签后的纯文本：目标行带外来标签时照样定位得到
+        Assert.Equal(1, doc.StripColorsOfLine("stat_a", "提高 {0}%", ["AT1"], CsdDocument.TargetLanguage));
+        Assert.True(doc.TryApplyColorToLine("stat_a", "Own1", "提高 {0}%", CsdDocument.TargetLanguage));
+
+        var text = TextOf(doc.Serialize());
+        Assert.Contains("\"<Own1>{{提高 {0}%}}\"", text);
+        Assert.Contains("\"<AT1>{{降低 {0}%}}\"", text); // 另一行的第三方配色原样
+    }
+
+    /// <summary>行级剥标签：只清匹配行的外来标签，同一条 stat 的其他行原样。</summary>
+    [Fact]
+    public void StripColorsOfLine_RemovesOnlyMatchingLine()
+    {
+        var doc = CsdDocument.Parse(Doc(
+            "description",
+            "\t1 stat_a",
+            "\t1",
+            "\t\t\"<AT1>{{提高 {0}%}}\"",
+            "\t\t\"<AT1>{{降低 {0}%}}\""));
+
+        Assert.Equal(1, doc.StripColorsOfLine("stat_a", "提高 {0}%", ["AT1"], CsdDocument.TargetLanguage));
+
+        var text = TextOf(doc.Serialize());
+        Assert.Contains("\"提高 {0}%\"", text);
+        Assert.Contains("\"<AT1>{{降低 {0}%}}\"", text); // 另一行不动
+    }
+
+    /// <summary>行文本不匹配任何显示行时返回 false、文档不动。</summary>
+    [Fact]
+    public void ApplyColorToLine_NoMatchingLine_ReturnsFalseAndChangesNothing()
+    {
+        var original = FixtureBytes();
+        var doc = CsdDocument.Parse(original);
+
+        Assert.False(doc.TryApplyColorToLine("map_item_drop_rarity_+%", "LuckyPurple", "不存在的行", CsdDocument.TargetLanguage));
+        Assert.Equal(original, doc.Serialize());
+    }
 }

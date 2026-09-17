@@ -27,6 +27,11 @@ public partial class FxPatchView : UserControl
 
     private readonly List<BuiltInRow> _builtInRows = [];
     private readonly List<ThirdPartyRow> _thirdPartyRows = [];
+    /// <summary>内置区里的「内置词缀修改补丁」固定行（执行走词缀补丁 json 通道，不占内置补丁 id）。</summary>
+    private CheckBox? _affixCheck;
+    private TextBlock? _affixStateText;
+    private Button? _affixExportButton;
+    private FxPatchEngine.PatchState? _affixState;
     /// <summary>程序化设置勾选时抑制「用户改过勾选」标记。</summary>
     private bool _suppressCheckEvents;
     /// <summary>用户手动改过勾选后，自动刷新不再覆盖他的选择（除非显式点刷新）。</summary>
@@ -58,6 +63,7 @@ public partial class FxPatchView : UserControl
             var grid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var check = new CheckBox
             {
@@ -79,9 +85,108 @@ public partial class FxPatchView : UserControl
             grid.Children.Add(check);
             grid.Children.Add(stateText);
             Grid.SetColumn(stateText, 1);
+            var export = MakeExportButton(FxPatchEngine.TryResolveBuiltInPatchPath(def.Id));
+            if (export is not null)
+            {
+                grid.Children.Add(export);
+                Grid.SetColumn(export, 2);
+            }
 
             BuiltInChecksPanel.Children.Add(grid);
             _builtInRows.Add(new BuiltInRow { Def = def, Check = check, StateText = stateText });
+        }
+
+        AppendAffixRow();
+    }
+
+    /// <summary>内置区末尾追加「内置词缀修改补丁」固定行：由「词缀上色」页生成与维护，
+    /// 本页负责启用 / 还原 / 卸载；执行仍走词缀补丁 json 通道（fx-patch），不占内置补丁 id，
+    /// 所以不进 <see cref="_builtInRows"/>（那里按 id 走 fx-oilmod 通道）。</summary>
+    private void AppendAffixRow()
+    {
+        // 与引擎内置特效补丁隔开：这个词缀补丁由「词缀上色」页生成，不是引擎 BuiltIns
+        var sep = new Separator { Margin = new Thickness(0, 8, 0, 4) };
+        sep.SetResourceReference(Separator.BackgroundProperty, "BorderBrush");
+        BuiltInChecksPanel.Children.Add(sep);
+
+        var grid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var check = new CheckBox
+        {
+            Content = "内置词缀修改补丁（词缀上色）",
+            VerticalContentAlignment = VerticalAlignment.Center,
+            ToolTip = "由「词缀上色」页生成并维护：调整颜色 / 规则去那个页，本页只负责启用、还原与卸载。",
+        };
+        check.Checked += (_, _) => OnUserToggle();
+        check.Unchecked += (_, _) => OnUserToggle();
+
+        var stateText = new TextBlock
+        {
+            Text = "待检测",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0),
+            Style = FindResource("SmallText") as Style,
+        };
+        stateText.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+
+        grid.Children.Add(check);
+        grid.Children.Add(stateText);
+        Grid.SetColumn(stateText, 1);
+
+        // 词缀补丁 json 在「词缀上色」首次应用后才存在：按钮常驻、按需显隐
+        if (MakeExportButton(AffixPatchJsonPath, requireExisting: false) is { } export)
+        {
+            export.Visibility = File.Exists(AffixPatchJsonPath) ? Visibility.Visible : Visibility.Collapsed;
+            _affixExportButton = export;
+            grid.Children.Add(export);
+            Grid.SetColumn(export, 2);
+        }
+
+        _affixCheck = check;
+        _affixStateText = stateText;
+        BuiltInChecksPanel.Children.Add(grid);
+    }
+
+    /// <summary>词缀固定行的状态与勾选：账本里有 affix-workbench 条目（引擎在应用时写入）= 已启用。
+    /// 状态字 / Tooltip 与内置行同一套；补丁内容变更请到「词缀上色」页重新应用，本页不校验内容。</summary>
+    private void UpdateAffixRow(List<FxPatchStateStore.AppliedPatch> entries, bool overwriteUserSelection)
+    {
+        if (_affixCheck is null || _affixStateText is null)
+            return;
+
+        _affixState = entries.Any(IsAffixPatchEntry)
+            ? FxPatchEngine.PatchState.Applied
+            : FxPatchEngine.PatchState.NotApplied;
+        _affixStateText.Text = FriendlyState(_affixState.Value);
+        _affixStateText.SetResourceReference(TextBlock.ForegroundProperty, BrushKeyOf(_affixState.Value));
+        _affixStateText.ToolTip = !File.Exists(AffixPatchJsonPath) && _affixState == FxPatchEngine.PatchState.Applied
+            // 账本说打过、但补丁产物不在这台机器上（换过电脑 / 清理过补丁目录）：
+            // 这种情况下本页没有可执行的还原入口，得说清楚让用户回「词缀上色」补一次。
+            ? "游戏里已经应用了词缀修改，但本机找不到对应的补丁文件（记录来自其他机器或补丁目录被清理过）。"
+              + "本页无法单独还原它：到「词缀上色」页重新应用一次即可补上；要彻底清掉请用「恢复游戏原版」。"
+            : TooltipOf(_affixState.Value, "");
+        _affixExportButton?.Visibility = File.Exists(AffixPatchJsonPath)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        _suppressCheckEvents = true;
+        try
+        {
+            // json 还不存在 = 从没用过词缀上色，没有可启用的东西：禁用勾选并指路
+            var hasPatch = File.Exists(AffixPatchJsonPath);
+            _affixCheck.IsEnabled = hasPatch;
+            _affixCheck.ToolTip = hasPatch
+                ? "由「词缀上色」页生成并维护：调整颜色 / 规则去那个页，本页只负责启用、还原与卸载。"
+                : "还没有生成过词缀补丁：先到「词缀上色」页连接游戏并点「应用词缀修改」，之后就能在这里启停。";
+            if (overwriteUserSelection)
+                _affixCheck.IsChecked = _affixState == FxPatchEngine.PatchState.Applied;
+        }
+        finally
+        {
+            _suppressCheckEvents = false;
         }
     }
 
@@ -152,6 +257,7 @@ public partial class FxPatchView : UserControl
                 : (FxPatchEngine.PatchState.NotApplied, TooltipOf(FxPatchEngine.PatchState.NotApplied, ""));
 
         ApplyStates(states, overwriteUserSelection);
+        UpdateAffixRow(entries, overwriteUserSelection);
 
         // 第三方补丁（自定义 / 整包替换型）以与内置一致的勾选行展示在左侧下半区。
         RenderThirdPartyList(entries);
@@ -160,7 +266,8 @@ public partial class FxPatchView : UserControl
 
     private string BuiltInSummaryHint()
     {
-        var applied = _builtInRows.Count(r => r.State == FxPatchEngine.PatchState.Applied);
+        var applied = _builtInRows.Count(r => r.State == FxPatchEngine.PatchState.Applied)
+                      + (_affixState == FxPatchEngine.PatchState.Applied ? 1 : 0);
         return applied == 0
             ? "当前没有已启用的内置补丁，勾选后点「启用特效补丁」即可。"
             : $"已启用 {applied} 个内置补丁，已自动勾选；需要还原直接点「恢复游戏原版」。";
@@ -173,6 +280,28 @@ public partial class FxPatchView : UserControl
     /// <summary>当前输入框里的补丁文件路径（待应用）；空视为无。</summary>
     private string? PendingPatchPath => _pendingPatchFile;
 
+    /// <summary>输入框文件本轮是否参与执行：列表里没有代表它的行（刚选完文件，保持「选完直接启用」），
+    /// 或代表它的行被勾选。行存在但未勾选 = 用户明确不要它参与。</summary>
+    private bool PendingFileParticipates()
+    {
+        var custom = PendingPatchPath;
+        if (string.IsNullOrWhiteSpace(custom) || !File.Exists(custom))
+            return false;
+        var row = FindThirdPartyRowBySource(custom);
+        return row is null || row.Check.IsChecked == true;
+    }
+
+    /// <summary>第三方列表里 SourceFile 与指定路径相同的行；没有返回 null。</summary>
+    private ThirdPartyRow? FindThirdPartyRowBySource(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        var full = Path.GetFullPath(path);
+        return _thirdPartyRows.FirstOrDefault(r =>
+            r.Entry.SourceFile is { } src
+            && Path.GetFullPath(src).Equals(full, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string PendingDisplayName(string path)
         => Path.GetFileName(path)
                .Replace(".patch.json", "", StringComparison.OrdinalIgnoreCase)
@@ -182,8 +311,9 @@ public partial class FxPatchView : UserControl
             : path;
 
     /// <summary>把第三方补丁渲染成与内置一致的勾选行：
-    /// 底部输入框选中的补丁文件作为「待应用」条目排在最前、默认勾选、右侧显示未启用；
-    /// 账本里已应用的条目（含整包替换型）跟随其后，显示已启用。
+    /// 底部输入框选中的补丁文件作为「待应用」条目随后、默认勾选、右侧显示未启用；
+    /// 账本里已应用的其他条目（含整包替换型）跟随其后，显示已启用。
+    /// 「内置词缀修改补丁」固定在内置区末尾（见 AppendAffixRow），不在这里渲染。
     /// 勾选 = 选中它参与「启用 / 恢复 / 卸载」操作；已应用条目的操作靠账本记录的原补丁文件路径。</summary>
     private void RenderThirdPartyList(List<FxPatchStateStore.AppliedPatch> entries)
     {
@@ -200,6 +330,7 @@ public partial class FxPatchView : UserControl
 
         var extras = entries
             .Where(e => !string.Equals(e.Kind, FxPatchStateStore.KindBuiltIn, StringComparison.OrdinalIgnoreCase))
+            .Where(e => !IsAffixPatchEntry(e)) // 词缀补丁固定在内置区，账本条目不进第三方列表
             .ToList();
         ThirdPartyEmpty.Visibility = extras.Count == 0 && !hasPending ? Visibility.Visible : Visibility.Collapsed;
 
@@ -220,6 +351,16 @@ public partial class FxPatchView : UserControl
         if (pendingRow is not null)
             EnforceSingleRawPack(pendingRow.Check);
     }
+
+    /// <summary>词缀上色模块生成的补丁（固定单例 id，不随版本变）。</summary>
+    private static bool IsAffixPatchEntry(FxPatchStateStore.AppliedPatch e)
+        => string.Equals(e.Id, AffixPatchBuilder.PatchId, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(e.Name, AffixPatchBuilder.PatchId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>词缀补丁描述文件的固定路径（词缀上色每次应用都会重写它，还原后仍在）。</summary>
+    private static string AffixPatchJsonPath
+        => Path.Combine(ConfigService.PatchesDirectory, AffixPatchBuilder.PatchId,
+            AffixPatchBuilder.PatchId + ".patch.json");
 
     /// <summary>该第三方补丁是否属于整包替换型（会整体替换 _.index.bin）。</summary>
     private bool IsRawPackEntry(FxPatchStateStore.AppliedPatch entry)
@@ -248,13 +389,15 @@ public partial class FxPatchView : UserControl
         SetStatus($"整包替换型补丁同一时间只能启用一个（都会整体替换游戏索引）：已让位 {string.Join("、", yielded.Select(r => r.Entry.Name))}。", UiStatus.Kind.Warning);
     }
 
-    private void AddThirdPartyRow(FxPatchStateStore.AppliedPatch entry, bool applied)
+    private void AddThirdPartyRow(FxPatchStateStore.AppliedPatch entry, bool applied, bool? defaultChecked = null)
     {
         var grid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var hasSource = !string.IsNullOrWhiteSpace(entry.SourceFile) && File.Exists(entry.SourceFile);
+        // 词缀补丁固定在内置区（AppendAffixRow），这里只渲染待应用与账本第三方条目
         var displayName = entry.Name.Contains('/') || entry.Name.Contains('\\')
             ? Path.GetFileNameWithoutExtension(entry.Name)
             : entry.Name;
@@ -262,7 +405,7 @@ public partial class FxPatchView : UserControl
         {
             Content = $"{displayName}（{KindLabel(entry.Kind)}）",
             VerticalContentAlignment = VerticalAlignment.Center,
-            IsChecked = !applied,
+            IsChecked = defaultChecked ?? !applied,
             IsEnabled = hasSource,
             ToolTip = applied
                 ? (hasSource
@@ -288,9 +431,60 @@ public partial class FxPatchView : UserControl
         grid.Children.Add(check);
         grid.Children.Add(stateText);
         Grid.SetColumn(stateText, 1);
+        var export = MakeExportButton(entry.SourceFile);
+        if (export is not null)
+        {
+            grid.Children.Add(export);
+            Grid.SetColumn(export, 2);
+        }
 
         ThirdPartyPanel.Children.Add(grid);
         _thirdPartyRows.Add(new ThirdPartyRow { Entry = entry, Check = check });
+    }
+
+    /// <summary>行尾的「导出」小按钮：把该补丁打包为可分发的 zip；来源缺失则不出按钮。</summary>
+    private Button? MakeExportButton(string? sourcePath, bool requireExisting = true)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || (requireExisting && !File.Exists(sourcePath)))
+            return null;
+        var btn = new Button
+        {
+            Content = "导出",
+            Style = FindResource("SecondaryButton") as Style,
+            Padding = new Thickness(8, 2, 8, 2),
+            Height = 24,
+            MinWidth = 52,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "把这个补丁打包为可分发的 zip（描述文件 + assets），发给别人在「启用特效补丁」处直接选用。",
+            Tag = sourcePath,
+        };
+        btn.Click += ExportPatch_Click;
+        return btn;
+    }
+
+    private void ExportPatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string source } || !File.Exists(source))
+            return;
+        var dlg = new SaveFileDialog
+        {
+            Title = "导出补丁",
+            FileName = Path.GetFileNameWithoutExtension(source) + ".zip",
+            Filter = "补丁包 (*.zip)|*.zip",
+        };
+        if (dlg.ShowDialog() != true)
+            return;
+        try
+        {
+            PatchExportService.ExportTo(source, dlg.FileName);
+            SetStatus($"✅ 已导出补丁：{dlg.FileName}", UiStatus.Kind.Success);
+        }
+        catch (Exception ex)
+        {
+            FileLogger.App.Error("导出补丁失败。", ex);
+            SetStatus("❌ 导出补丁失败：" + ex.Message, UiStatus.Kind.Error);
+        }
     }
 
     private static string KindLabel(string kind) => kind switch
@@ -408,9 +602,10 @@ public partial class FxPatchView : UserControl
             return false;
         }
 
-        var custom = PendingPatchPath ?? string.Empty;
+        var custom = PendingFileParticipates() ? PendingPatchPath! : string.Empty;
         var builtInIds = CheckedBuiltInIds;
-        if (requireSelection && builtInIds.Count == 0 && custom.Length == 0 && CheckedThirdParty.Count == 0)
+        var affixChecked = _affixCheck?.IsChecked == true && File.Exists(AffixPatchJsonPath);
+        if (requireSelection && builtInIds.Count == 0 && custom.Length == 0 && CheckedThirdParty.Count == 0 && !affixChecked)
         {
             SetStatus("请先勾选至少一个补丁，或选择一个自定义补丁文件。", UiStatus.Kind.Warning);
             return false;
@@ -480,12 +675,12 @@ public partial class FxPatchView : UserControl
                 : CheckedThirdParty)
             .Where(e => !string.IsNullOrWhiteSpace(e.SourceFile) && File.Exists(e.SourceFile))
             .ToList();
-        var thirdPartyPaths = checkedThirdParty
-            .Select(e => Path.GetFullPath(e.SourceFile!))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
+        // 输入框文件只有「列表里没有代表它的行」（刚选完文件，保持选完直接启用）
+        // 或「代表它的行被勾选」（此时上面的勾选第三方已带上，无需重复拼）时才参与执行。
+        // 行存在但未勾选 = 用户明确不要它参与——此前这里无视勾选无条件拼入，
+        // 取消勾选形同虚设，刚卸载的补丁也会被悄悄打回去（2026-09-16 用户实测踩坑）。
         var custom = PendingPatchPath ?? string.Empty;
-        if (custom.Length > 0 && !thirdPartyPaths.Contains(Path.GetFullPath(custom)))
+        if (custom.Length > 0 && FindThirdPartyRowBySource(custom) is null)
             AddSource(null, custom, knownRawPack: false);
 
         var builtInIds = ledger is not null
@@ -498,6 +693,12 @@ public partial class FxPatchView : UserControl
         foreach (var entry in checkedThirdParty)
             AddSource(null, entry.SourceFile!,
                 knownRawPack: string.Equals(entry.Kind, FxPatchStateStore.KindRawPack, StringComparison.OrdinalIgnoreCase));
+
+        // 内置区的「内置词缀修改补丁」固定行：执行走词缀补丁 json 通道，固定排在修改类最后
+        //（顺序引导的最后一步：先打完特效 / 整包补丁，最后词缀修改）。
+        // uninstallAll 的账本分支已含词缀条目（上面循环拼过），这里只在按勾选拼装时补，避免重复执行。
+        if (!uninstallAll && _affixCheck?.IsChecked == true && File.Exists(AffixPatchJsonPath))
+            AddSource(null, AffixPatchJsonPath, knownRawPack: false);
 
         // 防御性兜底：整包替换型一次只能执行一个，多出的跳过（正常情况勾选层已互斥，走不到这里）。
         if (rawPack.Count > 1)
@@ -609,13 +810,18 @@ public partial class FxPatchView : UserControl
             }
             FxPatchStateStore.SaveAll(path, ledger);
 
+            var entries = FxPatchStateStore.Read(path);
             var states = new Dictionary<string, (FxPatchEngine.PatchState State, string Tip)>();
             foreach (var s in statuses)
                 states[s.Id] = (s.State, TooltipOf(s.State, s.Detail));
             ApplyStates(states, overwriteUserSelection: true);
             _statusStale = false;
             _statusLoadedPath = path;
-            RenderThirdPartyList(FxPatchStateStore.Read(path));
+            // 词缀行不在 _builtInRows 里（它走 fx-patch 通道），ApplyStates 覆盖不到：
+            // 必须单独按账本刷新，否则「刷新补丁状态」之后这一行会停在旧状态、勾也不回正。
+            // 点按钮是显式刷新，所以这里覆盖用户的手动勾选。
+            UpdateAffixRow(entries, overwriteUserSelection: true);
+            RenderThirdPartyList(entries);
             SetStateHint(BuiltInSummaryHint());
 
             if (quiet)
@@ -636,6 +842,13 @@ public partial class FxPatchView : UserControl
                     applied++;
                 AppendLog($"  {mark} {row.Def.DisplayName}（{row.Def.Id}）—— {row.StateText.Text}");
             }
+            // 「内置词缀修改补丁」固定在内置区、但不进 _builtInRows，单独补一行：
+            // 否则核对结果里缺它，用户明明启用过却在输出里找不到。
+            var affixMark = _affixState == FxPatchEngine.PatchState.Applied ? "☑"
+                : _affixState is null ? "?" : "☐";
+            if (_affixState == FxPatchEngine.PatchState.Applied)
+                applied++;
+            AppendLog($"  {affixMark} 内置词缀修改补丁（{AffixPatchBuilder.PatchId}）—— {_affixStateText?.Text ?? "待检测"}");
             AppendLog("");
             AppendLog(applied == 0 ? "没有已启用的内置补丁。" : $"已启用 {applied} 个，已自动勾选。");
             SetStatus("✅ 已核对补丁状态。", UiStatus.Kind.Success);
@@ -657,6 +870,15 @@ public partial class FxPatchView : UserControl
     {
         if (!ValidateInputs(out _))
             return;
+
+        // 引导：整包替换型补丁会整体换掉 _.index.bin，已启用的词缀修改补丁会被冲掉。
+        // 提醒用户按「先补丁、最后词缀修改」的顺序来，应用完成后到词缀上色页重新应用。
+        var appliesRawPack = CheckedThirdParty.Any(e =>
+            string.Equals(e.Kind, FxPatchStateStore.KindRawPack, StringComparison.OrdinalIgnoreCase))
+            || (PendingFileParticipates() && IsRawPackSource(PendingPatchPath!));
+        if (appliesRawPack && _affixState == FxPatchEngine.PatchState.Applied)
+            SetStatus("提示：整包替换型补丁会整体替换游戏索引，已启用的词缀修改补丁会失效；请在整包应用完成后到「词缀上色」重新应用一次（顺序：先补丁，最后词缀修改）。", UiStatus.Kind.Warning);
+
         await RunEngineAsync("启用特效补丁", BuildInvocations("apply"));
         RefreshAfterOperation();
     }
@@ -712,6 +934,15 @@ public partial class FxPatchView : UserControl
                 return;
         }
         WarnMissingThirdPartySource("卸载", uninstallAll);
+        // 记下本轮真正卸载的第三方来源（uninstallAll 的账本快照必须在引擎清空账本之前取）。
+        // 卸载完成后若输入框还指向其中之一，清空它：否则「待应用」条目会以勾选状态复活，
+        // 下一次启用会把刚卸载的补丁悄悄打回去（2026-09-16 用户实测踩坑）。
+        var purgedSources = (uninstallAll
+                ? CurrentLedgerEntries().Where(e => !string.Equals(e.Kind, FxPatchStateStore.KindBuiltIn, StringComparison.OrdinalIgnoreCase))
+                : CheckedThirdParty)
+            .Where(e => !string.IsNullOrWhiteSpace(e.SourceFile) && File.Exists(e.SourceFile))
+            .Select(e => Path.GetFullPath(e.SourceFile!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var invocations = BuildInvocations("purge", uninstallAll);
         if (invocations.Count == 0)
         {
@@ -719,6 +950,12 @@ public partial class FxPatchView : UserControl
             return;
         }
         await RunEngineAsync(uninstallAll ? "卸载全部补丁（连带整包替换型）" : "卸载已勾选补丁", invocations);
+        if (_pendingPatchFile is { } pending && File.Exists(pending) && purgedSources.Contains(Path.GetFullPath(pending)))
+        {
+            _pendingPatchFile = null;
+            PatchJsonBox.Text = string.Empty;
+            PatchJsonBox.ToolTip = null;
+        }
         RefreshAfterOperation();
     }
 

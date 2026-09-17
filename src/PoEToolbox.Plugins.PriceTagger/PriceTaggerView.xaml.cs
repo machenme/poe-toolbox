@@ -442,8 +442,27 @@ public partial class PriceTaggerView : UserControl
             await GameDataLoader.UseAsync(ggpkPath, GameDataMode.ReadWrite, (gd, _) =>
             {
                 IndexBackupService.RestoreBaseline(gd);
+                // 与「特效补丁」页「恢复游戏原版」同口径：基线回写后残留的 PATCHED bundle 已无引用，顺手清掉
+                gd.CleanupOrphanCustomBundles(saveIndex: true);
                 return Task.CompletedTask;
             });
+
+            // 自检悬空补丁引用：基线可能过期或被污染（在补丁应用状态下创建），恢复出的索引仍可能
+            // 指向已丢失的补丁文件。尽力而为，失败不改变「还原已完成」的结论。
+            try
+            {
+                var repaired = PatchBundleRepair.RepairIfBroken(ggpkPath);
+                if (repaired > 0)
+                    LogSuccess(isZh
+                        ? $"已修复 {repaired} 个指向丢失补丁文件的索引引用。"
+                        : $"Repaired {repaired} dangling patch-file references.");
+            }
+            catch (Exception ex)
+            {
+                LogError(isZh
+                    ? $"还原后自检悬空补丁引用未完成：{ex.Message}"
+                    : $"Post-restore dangling-reference check failed: {ex.Message}");
+            }
 
             LogSuccess(isZh ? "游戏数据已还原！" : "Game data restored!");
             // Clear language mod cache after restore

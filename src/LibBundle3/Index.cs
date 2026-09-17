@@ -30,22 +30,21 @@ namespace LibBundle3;
 /// Class to handle the _.index.bin file.
 /// </summary>
 public class Index : IDisposable {
-	// PoEToolbox 修订：原为 readonly；原因同 baseBundle（初始化提取到 Initialize()）。
-	protected internal IBundleFactory bundleFactory;
+	// PoEToolbox 修订：原为 readonly 且在构造函数体内赋值；现初始化提取到 Initialize()
+	// （字符串构造函数在流初始化失败时必须关掉文件句柄），字段用 null! 标注「由 Initialize 赋值」。
+	protected internal IBundleFactory bundleFactory = null!;
 	/// <summary>
 	/// <see cref="Bundle"/> instance of "_.index.bin"
 	/// </summary>
-	// PoEToolbox 修订：原为 readonly；初始化提取到 Initialize() 以便字符串构造函数在
-	// 流初始化失败时关闭文件句柄，因此这两个字段需要在构造函数外赋值一次。
-	protected Bundle baseBundle;
+	protected Bundle baseBundle = null!;
 	/// <summary>
 	/// Data for <see cref="ParsePaths"/>
 	/// </summary>
-	protected byte[] directoryBundleData;
+	protected byte[] directoryBundleData = null!;
 
-	protected BundleRecord[] _Bundles;
-	protected internal DirectoryRecord[] _Directories;
-	protected Dictionary<ulong, FileRecord> _Files;
+	protected BundleRecord[] _Bundles = null!;
+	protected internal DirectoryRecord[] _Directories = null!;
+	protected Dictionary<ulong, FileRecord> _Files = null!;
 
 	/// <summary>
 	/// Bundles ceated by this library for writing modfied files.
@@ -627,7 +626,11 @@ public class Index : IDisposable {
 					CustomBundles.RemoveAt(i--);
 					var bundleIndex = Array.IndexOf(_Bundles, br);
 					if (bundleIndex >= 0)
-						_Bundles.RemoveAt(bundleIndex);
+						// PoEToolbox 修订（2026-09-16）：SystemExtensions 的 Array.RemoveAt 是函数式的——
+						// 返回移除后的新数组、不改动原数组（上游误当 void 用，返回值被丢弃导致 _Bundles
+						// 从未缩短：腾空的补丁 bundle 物理文件删了、索引里的空记录却永久残留并随每次
+						// 应用/还原不断堆积）。必须把返回值赋回。
+						_Bundles = _Bundles.RemoveAt(bundleIndex);
 					baseBundle.UncompressedSize -= br.RecordLength;
 					removed.Add(br);
 				}

@@ -315,6 +315,16 @@ public static class FxPatchEngine
         return Path.Combine(AppContext.BaseDirectory, fileName);
     }
 
+    /// <summary>按 id 解析内置补丁描述文件路径（导出补丁文件用）；补丁不存在或文件缺失返回 null。</summary>
+    public static string? TryResolveBuiltInPatchPath(string patchId)
+    {
+        var def = BuiltIns.FirstOrDefault(b => b.Id.Equals(patchId, StringComparison.OrdinalIgnoreCase));
+        if (def is null)
+            return null;
+        var path = ResolveBuiltInPatchPath(def.FileName);
+        return File.Exists(path) ? path : null;
+    }
+
     /// <summary>读取并校验一份 .patch.json，注入 BasePath（assets 相对路径基准）。</summary>
     private static PatchDef LoadPatchFile(string path)
     {
@@ -505,10 +515,22 @@ public static class FxPatchEngine
         var indexDir = Path.GetDirectoryName(resolved)!;
         var patchedDir = Path.Combine(indexDir, "PATCHED");
 
+        var baselineMissing = false;
         GameDataLoader.Use(resolved, GameDataMode.ReadWrite, gd =>
         {
+            // 没有基线就整体回写不了索引；此时删 PATCHED 文件只会制造悬空引用。
+            // 明确中止并指向启动器验证（那边能拿到官方索引），比抛英文 FileNotFoundException 有用得多。
+            if (!File.Exists(IndexBackupService.GetBaselinePath(resolved)))
+            {
+                LogErr("[中止] 没有原始索引备份（Bundles2\\backup\\_.index.bin 缺失），无法整体恢复原版。"
+                    + "请用启动器的「验证/修复游戏文件」恢复官方索引；得到干净索引后本工具会自动重建基线。");
+                baselineMissing = true;
+                return;
+            }
             IndexBackupService.RestoreBaseline(gd); // 写回基线索引并清空账本
         });
+        if (baselineMissing)
+            return 1;
 
         var removed = 0;
         if (Directory.Exists(patchedDir))
@@ -540,6 +562,20 @@ public static class FxPatchEngine
         }
 
         Log("[完成] 已恢复原版索引；所有补丁记录已清空，想再用需要重新启用补丁。");
+
+        // 基线可能过期或被污染（在补丁应用状态下创建/刷新），恢复出的索引也许仍引用已删除/丢失的
+        // PATCHED bundle。不修的话，之后打开游戏数据乃至游戏加载都会直接失败。
+        // 尽力而为：与整包还原（RawRevert）同一口径；修不动时 RepairIfBroken 的日志已说明成因与出路。
+        try
+        {
+            var repaired = PatchBundleRepair.RepairIfBroken(resolved, Log);
+            if (repaired > 0)
+                Log($"[修复] 恢复出的索引仍引用已丢失的补丁 bundle，已把 {repaired} 个文件归位到原版位置。");
+        }
+        catch (Exception ex)
+        {
+            LogErr($"[警告] 恢复后自检悬空补丁引用未完成：{ex.Message}");
+        }
         return 0;
     }
 
@@ -1007,6 +1043,11 @@ public static class FxPatchEngine
             if (preview.Any(s => s.State is PatchState.Conflict or PatchState.Incompatible))
             {
                 LogErr("[中止] 存在冲突或不兼容操作，未做任何写入。");
+                // 词缀补丁由「词缀上色」页按当时的游戏文件现生成；这里启用的 json 是上一次的产物，
+                // 游戏文件变过（应用/卸载其他补丁、换汉化、游戏更新）就必然对不上。
+                if (string.Equals(patch.PatchId, AffixPatchBuilder.PatchId, StringComparison.OrdinalIgnoreCase))
+                    LogErr("[指引] 这是词缀上色生成的补丁，与当前游戏文件内容不一致（通常是之后应用或卸载过其他补丁，文本已变化）。"
+                        + "请到「词缀上色」页处理：要用就重新点「应用词缀修改」，不用了就在那里恢复原版。");
                 return 1;
             }
         }

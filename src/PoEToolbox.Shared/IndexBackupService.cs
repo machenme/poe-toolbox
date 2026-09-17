@@ -47,6 +47,13 @@ public static class IndexBackupService
                 FileLogger.App.Info("游戏索引与原始基线不一致，但客户端存在已应用补丁：基线保持不变。");
                 return;
             }
+            if (!IndexHasNoPatchBundleRecords(resolved))
+            {
+                // 磁盘上看是"干净"（账本空、PATCHED 无文件），但索引仍引用 PATCHED bundle = 悬空状态；
+                // 把它刷进基线等于把悬空固化成"原版"，之后恢复原版永远修不回来。
+                FileLogger.App.Info("游戏索引仍引用 PATCHED 补丁 bundle（悬空状态）：基线保持不变。");
+                return;
+            }
             File.Copy(resolved, baselinePath, overwrite: true);
             FileLogger.App.Info(
                 $"游戏索引已更新且客户端无补丁：原始索引基线已刷新为当前版本（{new FileInfo(resolved).Length:N0} bytes）。");
@@ -92,6 +99,27 @@ public static class IndexBackupService
             || !Directory.EnumerateFiles(patchedDirectory, "*.bundle.bin").Any();
     }
 
+    /// <summary>索引记录层面没有任何 PATCHED bundle 引用。IsClientClean 只看磁盘证据，
+    /// 看不出「PATCHED 文件已丢但索引仍引用」的悬空状态——那种状态下刷新基线会把悬空固化。</summary>
+    private static bool IndexHasNoPatchBundleRecords(string resolvedIndex)
+    {
+        try
+        {
+            using var gd = GameDataAccess.OpenReadOnlyMapped(resolvedIndex);
+            return !HasPatchBundleRecord(gd.Index);
+        }
+        catch (Exception ex)
+        {
+            FileLogger.App.Error($"打开索引核对补丁引用失败，基线保持不变：{ex.Message}");
+            return false;
+        }
+        finally
+        {
+            // Opened outside GameDataLoader, so the reclaim has to be requested here as well.
+            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
+        }
+    }
+
     /// <summary>
     /// Ensures the original index is retained before a game-data mutation starts.
     /// </summary>
@@ -102,10 +130,32 @@ public static class IndexBackupService
         var beforeHash = HashIndex(gameData);
         var baselinePath = GetBaselinePath(gameData.GameDataPath);
         Directory.CreateDirectory(Path.GetDirectoryName(baselinePath)!);
-        var createdBaseline = EnsureBaseline(baselinePath, gameData);
+        // 基线写入后会被之后所有「恢复原版」当官方索引整体回写：在补丁已应用时创建基线，
+        // 等于把 PATCHED 重定向固化成"原版"——恢复后索引指向已被清理的补丁文件，游戏与工具全部悬空
+        //（2026-09-16 词缀上色悬空 v12 bundle 即此成因）。宁缺毋滥：宁可不建，也不能建脏的。
+        var createdBaseline = IndexIsPatchFree(gameData.Index) && EnsureBaseline(baselinePath, gameData);
+        if (!createdBaseline && !File.Exists(baselinePath))
+            FileLogger.App.Warn(
+                "当前索引仍引用 PATCHED/ 补丁 bundle，已跳过基线创建：把打补丁的索引存成「原版基线」，"
+                + "之后每次恢复原版都会指向丢失的补丁文件。请先执行「恢复游戏原版」或用启动器验证游戏文件，"
+                + "得到干净索引后基线会自动建立。");
         FileLogger.App.Info($"Backup session started: {backupDirectory} (baseline {(createdBaseline ? "created" : "already existed")}, hash {beforeHash[..12]})");
 
         return new IndexBackupSession(backupDirectory, baselinePath, beforeHash, createdBaseline);
+    }
+
+    /// <summary>索引是否已与补丁脱钩：没有任何 bundle 记录落在 PATCHED/ 目录下。</summary>
+    private static bool IndexIsPatchFree(LibBundle3.Index index) => !HasPatchBundleRecord(index);
+
+    /// <summary>索引记录里是否存在指向 PATCHED/ 目录的 bundle。</summary>
+    private static bool HasPatchBundleRecord(LibBundle3.Index index)
+    {
+        foreach (var br in index.Bundles.Span)
+        {
+            if (br.Path.StartsWith("PATCHED/", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>Logs a mutation after it has been saved. No-op saves are skipped, detected by hash.</summary>

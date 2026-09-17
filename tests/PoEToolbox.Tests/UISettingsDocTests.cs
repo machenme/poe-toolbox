@@ -123,6 +123,50 @@ public sealed class UISettingsDocTests
         Assert.Equal(1, System.Text.RegularExpressions.Regex.Count(text, "id=\"AT1\""));
     }
 
+    /// <summary>第三方配色补丁（如 A 补丁）把颜色写成 a,r,g,b 四段，游戏原生是 r,g,b 三段——
+    /// 列表要渲染它们的标签，先得把两种格式都读回来。</summary>
+    [Fact]
+    public void TryParseColor_ReadsThreeAndFourComponentValues()
+    {
+        var three = UISettingsDoc.TryParseColor("Critical", "255,0,0");
+        Assert.Equal(new AffixColorDef("Critical", 255, 0, 0), three);
+
+        // A 补丁的写法：第一个分量是透明度
+        var four = UISettingsDoc.TryParseColor("AT1", "255,231,179,37");
+        Assert.Equal(new AffixColorDef("AT1", 231, 179, 37, 255), four);
+    }
+
+    [Fact]
+    public void TryParseColor_RejectsUnusableInput()
+    {
+        Assert.Null(UISettingsDoc.TryParseColor("1bad", "1,2,3"));   // id 不是字母开头
+        Assert.Null(UISettingsDoc.TryParseColor("TooShort", "1,2"));
+        Assert.Null(UISettingsDoc.TryParseColor("TooMany", "1,2,3,4,5"));
+        Assert.Null(UISettingsDoc.TryParseColor("NotNumber", "x,2,3"));
+        Assert.Null(UISettingsDoc.TryParseColor("Overflow", "300,2,3"));
+    }
+
+    /// <summary>游戏自带颜色与第三方补丁颜色一起读出，供列表着色；无法解析的条目跳过而不是报错。</summary>
+    [Fact]
+    public void GetColorDefs_IncludesExternalPatchColors()
+    {
+        var doc = UISettingsDoc.Parse(DocText(
+            "<Props id=\"PathOfExile\">",
+            "\t<Colour id=\"Critical\" value=\"255,0,0\"/>",
+            "\t<Colour id=\"AT1\" value=\"255,231,179,37\"/>",
+            "\t<Colour id=\"LUK2\" value=\"200,170,158,130\"/>",
+            "\t<Colour id=\"1broken\" value=\"1,2,3\"/>",
+            "</Props>"));
+
+        var defs = doc.GetColorDefs();
+        var byId = defs.ToDictionary(d => d.Id);
+
+        Assert.Equal(3, defs.Count); // 非法 id 被跳过
+        Assert.Equal(new AffixColorDef("Critical", 255, 0, 0), byId["Critical"]);
+        Assert.Equal(new AffixColorDef("AT1", 231, 179, 37, 255), byId["AT1"]);
+        Assert.Equal(new AffixColorDef("LUK2", 170, 158, 130, 200), byId["LUK2"]);
+    }
+
     [Fact]
     public void GetColors_ListsExistingDefinitions()
     {

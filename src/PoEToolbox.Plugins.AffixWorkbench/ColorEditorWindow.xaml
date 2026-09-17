@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:PoEToolbox.Plugins.AffixWorkbench"
-        Title="颜色修改" Width="620" Height="640" WindowStartupLocation="CenterOwner"
+        Title="颜色修改" Width="620" Height="760" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBgBrush}">
     <Window.Resources>
         <local:AffixColorBrushConverter x:Key="AffixBrush"/>
@@ -10,6 +10,7 @@
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -87,7 +88,53 @@
             </StackPanel>
         </Border>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <!-- 游戏里已经在用的颜色（第三方补丁 / 游戏自带）：只读，可拿来当自己做色的起点 -->
+        <Border Grid.Row="2" Margin="0,10,0,0" Padding="10" CornerRadius="4" x:Name="ExternalPanel"
+                Background="{DynamicResource SurfaceBrush}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Style="{StaticResource SmallText}" TextWrapping="Wrap"
+                               Text="游戏里已经在用的颜色：第三方补丁或游戏自带的配色。游戏自带的定义有 300 多个，下面只列出被当前词缀真的引用到的这些。"/>
+                    <TextBlock Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="点右侧按钮可以照抄它的颜色，做成你自己的一个新颜色——之后把这个颜色指派给某条词缀，那一条就会换成你的颜色，同一款补丁上的其他词缀不受影响。"/>
+                </StackPanel>
+                <TextBlock x:Name="ExternalEmpty" DockPanel.Dock="Top" Margin="0,8,0,0"
+                           Style="{StaticResource SmallText}" TextWrapping="Wrap"
+                           Text="没有读到游戏里已存在的颜色——客户端当前没有装词缀配色补丁。" Visibility="Collapsed"/>
+                <ListBox x:Name="ExternalList" Margin="0,8,0,0" MaxHeight="168" Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Height="20" CornerRadius="3"
+                                        Background="{Binding Id, Converter={StaticResource AffixBrush}}"
+                                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                        ToolTip="游戏里这个颜色的实际样子"/>
+                                <TextBlock Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                           Text="{Binding Id}" ToolTip="{Binding Id}"/>
+                                <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                           Style="{StaticResource SmallText}" Text="{Binding Hex}"/>
+                                <TextBlock Grid.Column="3" Margin="8,0,0,0" VerticalAlignment="Center"
+                                           Style="{StaticResource SmallText}" Text="{Binding Note}"
+                                           ToolTip="游戏文件里的原始写法（不带 #：R,G,B 或 A,R,G,B）"/>
+                                <Button Grid.Column="4" Content="照抄这个颜色" Margin="8,0,0,0"
+                                        Style="{StaticResource SecondaryButton}" Click="Take_Click"
+                                        ToolTip="用它当前的颜色新建一个属于你的颜色（id 会自动避开同名），之后就能指派给词缀"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="取消" Style="{StaticResource SecondaryButton}" Width="80" Click="Cancel_Click"/>
             <Button Content="确定" Style="{StaticResource PrimaryButton}" Width="80" Margin="8,0,0,0" Click="Ok_Click"/>
         </StackPanel>

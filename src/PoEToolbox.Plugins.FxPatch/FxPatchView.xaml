@@ -49,7 +49,10 @@
 
                         <Separator Margin="0,12,0,8" Background="{DynamicResource BorderBrush}"/>
                         <TextBlock Text="第三方补丁" Style="{StaticResource SmallText}"
-                                   ToolTip="上面的待应用条目来自底部选择的补丁文件；下面的来自补丁记录（已应用）。勾选后可用「启用 / 恢复 / 卸载」批量处理。"/>
+                                   ToolTip="下面的待应用条目来自底部选择的补丁文件，其余来自补丁记录（已应用）。勾选后可用「启用 / 恢复 / 卸载」批量处理。"/>
+                        <TextBlock Text="建议顺序：先在本页打完特效 / 整包补丁，最后启用「内置词缀修改补丁」（内置区末尾，或到「词缀上色」页调整颜色后应用）。"
+                                   Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
                         <TextBlock x:Name="ThirdPartyEmpty" Text="没有读取到已安装的第三方补丁。"
                                    Style="{StaticResource SmallText}" Margin="0,4,0,0"/>
                         <StackPanel x:Name="ThirdPartyPanel" Margin="0,2,0,0"/>

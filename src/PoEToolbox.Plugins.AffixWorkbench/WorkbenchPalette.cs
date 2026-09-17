@@ -12,19 +12,44 @@ namespace PoEToolbox.Plugins.AffixWorkbench;
 /// </summary>
 public static class WorkbenchPalette
 {
+    /// <summary>方案自己的颜色（含由它合成的色阶前缀）。</summary>
+    private static IReadOnlyList<AffixColorDef> _owned = [];
+
+    /// <summary>游戏里已存在、不属于方案的颜色（第三方补丁定义的）。只做兜底查询。</summary>
+    private static IReadOnlyList<AffixColorDef> _external = [];
+
     public static IReadOnlyDictionary<string, Color> Colors { get; private set; }
         = new Dictionary<string, Color>();
 
     /// <summary>重建调色板。色阶前缀（如 <c>AT</c>）会映射到它首档的颜色，供列表预览按色阶着色。</summary>
     public static void Update(IEnumerable<AffixColorDef> defs)
     {
-        var colors = defs as IList<AffixColorDef> ?? [.. defs];
-        var map = colors.ToDictionary(c => c.Id, c => Color.FromArgb(c.A, c.R, c.G, c.B), StringComparer.Ordinal);
-        foreach (var ramp in AffixColorRamp.FromColors(colors))
+        _owned = defs as IReadOnlyList<AffixColorDef> ?? [.. defs];
+        Apply();
+    }
+
+    /// <summary>登记「别的补丁已经定义好」的颜色，让列表能把它们渲染出来。
+    /// 刻意<b>不</b>参与色阶合成：外部色往往成系列（AT1~AT4、DA1~DA4），
+    /// 合成后界面会凭空多出一批不属于本方案的色阶。</summary>
+    public static void SetExternal(IEnumerable<AffixColorDef> external)
+    {
+        _external = external as IReadOnlyList<AffixColorDef> ?? [.. external];
+        Apply();
+    }
+
+    private static void Apply()
+    {
+        var map = new Dictionary<string, Color>(StringComparer.Ordinal);
+        foreach (var def in _owned)
+            map[def.Id] = Color.FromArgb(def.A, def.R, def.G, def.B);
+        foreach (var ramp in AffixColorRamp.FromColors(_owned))
         {
             if (map.TryGetValue(ramp.ColorIds[0], out var color))
                 map[ramp.Prefix] = color;
         }
+        // 外部色兜底：同名以方案为准，方案没有的才用游戏里已有的定义
+        foreach (var def in _external)
+            map.TryAdd(def.Id, Color.FromArgb(def.A, def.R, def.G, def.B));
         Colors = map;
     }
 
