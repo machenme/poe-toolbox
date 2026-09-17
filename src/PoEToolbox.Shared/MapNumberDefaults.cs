@@ -43,7 +43,7 @@ public sealed record MapNumberRestoreResult(int RestoredFiles, int AlreadyOrigin
 /// <remarks>
 /// 与基线（<c>Bundles2/backup/_.index.bin</c>）的分工：
 /// <list type="bullet">
-/// <item>基线记录的是**游戏原版**位置，用于「恢复游戏原版」这类全局还原；</item>
+/// <item>基线记录的是**游戏原版**位置，用于「彻底还原游戏客户端」这类全局还原；</item>
 /// <item>本快照记录的是**用户按「写入地图标签」那一刻的实际内容**。用户改过之后又想撤，
 /// 就该回到那时——哪怕那时客户端已经被第三方补丁改过（比如换了地图底图），
 /// 恢复到原版会把第三方的东西一起抹掉，那是另一件事。</item>

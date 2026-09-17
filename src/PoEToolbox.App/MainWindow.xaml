@@ -252,15 +252,15 @@
         <Border Grid.Row="3" Background="{DynamicResource SurfaceBrush}" Padding="12,0">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- 整体兜底入口：无论当前在哪个模块，改坏了游戏都能从这里一键恢复原版 -->
+                    <!-- 整体兜底入口：无论当前在哪个模块，改坏了游戏都能从这里一键彻底还原官方客户端 -->
                     <Button x:Name="RestoreBaselineButton" Click="RestoreBaselineButton_Click"
-                            Content="恢复游戏原版"
+                            Content="彻底还原游戏客户端"
                             Style="{StaticResource SecondaryButton}"
                             Height="24" Padding="10,0" FontSize="11"
                             Foreground="{DynamicResource ErrorBrush}"
                             BorderBrush="{DynamicResource ErrorBrush}"
                             Cursor="Hand"
-                            ToolTip="整体兜底：用备份的原版索引替换当前索引，并删除所有补丁新增的文件（含第三方补丁）。任何模块改坏了游戏都可以用它恢复；日常卸载单个补丁请到「特效补丁」页。"/>
+                            ToolTip="整体兜底：把游戏彻底还原成官方原版——整包替换型补丁（如汉化包）覆盖的原生文件按备份清单放回，再用原版索引替换当前索引并删除所有补丁新增的文件（含第三方补丁）。任何模块改坏了游戏都可以用它恢复；日常卸载单个补丁请到「特效补丁」页。"/>
                     <TextBlock x:Name="StatusLabel" Text="Ready"
                                Style="{StaticResource SmallText}"
                                Margin="12,0,0,0"

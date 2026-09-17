@@ -71,6 +71,33 @@ public sealed class AffixColorSchemeTests : IDisposable
         Assert.Contains("NoSuchColor", issues[0]);
     }
 
+    /// <summary>指派引用色阶前缀（如 "Tier"）或 "正向|负向" 复合写法时不算悬空——
+    /// 与 AffixDataService.MatchColor 的解析语义一致；真实案例：A 大配色 638 条指派全是 "Tier"。</summary>
+    [Fact]
+    public void Validate_AcceptsRampReferencesInAssignments()
+    {
+        var scheme = Sample("ramp-ref");
+        scheme.Colors.Add(new AffixColorDef("Tier1", 200, 255, 70));
+        scheme.Colors.Add(new AffixColorDef("Tier2", 100, 180, 60));
+        scheme.Colors.Add(new AffixColorDef("Neg1", 30, 30, 255));
+        scheme.Colors.Add(new AffixColorDef("Neg2", 20, 20, 200));
+        scheme.Assignments.Add(new AffixAssignment("a", "", "Tier"));
+        scheme.Assignments.Add(new AffixAssignment("b", "", "Tier|Neg"));
+
+        Assert.Empty(scheme.Validate());
+    }
+
+    [Fact]
+    public void Validate_ReportsAssignmentNeitherColorNorRamp()
+    {
+        var scheme = Sample("dangling-assign");
+        scheme.Assignments.Add(new AffixAssignment("a", "", "NoSuchColor"));
+        scheme.Assignments.Add(new AffixAssignment("b", "", "NoSuchColor|Tier"));
+
+        var issues = scheme.Validate();
+        Assert.Equal(2, issues.Count);
+    }
+
     [Fact]
     public void PathOf_RejectsInvalidFileNameChars()
     {

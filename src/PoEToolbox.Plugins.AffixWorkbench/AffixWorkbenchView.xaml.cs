@@ -228,6 +228,14 @@ public partial class AffixWorkbenchView : UserControl
     {
         if (_suppressTierComboEvents || TierCountCombo.SelectedItem is not int count)
             return;
+        if (!EnsureColorableScheme())
+        {
+            // 改动被拒后把下拉拨回现状，避免界面显示值与方案实际档位不一致
+            _suppressTierComboEvents = true;
+            try { TierCountCombo.SelectedItem = Math.Clamp(_scheme.FindRamp("Tier")?.ColorIds.Count ?? 4, 2, 8); }
+            finally { _suppressTierComboEvents = false; }
+            return;
+        }
         RegenerateTierGradient(count);
     }
 
@@ -496,6 +504,8 @@ public partial class AffixWorkbenchView : UserControl
     /// <summary>用检查器里选中的颜色，一次给所有勾选的词缀指派颜色。</summary>
     private void ApplyColorToChecked_Click(object sender, RoutedEventArgs e)
     {
+        if (!EnsureColorableScheme())
+            return;
         var targets = _allEntries.Where(vm => vm.IsChecked).ToList();
         if (targets.Count == 0)
         {
@@ -738,6 +748,8 @@ public partial class AffixWorkbenchView : UserControl
     /// 同一条 stat 的其他行（如"降低"方向）不受影响。</summary>
     private void ApplyLineColor_Click(object sender, RoutedEventArgs e)
     {
+        if (!EnsureColorableScheme())
+            return;
         if (EntryList.SelectedItem is not EntryVm vm || sender is not FrameworkElement { DataContext: LineVm line })
             return;
         if (InspectorColorCombo.SelectedItem is not string colorLabel)
@@ -773,6 +785,8 @@ public partial class AffixWorkbenchView : UserControl
     /// 首次会构建档位索引（约 1 秒），之后复用。</summary>
     private void ApplyRampToAllTiered_Click(object sender, RoutedEventArgs e)
     {
+        if (!EnsureColorableScheme())
+            return;
         if (!_service.IsConnected)
         {
             Output.SetStatus("请先连接游戏数据（顶部「选择游戏数据」）。", UiStatus.Kind.Warning);
@@ -829,6 +843,8 @@ public partial class AffixWorkbenchView : UserControl
     /// 生成补丁时按行首数值区间展开成分档颜色、并把带正负号的行拆成提高/降低两行。</summary>
     private void AssignRamp(IReadOnlyList<EntryVm> targets, AffixColorRamp ramp)
     {
+        if (!EnsureColorableScheme())
+            return;
         var negative = NegativeRampCombo.SelectedItem as AffixColorRamp;
         var colorId = negative is null ? ramp.Prefix : $"{ramp.Prefix}|{negative.Prefix}";
         foreach (var vm in targets)
@@ -898,11 +914,17 @@ public partial class AffixWorkbenchView : UserControl
 
     private void RefreshSchemeCombo(bool initial = false)
     {
+        try { AffixColorScheme.EnsureOriginalExists(); }
+        catch (Exception ex)
+        {
+            Output.AppendLog($"内置「官方原版」方案创建失败（不影响其他方案）：{ex.Message}");
+        }
         var names = AffixColorScheme.ListSchemeNames();
-        if (initial && names.Count == 0)
+        // 全新安装（除内置「官方原版」外一个方案都没有）时，把默认方案落盘
+        if (initial && names.All(n => n == AffixColorScheme.OriginalName))
         {
             _scheme.Save();
-            names = [_scheme.Name];
+            names = [_scheme.Name, .. names];
         }
         SchemeCombo.ItemsSource = names;
         var current = _scheme.Name;
@@ -920,7 +942,9 @@ public partial class AffixWorkbenchView : UserControl
             RefreshPreview();
             RebuildEntryList();
             RefreshInspector();
-            Output.AppendLog($"已加载方案：{name}（{_scheme.Colors.Count} 颜色 / {_scheme.Rules.Count} 规则 / {_scheme.Assignments.Count} 指派）");
+            Output.AppendLog(_scheme.RestoreOriginal
+                ? $"已加载方案：{name}（内置：点「应用词缀修改」即清除全部词缀颜色、恢复官方默认）"
+                : $"已加载方案：{name}（{_scheme.Colors.Count} 颜色 / {_scheme.Rules.Count} 规则 / {_scheme.Assignments.Count} 指派）");
         }
         catch (Exception ex)
         {
@@ -949,6 +973,11 @@ public partial class AffixWorkbenchView : UserControl
         var name = SchemeCombo.SelectedItem as string;
         if (name is null)
             return;
+        if (name == AffixColorScheme.OriginalName)
+        {
+            Output.SetStatus("「官方原版」是内置方案，不能删除。", UiStatus.Kind.Warning);
+            return;
+        }
         var result = MessageBox.Show(Window.GetWindow(this)!, $"确定删除方案「{name}」？（不影响已应用到游戏的补丁）",
             "删除方案", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes)
@@ -977,6 +1006,11 @@ public partial class AffixWorkbenchView : UserControl
         try
         {
             var name = Path.GetFileNameWithoutExtension(dlg.FileName);
+            if (name == AffixColorScheme.OriginalName)
+            {
+                Output.SetStatus("「官方原版」是内置方案名，请把文件改名后再导入。", UiStatus.Kind.Warning);
+                return;
+            }
             _scheme = AffixColorScheme.Import(dlg.FileName, name);
             _scheme.Save();
             RefreshSchemeCombo();
@@ -985,9 +1019,15 @@ public partial class AffixWorkbenchView : UserControl
             RebuildEntryList();
             RefreshInspector();
             var issues = _scheme.Validate();
-            Output.SetStatus(issues.Count == 0
-                ? $"已导入并保存方案「{name}」。"
-                : $"已导入方案「{name}」，但存在配置问题：{string.Join("；", issues)}", UiStatus.Kind.Warning);
+            if (issues.Count == 0)
+                Output.SetStatus($"已导入并保存方案「{name}」。");
+            else
+            {
+                Output.AppendLog($"方案「{name}」配置问题（{issues.Count} 项）：\n" + string.Join("\n", issues));
+                var summary = string.Join("；", issues.Take(3)) + (issues.Count > 3 ? "……" : "");
+                Output.SetStatus($"已导入方案「{name}」，但存在 {issues.Count} 个配置问题（完整清单见日志）：{summary}",
+                    UiStatus.Kind.Warning);
+            }
         }
         catch (Exception ex)
         {
@@ -1026,6 +1066,15 @@ public partial class AffixWorkbenchView : UserControl
     }
 
     // ═══ 应用 / 恢复 ═══════════════════════════════════════════
+
+    /// <summary>「官方原版」是恢复语义的内置方案：应用 = 清除全部颜色标签，给它上色/指派没有意义。</summary>
+    private bool EnsureColorableScheme()
+    {
+        if (!_scheme.RestoreOriginal)
+            return true;
+        Output.SetStatus("「官方原版」方案用于恢复官方默认，不支持上色；请先切换到其他方案再操作。", UiStatus.Kind.Warning);
+        return false;
+    }
 
     /// <summary>方案被修改后自动重算「应用后效果」：在内存里模拟一次应用（不写盘），
     /// 随后的列表重建就会展示变色后的真实样子（按档拆行、只染数值），会变色的排最前面。</summary>
@@ -1121,7 +1170,9 @@ public partial class AffixWorkbenchView : UserControl
             _service.AdvanceBaseline(changes);
             _service.ClearPreview();
             RebuildEntryList();
-            return "词缀颜色补丁已应用。可在游戏中查看效果；继续调整方案前请先重新连接游戏。";
+            return _scheme.RestoreOriginal
+                ? "已恢复官方默认：全部词缀颜色标签已清除。继续调整方案前请先重新连接游戏。"
+                : "词缀颜色补丁已应用。可在游戏中查看效果；继续调整方案前请先重新连接游戏。";
         });
     }
 
@@ -1142,7 +1193,7 @@ public partial class AffixWorkbenchView : UserControl
         {
             FileLogger.App.Error("词缀上色自动修复失败。", ex);
             throw new InvalidOperationException(
-                "自动修复未完成：请先退出游戏，到「特效补丁」页执行「恢复游戏原版」后再回来重新连接。", ex);
+                "自动修复未完成：请先退出游戏，到「特效补丁」页执行「彻底还原游戏客户端」后再回来重新连接。", ex);
         }
         return _service.IsConnected
             ? "索引已修复并重新连接。刚才的「应用」未写入任何内容，请再次点击「应用词缀修改」。"

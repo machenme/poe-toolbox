@@ -90,11 +90,11 @@
                                Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Row="0" Grid.Column="2">
-                    <Button x:Name="RevertButton" Content="恢复游戏原版"
-                            ToolTip="用备份的原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。整包替换型补丁覆盖的原生文件除外（需用对应补丁的还原功能）。"
+                    <Button x:Name="RevertButton" Content="彻底还原游戏客户端"
+                            ToolTip="把游戏彻底还原成官方原版：整包替换型补丁（如汉化包）覆盖的原生文件按备份清单放回，再用备份的原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。"
                             Style="{StaticResource SecondaryButton}" Height="42"
                             Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource ErrorBrush}" Click="Revert_Click"/>
-                    <TextBlock Text="整体恢复原版：全部补丁（含第三方）都会被移除，之后想再用需重新启用。"
+                    <TextBlock Text="彻底还原官方原版：全部补丁（含第三方、汉化整包）都会被移除，之后想再用需重新启用。"
                                Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="0">
@@ -106,9 +106,9 @@
                 </StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="2">
                     <Button x:Name="PurgeButton" Content="卸载已勾选补丁"
-                            ToolTip="完整卸载勾选的补丁：撤销修改并删除新增文件；其他未勾选的补丁不受影响。注意：勾选了整包替换型补丁（含 _.index.bin 的 zip）时会连带卸载全部补丁，弹窗会再确认。卸载后要重新应用补丁才能再用。想整体恢复原版用「恢复游戏原版」。"
+                            ToolTip="完整卸载勾选的补丁：撤销修改并删除新增文件；其他未勾选的补丁不受影响。注意：勾选了整包替换型补丁（含 _.index.bin 的 zip）时会连带卸载全部补丁，弹窗会再确认。卸载后要重新应用补丁才能再用。想整体还原原版用「彻底还原游戏客户端」。"
                             Style="{StaticResource SecondaryButton}" Height="42" Click="Purge_Click"/>
-                    <TextBlock Text="撤销修改并删除勾选补丁的文件，其他补丁不受影响；整包替换型补丁除外（卸载它会连带卸载全部补丁）。整体恢复请用「恢复游戏原版」。"
+                    <TextBlock Text="撤销修改并删除勾选补丁的文件，其他补丁不受影响；整包替换型补丁除外（卸载它会连带卸载全部补丁）。整体还原请用「彻底还原游戏客户端」。"
                                Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>

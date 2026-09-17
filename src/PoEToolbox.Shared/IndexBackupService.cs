@@ -137,7 +137,7 @@ public static class IndexBackupService
         if (!createdBaseline && !File.Exists(baselinePath))
             FileLogger.App.Warn(
                 "当前索引仍引用 PATCHED/ 补丁 bundle，已跳过基线创建：把打补丁的索引存成「原版基线」，"
-                + "之后每次恢复原版都会指向丢失的补丁文件。请先执行「恢复游戏原版」或用启动器验证游戏文件，"
+                + "之后每次恢复原版都会指向丢失的补丁文件。请先执行「彻底还原游戏客户端」或用启动器验证游戏文件，"
                 + "得到干净索引后基线会自动建立。");
         FileLogger.App.Info($"Backup session started: {backupDirectory} (baseline {(createdBaseline ? "created" : "already existed")}, hash {beforeHash[..12]})");
 

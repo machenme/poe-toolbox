@@ -474,7 +474,7 @@ public static class FxPatchEngine
     private static void Usage(bool builtIn)
     {
         LogErr(builtIn
-            ? $"Usage: fx-oilmod <game-data> [patch-id|{BuiltInAll}] <status|list|apply|revert|cleanup|purge|restore>（省略 patch-id 对全部内置补丁执行；restore = 恢复原版索引并删除全部补丁文件；可用: {string.Join(", ", BuiltIns.Select(p => p.Id))}）"
+            ? $"Usage: fx-oilmod <game-data> [patch-id|{BuiltInAll}] <status|list|apply|revert|cleanup|purge|restore>（省略 patch-id 对全部内置补丁执行；restore = 彻底还原官方客户端：整包替换型补丁 + 全部补丁文件与索引一并复原；可用: {string.Join(", ", BuiltIns.Select(p => p.Id))}）"
             : "Usage: fx-patch <game-data> <patch.json|patch.zip> <status|apply|revert|cleanup|purge>\n       fx-patch diff <原版index.bin> <修改后index.bin> [-o 目录] [--id x] [--bundle y] [--version v] [--zip]");
     }
 
@@ -494,9 +494,9 @@ public static class FxPatchEngine
         return 0;
     }
 
-    /// <summary>彻底恢复原版：用 backup\_.index.bin 基线整体替换当前索引，再删掉 PATCHED 目录里
-    /// 补丁新增的 bundle 物理文件（基线索引不再引用它们）。账本随基线恢复一并清空。
-    /// 注意：整包替换型补丁覆盖的原生文件（非 PATCHED bundle）不在此列，需要用对应补丁的还原功能。</summary>
+    /// <summary>彻底恢复官方原版：先按各补丁的备份清单把「整包替换型补丁」覆盖的原生文件放回去
+    /// （不需要补丁包本身，清单里有全部信息），再用 backup\_.index.bin 基线整体替换当前索引，
+    /// 最后删掉 PATCHED 目录里补丁新增的 bundle 物理文件（基线索引不再引用它们）。账本随基线恢复一并清空。</summary>
     private static int CmdRestoreBaselineFull(string resolved)
     {
         if (PoeDetector.Default.IsPoeRunning())
@@ -510,7 +510,23 @@ public static class FxPatchEngine
             .Select(e => e.Name)
             .ToList();
         if (rawPackIds.Count > 0)
-            Log($"[提示] 检测到 {rawPackIds.Count} 个整包替换型补丁（{string.Join("、", rawPackIds)}）：它们覆盖的原生文件不属于 PATCHED bundle，本次恢复不处理，需要时请重新应用该补丁后再「还原补丁」。");
+            Log($"[提示] 检测到 {rawPackIds.Count} 个整包替换型补丁（{string.Join("、", rawPackIds)}），将按备份清单把它们覆盖的原生文件一并还原。");
+
+        // 整包替换型补丁覆盖的是游戏原生文件（含索引本体），还原只靠备份清单，不依赖基线也不开索引；
+        // 必须在基线回写之前做：其中索引的备份来源可能是基线（backupSource=baseline）。
+        var rawPackFailures = 0;
+        foreach (var id in rawPackIds)
+        {
+            if (RevertRawPackFromLedger(resolved, id) != 0)
+                rawPackFailures++;
+        }
+        if (rawPackIds.Count > 0)
+        {
+            if (rawPackFailures > 0)
+                LogErr($"[警告] {rawPackFailures} 个整包替换型补丁没能完整还原（缺备份清单或缺备份文件），详见上方日志。");
+            else
+                Log($"[完成] {rawPackIds.Count} 个整包替换型补丁覆盖的原生文件已全部还原。");
+        }
 
         var indexDir = Path.GetDirectoryName(resolved)!;
         var patchedDir = Path.Combine(indexDir, "PATCHED");
@@ -724,6 +740,8 @@ public static class FxPatchEngine
             return 1;
         }
 
+        Log("[提示] 整包替换会整体替换游戏索引，可能覆盖已应用的其他补丁（词缀上色、技能特效等）写入的内容；受影响的补丁之后需要重新应用。");
+
         var indexDir = Path.GetDirectoryName(resolved)!;
         var backupDir = Path.Combine(IndexBackupService.GetBackupDirectory(resolved), pack.PatchId);
         var baselinePath = IndexBackupService.GetBaselinePath(resolved);
@@ -788,12 +806,38 @@ public static class FxPatchEngine
             return 1;
         }
 
-        var indexDir = Path.GetDirectoryName(resolved)!;
         var backupDir = Path.Combine(IndexBackupService.GetBackupDirectory(resolved), pack.PatchId);
+        return RevertRawPackFiles(resolved, pack.PatchId, backupDir, pack.Files);
+    }
+
+    /// <summary>按账本里的记录还原一个整包替换型补丁——不需要补丁包本身，还原清单
+    /// （<c>backup/&lt;补丁名&gt;/manifest.txt</c>）里有全部信息。供「彻底还原游戏客户端」逐个调用；
+    /// 清单缺失时告警并返回非 0，不中断其他补丁的还原。</summary>
+    internal static int RevertRawPackFromLedger(string resolved, string patchId)
+    {
+        var backupDir = Path.Combine(IndexBackupService.GetBackupDirectory(resolved), patchId);
+        var manifest = ReadRawManifest(Path.Combine(backupDir, RawManifestFileName));
+        if (manifest.Count == 0)
+        {
+            LogErr($"[警告] 整包替换补丁 {patchId} 没有还原清单（{backupDir}\\{RawManifestFileName}），"
+                + "无法自动还原它覆盖的文件；可从该目录手动放回，或用启动器的「验证/修复游戏文件」。");
+            return 1;
+        }
+        var files = manifest.Keys
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .Select(rel => new RawPackFile(rel, ""))
+            .ToList();
+        return RevertRawPackFiles(resolved, patchId, backupDir, files);
+    }
+
+    /// <summary>整包替换型还原的核心：逐文件把备份放回原位 / 删除补丁新增文件，随后自检悬空引用。</summary>
+    private static int RevertRawPackFiles(string resolved, string patchId, string backupDir, IReadOnlyList<RawPackFile> files)
+    {
+        var indexDir = Path.GetDirectoryName(resolved)!;
         var baselinePath = IndexBackupService.GetBaselinePath(resolved);
         var manifest = ReadRawManifest(Path.Combine(backupDir, RawManifestFileName));
 
-        foreach (var file in pack.Files)
+        foreach (var file in files)
         {
             var target = Path.Combine(indexDir, file.RelativePath);
             manifest.TryGetValue(file.RelativePath, out var entry);
@@ -823,7 +867,7 @@ public static class FxPatchEngine
                 LogErr($"[警告] {file.RelativePath} 找不到原始备份，未改动（可从 {backupDir} 手动恢复，或用「还原原版索引」）");
         }
 
-        FxPatchStateStore.MarkRemoved(resolved, pack.PatchId);
+        FxPatchStateStore.MarkRemoved(resolved, patchId);
 
         // 快照可能早于其他补丁的卸载：还原出的索引也许还引用已被删除的 PATCHED bundle（悬空）。
         // 不修的话，之后任何打开游戏数据的操作（词缀上色连接、游戏读文件）都会直接失败。
@@ -840,7 +884,7 @@ public static class FxPatchEngine
             LogErr($"[警告] 还原后自检悬空补丁引用未完成：{ex.Message}");
         }
 
-        Log($"[成功] {pack.PatchId} 还原完成。");
+        Log($"[成功] {patchId} 还原完成。");
         return 0;
     }
 

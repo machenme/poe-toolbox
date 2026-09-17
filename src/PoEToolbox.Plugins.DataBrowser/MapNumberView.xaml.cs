@@ -291,7 +291,7 @@ public partial class MapNumberView : UserControl
                 + list + "\n\n"
                 + "继续写入会把上面这些内容**覆盖掉**，而且这次覆盖之后不好单独找回（「恢复到上一次改动前」"
                 + "会把你带回到现在的状态，但不会带回对方的改动）。\n\n"
-                + "建议先退出，用「恢复游戏原版」或启动器的验证功能确认客户端状态后再回来。\n\n"
+                + "建议先退出，用「彻底还原游戏客户端」或启动器的验证功能确认客户端状态后再回来。\n\n"
                 + "确定继续写入？",
                 "地图文件已被修改", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
             if (confirm != MessageBoxResult.OK)

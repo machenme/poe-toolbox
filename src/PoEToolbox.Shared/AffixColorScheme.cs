@@ -25,6 +25,25 @@ public sealed class AffixColorScheme
     public List<AffixRuleGroup> Rules { get; set; } = [];
     public List<AffixAssignment> Assignments { get; set; } = [];
 
+    /// <summary>内置「官方原版」方案：应用 = 清除词缀描述文件里的<strong>全部</strong>颜色标签
+    /// （本工具与第三方补丁打的一起剥），恢复官方默认显示。原版 csd 实测不含任何颜色标签，
+    /// 全剥即官方默认；uisettings 的颜色定义保留（无标签引用时无视觉效果）。
+    /// 该方案下 Colors/Rules/Assignments 被忽略，不上色。</summary>
+    public bool RestoreOriginal { get; set; }
+
+    /// <summary>内置「官方原版」方案的固定方案名。</summary>
+    public const string OriginalName = "官方原版";
+
+    /// <summary>构造内置「官方原版」方案（空内容 + <see cref="RestoreOriginal"/> 标记）。</summary>
+    public static AffixColorScheme CreateOriginal() => new() { Name = OriginalName, RestoreOriginal = true };
+
+    /// <summary>确保内置「官方原版」方案已物化到方案目录（用户删过会在下次启动时回来）。</summary>
+    public static void EnsureOriginalExists()
+    {
+        if (!File.Exists(PathOf(OriginalName)))
+            CreateOriginal().Save();
+    }
+
     public AffixColorDef? FindColor(string id) => Colors.FirstOrDefault(c => c.Id == id);
 
     /// <summary>从颜色命名推断出的<strong>色阶</strong>（见 <see cref="AffixColorRamp.FromColors"/>）。</summary>
@@ -41,20 +60,26 @@ public sealed class AffixColorScheme
     /// <summary>所有颜色 id（去重，保持顺序）。</summary>
     public IReadOnlyList<string> ColorIds => [.. Colors.Select(c => c.Id).Distinct()];
 
-    /// <summary>指派/规则引用了不存在的颜色 id 时返回问题清单；空 = 方案自洽。</summary>
+    /// <summary>指派/规则引用了无法解析的颜色 id 时返回问题清单；空 = 方案自洽。
+    /// 指派允许色阶引用（"Tier" 或 "Tier|负向色阶"），解析语义见
+    /// AffixDataService.MatchColor：整串先按颜色找，再按 '|' 拆开、首段按色阶找。</summary>
     public IReadOnlyList<string> Validate()
     {
         var issues = new List<string>();
         var known = new HashSet<string>(Colors.Select(c => c.Id), StringComparer.Ordinal);
         foreach (var rule in Rules.Where(r => !known.Contains(r.ColorId)))
             issues.Add($"规则「{rule.Name}」引用了未定义的颜色 {rule.ColorId}");
-        foreach (var a in Assignments.Where(a => !known.Contains(a.ColorId)))
+        foreach (var a in Assignments.Where(a => !CanResolveColorRef(a.ColorId, known)))
             issues.Add($"词缀 {a.StatKey} 的指派引用了未定义的颜色 {a.ColorId}");
         var duplicated = Colors.GroupBy(c => c.Id).Where(g => g.Count() > 1).Select(g => g.Key);
         foreach (var id in duplicated)
             issues.Add($"颜色 id 重复定义：{id}");
         return issues;
     }
+
+    /// <summary>指派的 ColorId 能否解析：整串是颜色，或 '|' 首段是色阶前缀（负向段解析失败只影响降向配色，不算悬空）。</summary>
+    private bool CanResolveColorRef(string colorId, HashSet<string> known)
+        => known.Contains(colorId) || FindRamp(colorId.Split('|', 2)[0]) is not null;
 
     // ═══ 持久化 ═════════════════════════════════════════════════
 

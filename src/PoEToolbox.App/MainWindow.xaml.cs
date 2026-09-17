@@ -570,12 +570,12 @@ public partial class MainWindow : Window
         public bool IsEnabled => IsPluginAvailable(Plugin, GameProvider());
     }
 
-    // ═══ 恢复游戏原版（全局兜底入口，与「特效补丁」页的恢复共用同一引擎通道） ═══
+    // ═══ 彻底还原游戏客户端（全局兜底入口，与「特效补丁」页的还原共用同一引擎通道） ═══
     private async void RestoreBaselineButton_Click(object sender, RoutedEventArgs e)
     {
         var confirm = MessageBox.Show(
-            "将用备份的原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。\n\n之后想再用任何补丁，都需要重新启用。确定继续？\n（只想移除个别补丁的话，请到「特效补丁」页用「卸载已勾选补丁」。）",
-            "恢复游戏原版", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            "将把游戏彻底还原成官方原版：整包替换型补丁（如汉化包）覆盖的原生文件会按备份清单放回，再用原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。\n\n之后想再用任何补丁，都需要重新启用。确定继续？\n（只想移除个别补丁的话，请到「特效补丁」页用「卸载已勾选补丁」。）",
+            "彻底还原游戏客户端", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.OK)
             return;
 
@@ -588,7 +588,7 @@ public partial class MainWindow : Window
 
         var gameData = GameDataPathPreference.Get()?.Trim();
         await FxEngineRunner.RunAsync(
-            "恢复游戏原版",
+            "彻底还原游戏客户端",
             [new FxEngineRunner.Invocation(FxPatchEngine.BuiltInAll, [gameData ?? "", "restore"])],
             gameDataPath: gameData,
             skipGameData: false,

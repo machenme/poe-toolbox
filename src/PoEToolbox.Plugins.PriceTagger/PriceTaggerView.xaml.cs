@@ -442,7 +442,7 @@ public partial class PriceTaggerView : UserControl
             await GameDataLoader.UseAsync(ggpkPath, GameDataMode.ReadWrite, (gd, _) =>
             {
                 IndexBackupService.RestoreBaseline(gd);
-                // 与「特效补丁」页「恢复游戏原版」同口径：基线回写后残留的 PATCHED bundle 已无引用，顺手清掉
+                // 与「特效补丁」页「彻底还原游戏客户端」同口径：基线回写后残留的 PATCHED bundle 已无引用，顺手清掉
                 gd.CleanupOrphanCustomBundles(saveIndex: true);
                 return Task.CompletedTask;
             });

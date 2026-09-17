@@ -166,7 +166,7 @@ public partial class FxPatchView : UserControl
             // 账本说打过、但补丁产物不在这台机器上（换过电脑 / 清理过补丁目录）：
             // 这种情况下本页没有可执行的还原入口，得说清楚让用户回「词缀上色」补一次。
             ? "游戏里已经应用了词缀修改，但本机找不到对应的补丁文件（记录来自其他机器或补丁目录被清理过）。"
-              + "本页无法单独还原它：到「词缀上色」页重新应用一次即可补上；要彻底清掉请用「恢复游戏原版」。"
+              + "本页无法单独还原它：到「词缀上色」页重新应用一次即可补上；要彻底清掉请用「彻底还原游戏客户端」。"
             : TooltipOf(_affixState.Value, "");
         _affixExportButton?.Visibility = File.Exists(AffixPatchJsonPath)
             ? Visibility.Visible
@@ -270,7 +270,7 @@ public partial class FxPatchView : UserControl
                       + (_affixState == FxPatchEngine.PatchState.Applied ? 1 : 0);
         return applied == 0
             ? "当前没有已启用的内置补丁，勾选后点「启用特效补丁」即可。"
-            : $"已启用 {applied} 个内置补丁，已自动勾选；需要还原直接点「恢复游戏原版」。";
+            : $"已启用 {applied} 个内置补丁，已自动勾选；需要还原直接点「彻底还原游戏客户端」。";
     }
 
     /// <summary>底部输入框当前对应的待应用补丁文件完整路径；null 表示没有选择。
@@ -547,7 +547,7 @@ public partial class FxPatchView : UserControl
     {
         FxPatchEngine.PatchState.Applied => "补丁已写入游戏；勾选后可执行还原或卸载。",
         FxPatchEngine.PatchState.NotApplied => "还没启用；勾选后点「启用特效补丁」即可。",
-        FxPatchEngine.PatchState.Conflict => "改动只生效了一部分，或内容与补丁不一致，建议先「恢复游戏原版」再重新启用。"
+        FxPatchEngine.PatchState.Conflict => "改动只生效了一部分，或内容与补丁不一致，建议先「彻底还原游戏客户端」再重新启用。"
                                              + (detail.Length == 0 ? "" : $"\n引擎提示：{detail}"),
         _ => "当前游戏数据与这个补丁不匹配。"
              + (detail.Length == 0 ? "" : $"\n引擎提示：{detail}"),
@@ -871,33 +871,45 @@ public partial class FxPatchView : UserControl
         if (!ValidateInputs(out _))
             return;
 
-        // 引导：整包替换型补丁会整体换掉 _.index.bin，已启用的词缀修改补丁会被冲掉。
-        // 提醒用户按「先补丁、最后词缀修改」的顺序来，应用完成后到词缀上色页重新应用。
+        // 引导：整包替换型补丁会整体换掉 _.index.bin，先于此应用的其他补丁（词缀上色、
+        // 技能特效等）的内容会被冲掉。这是有实际代价的操作，用弹窗确认而不是状态栏一闪而过。
         var appliesRawPack = CheckedThirdParty.Any(e =>
             string.Equals(e.Kind, FxPatchStateStore.KindRawPack, StringComparison.OrdinalIgnoreCase))
             || (PendingFileParticipates() && IsRawPackSource(PendingPatchPath!));
-        if (appliesRawPack && _affixState == FxPatchEngine.PatchState.Applied)
-            SetStatus("提示：整包替换型补丁会整体替换游戏索引，已启用的词缀修改补丁会失效；请在整包应用完成后到「词缀上色」重新应用一次（顺序：先补丁，最后词缀修改）。", UiStatus.Kind.Warning);
+        if (appliesRawPack)
+        {
+            var affixNote = _affixState == FxPatchEngine.PatchState.Applied
+                ? "\n\n当前已启用词缀修改补丁：应用本补丁后它会失效，请在完成后到「词缀上色」重新点「应用词缀修改」。"
+                : "\n\n建议顺序：先应用普通补丁和整包替换型补丁，最后再到「词缀上色」应用词缀修改。";
+            var confirm = MessageBox.Show(
+                "勾选的补丁里包含整包替换型补丁——它会整体替换游戏索引（_.index.bin）。\n\n" +
+                "这可能覆盖已启用的其他补丁写入的内容（包括但不限于词缀上色、技能特效等），" +
+                "被覆盖的补丁会显示失效，需要重新应用。" + affixNote + "\n\n确定继续？",
+                "启用整包替换型补丁", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.OK)
+                return;
+        }
 
         await RunEngineAsync("启用特效补丁", BuildInvocations("apply"));
         RefreshAfterOperation();
     }
 
-    /// <summary>恢复游戏原版 = 整体恢复：基线索引替换 + 删除全部补丁新增文件（含第三方补丁）。
+    /// <summary>彻底还原游戏客户端 = 整体还原官方原版：先按备份清单还原整包替换型补丁覆盖的原生文件，
+    /// 再基线索引替换 + 删除全部补丁新增文件（含第三方补丁）。
     /// 与逐补丁的「卸载已勾选补丁」相对；不可逆（想再用要重新启用补丁），所以用红色警示 + 二次确认。</summary>
     private async void Revert_Click(object sender, RoutedEventArgs e)
     {
         if (!ValidateInputs(out _, requireSelection: false))
             return;
         var confirm = MessageBox.Show(
-            "将用备份的原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。\n\n之后想再用任何补丁，都需要重新启用。确定继续？\n（只想移除个别补丁的话，请用「卸载已勾选补丁」。）",
-            "恢复游戏原版", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            "将把游戏彻底还原成官方原版：整包替换型补丁（如汉化包）覆盖的原生文件会按备份清单放回，再用原版索引整体替换当前索引，并删除所有补丁新增的文件——包括第三方补丁，全部补丁记录一并清空。\n\n之后想再用任何补丁，都需要重新启用。确定继续？\n（只想移除个别补丁的话，请用「卸载已勾选补丁」。）",
+            "彻底还原游戏客户端", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.OK)
             return;
 
         var gameData = (_gameDataPath ?? GameDataPathPreference.Get())!.Trim();
         // restore 是内置通道的动作（BuiltInId 不能为 null，否则会被当成自定义补丁路径解析）。
-        await RunEngineAsync("恢复游戏原版",
+        await RunEngineAsync("彻底还原游戏客户端",
             [(FxPatchEngine.BuiltInAll, new[] { gameData, "restore" })]);
         RefreshAfterOperation();
     }
@@ -928,7 +940,7 @@ public partial class FxPatchView : UserControl
         else
         {
             var confirm = MessageBox.Show(
-                "将完整卸载勾选的补丁：撤销它们对游戏文件的修改，并删除补丁新增的文件；其他未勾选的补丁不受影响。\n\n卸载之后想再用，需要重新应用补丁。确定继续？\n（想把游戏整体恢复原版、移除所有补丁的话，请用「恢复游戏原版」。）",
+                "将完整卸载勾选的补丁：撤销它们对游戏文件的修改，并删除补丁新增的文件；其他未勾选的补丁不受影响。\n\n卸载之后想再用，需要重新应用补丁。确定继续？\n（想把游戏整体还原成官方原版、移除所有补丁的话，请用「彻底还原游戏客户端」。）",
                 "卸载已勾选补丁", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
             if (confirm != MessageBoxResult.OK)
                 return;

@@ -187,10 +187,10 @@ public sealed class AffixDataService : IDisposable
     }
 
     /// <summary>修复也无法恢复时的报错：说清成因（恢复默认游戏数据/客户端校验删了补丁文件）
-    /// 与出路（特效补丁页「恢复游戏原版」，或启动器验证游戏文件），不再把英文 IO 异常原样甩给界面。</summary>
+    /// 与出路（特效补丁页「彻底还原游戏客户端」，或启动器验证游戏文件），不再把英文 IO 异常原样甩给界面。</summary>
     private static InvalidOperationException MissingPatchBundleUnrecoverable(Exception cause) => new(
         "游戏数据里仍有文件指向已丢失的补丁文件，自动修复未能恢复。" +
-        "常见原因：补丁文件被「恢复默认游戏数据」「恢复游戏原版」或客户端文件校验删除，而索引仍指向它们。"
+        "常见原因：补丁文件被「恢复默认游戏数据」「彻底还原游戏客户端」或客户端文件校验删除，而索引仍指向它们。"
         + cause.Message,
         cause);
 
@@ -395,10 +395,43 @@ public sealed class AffixDataService : IDisposable
         return copy.Serialize();
     }
 
+    /// <summary>把一个 csd 文档剥成官方默认（清除全部颜色标签）。没有标签时返回 null = 文件不用动。
+    /// 原版 csd 实测不含任何颜色标签（2026-09-17 用基线索引抽查过 stat/map/skill 三件），
+    /// 所以全剥就是官方默认；第三方补丁打的一起剥——这正是「官方原版」方案的目的。</summary>
+    private static byte[]? StripAllColorTags(CsdDocument doc)
+    {
+        var copy = CsdDocument.Parse(doc.Serialize());
+        var ids = copy.CollectColorIds();
+        if (ids.Count == 0)
+            return null;
+        copy.StripColors(ids);
+        return copy.Serialize();
+    }
+
+    /// <summary>「官方原版」方案的变更计算：凡带颜色标签的词缀描述文件整体剥净；
+    /// uisettings 不进补丁（残留的颜色定义无标签引用、无视觉效果，官方自带定义也不允许删）。</summary>
+    private IReadOnlyList<AffixPatchBuilder.FileChange> ComputeOfficialRestoreChanges()
+    {
+        var changes = new List<AffixPatchBuilder.FileChange>();
+        foreach (var (path, doc, _) in _csd)
+        {
+            var current = doc.Serialize(); // round-trip 保证与连接时读到的字节一致
+            var modified = StripAllColorTags(doc);
+            if (modified is null || current.AsSpan().SequenceEqual(modified))
+                continue; // 客户端已经是官方默认状态
+            changes.Add(new AffixPatchBuilder.FileChange(path, current, modified));
+        }
+        if (changes.Count == 0)
+            throw new InvalidOperationException("客户端当前没有任何颜色标签，已经是官方默认状态，无需恢复。");
+        return changes;
+    }
+
     /// <summary>按 SPEC 控制流计算全部文件变更；内容无变化的文件不进补丁。</summary>
     public IReadOnlyList<AffixPatchBuilder.FileChange> ComputeChanges(AffixColorScheme scheme, bool forExport = false)
     {
         ObjectDisposedException.ThrowIf(_gd is null, this);
+        if (scheme.RestoreOriginal)
+            return ComputeOfficialRestoreChanges();
         var colorIds = scheme.ColorIds;
         var changes = new List<AffixPatchBuilder.FileChange>();
         // 有指派色阶时才需要 tier 阶梯（首次构建约 1 秒），没有就完全不碰 mods 表
@@ -554,9 +587,21 @@ public sealed class AffixDataService : IDisposable
     public int ComputePreview(AffixColorScheme scheme)
     {
         ObjectDisposedException.ThrowIf(_gd is null, this);
+        var docs = new Dictionary<string, CsdDocument>(StringComparer.OrdinalIgnoreCase);
+        if (scheme.RestoreOriginal)
+        {
+            // 官方原版预览：剥净标签后的文档（列表里已上色的词缀会显示回官方默认）
+            foreach (var (path, doc, _) in _csd)
+            {
+                var modified = StripAllColorTags(doc);
+                if (modified is not null)
+                    docs[path] = CsdDocument.Parse(modified);
+            }
+            _previewDocs = docs;
+            return docs.Count;
+        }
         var colorIds = scheme.ColorIds;
         var tierIndex = scheme.Ramps().Count > 0 ? TierIndex() : null;
-        var docs = new Dictionary<string, CsdDocument>(StringComparer.OrdinalIgnoreCase);
         foreach (var (path, doc, _) in _csd)
         {
             var modified = RebuildCsd(doc, scheme, colorIds, path, ClientLanguage, tierIndex);

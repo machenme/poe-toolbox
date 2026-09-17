@@ -184,6 +184,38 @@ public sealed class FxRawPackPatchTests : IDisposable
         Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "status"));
     }
 
+    /// <summary>
+    /// 「彻底还原游戏客户端」的路径：按账本 + 备份清单还原整包替换型补丁，
+    /// 不需要补丁包（zip / 解压目录）还在手上。
+    /// </summary>
+    [Fact]
+    public void LedgerRevert_RestoresOriginalsWithoutThePack()
+    {
+        if (GameIsRunning())
+            return;
+
+        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, Detect(), "apply"));
+
+        // 补丁包本体被删（用户没有 zip 了），只能靠 backup/<补丁名>/manifest.txt 还原。
+        Directory.Delete(Path.Combine(_root, "pack"), recursive: true);
+
+        Assert.Equal(0, FxPatchEngine.RevertRawPackFromLedger(_indexPath, "Tiny"));
+
+        Assert.Equal(OriginalIndex, File.ReadAllText(_indexPath));
+        Assert.Equal(OriginalBundle, File.ReadAllText(GamePath("Tiny.V0.1.bundle.bin")));
+        // 账本条目随还原移除，彻底还原不会再碰这个补丁。
+        Assert.DoesNotContain(FxPatchStateStore.Read(_indexPath), e => e.Name == "Tiny");
+    }
+
+    [Fact]
+    public void LedgerRevert_FailsGracefullyWhenManifestIsMissing()
+    {
+        if (GameIsRunning())
+            return;
+
+        Assert.NotEqual(0, FxPatchEngine.RevertRawPackFromLedger(_indexPath, "Tiny"));
+    }
+
     private FxPatchEngine.RawPack Detect()
         => FxPatchEngine.TryDetectRawPack(Path.Combine(_root, "pack"), "Tiny")
            ?? throw new InvalidOperationException("测试用的整包补丁未被识别。");
