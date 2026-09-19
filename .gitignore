@@ -48,9 +48,9 @@ work/config.json
 Content.ggpk
 *.ggpk
 
-# Docs (not tracked)
-PRD-*.md
-SPEC-*.md
+# 起草中的设计稿（定稿后移入 docs/ 入库，见 docs/PRD-engineering-hardening.md 的 D3）
+/PRD-affix-coloring.md
+/SPEC-affix-coloring.md
 AUDIT_PRD.md
 AUDIT_SPEC.md
 TODO.md

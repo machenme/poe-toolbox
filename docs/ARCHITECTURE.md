@@ -7,7 +7,8 @@
 
 > 本文回答「东西在哪、谁能引用谁、哪几条规矩破了自己会死」。
 > 具体功能设计看 `DESIGN-fx-patch-engine.md`、`DESIGN-bundles2-storage.md`；
-> 写作流程看 `GUIDE-patch-authoring.md`；已知结构债看 `REVIEW-software-engineering.md` 的风险清单。
+> 写作流程看 `GUIDE-patch-authoring.md`；已知结构债看 `REVIEW-software-engineering.md` 的风险清单；
+> 本轮工程加固为什么这样定，看 `PRD-engineering-hardening.md`（拍板）与 `SPEC-engineering-hardening.md`（计划）。
 
 ---
 
