@@ -285,6 +285,28 @@ MapNumberView.xaml.cs          507
 | P2-7 | `docs/BUILT-IN-FX-PATCHES.txt` 未入库且与 .md 重复 | 删除 .txt |
 | P2-8 | Debug 下 `DisposeWithoutSave_*` 用例必挂 | `Index.Dispose` 的 `Debug.Fail`（`Index.cs:1329`，行号来自项目记忆未复核）。要么修断言，要么给用例加 Debug 跳过条件 |
 
+### 6.5 处置状态（2026-09-20 追加，报告正文的判定不随此改动重写）
+
+| # | 状态 | 说明 |
+|---|---|---|
+| P0-1 | ✅ | `FxPatchEngine.cs` 1754 → 211 行，逻辑分散到 `Shared/Fx/` 九个模块（提交 `fc8a84441`） |
+| P0-2 | ✅ | 回收下沉到 `GameDataAccess.Dispose`（`ddcedd5be`）。**本报告提议的「源码扫描测试」被实测否掉**——朴素计数既误报又漏判，改测运行时行为 |
+| P1-1 / P1-2 | 部分 | P1-2 补成 9 条性质测试（非 3 条）；P1-1 MVVM 明确排除在本轮外，见 `SPEC-engineering-hardening.md` §11 |
+| P1-3 | ✅ | `NetworkDefaults` 统一超时 + 调用点降级与中文失败原因（`2327ae8c9`、`12bd84929`） |
+| P1-4 | ✅ | 选改名 `Abstractions`（`574404bd4`），同时拆出 `IUiPlugin`（`2463179fe`） |
+| P1-5 | ❌ **判定有误** | 不是误引：Voyager 有 8 处 `using PoEToolbox.Plugins.BagCleaner.*`，是真依赖。而且**本报告只给了行号级证据**（`Voyager.csproj` → `BagCleaner.csproj`），读起来像删一行引用就能了。沉到哪一层是选型题，未做，见 SPEC §12 |
+| P1-6 | ✅ | 新建 `PoEToolbox.Ui`（`c8cabcbd4`）、`ThemeManager` 移入 App（`69645d931`），`Shared` 不再引用 WPF |
+| P1-7 | ✅ | App + Cli 均挂兜底（`f154c507f`） |
+| P2-1 | ✅ | `build.bat` 补 `-m:1`（`d6b3d46ba`） |
+| P2-2 | ✅ | `docs/ARCHITECTURE.md`（`9398f1b20`）。**本报告「三条不变式」太少，实际立了 9 条** |
+| P2-3 | 未动 | 报告自己的方案就是「短期不动」，本轮也未纳入 SPEC（§11 里没有这一项）。「新文案注意集中」这条无人执行，要靠本人日后自觉 |
+| P2-4 | 未验证 | 仍需本人在 GitHub 侧确认 |
+| P2-5 | ✅ **口径修正** | 不是 18 处：全仓 29 处，`src/` 下 19 处，逐处判定后补日志 4 处、写明有意吞掉 15 处。「全部加 FileLogger」会让日志在正常使用下被刷爆（`9290f15a9`） |
+| P2-6 | 不动 | 与 MVVM 同批，SPEC §11 排除 |
+| P2-7 | ✅ | `.txt` 已删（`62816cf26`）。补充事实：它是 `.md` 的严格子集，且 `.md` 之后又更正过两轮，双份必然再分叉 |
+| P2-8 | 待拍板 | PRD D4，倾向给用例加 Debug 跳过条件 |
+
+
 ---
 
 ## 7. 发布工程：做得好的部分
