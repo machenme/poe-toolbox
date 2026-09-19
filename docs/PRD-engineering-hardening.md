@@ -4,10 +4,10 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1 |
-| 日期 | 2026-09-19 |
+| 文档版本 | v2（2026-09-20 收尾：§11 的 D1~D5 全部拍板完毕并落地，唯一仍未关的是需要人开一次程序的目视确认） |
+| 日期 | 2026-09-19 立项 / 2026-09-20 收尾 |
 | 代码基线 | `cb7bc4791`（main），`version.json` = 0.2.3 |
-| 关联文档 | `docs/REVIEW-software-engineering.md`（体检报告 v2）、`docs/SPEC-engineering-hardening.md`（技术方案，历史计划）、`docs/ARCHITECTURE.md`（现状） |
+| 关联文档 | `docs/REVIEW-software-engineering.md`（体检报告 v2）、`docs/SPEC-engineering-hardening.md`（技术方案，历史计划）、`docs/ARCHITECTURE.md`（现状）、`docs/REVIEW-engineering-hardening-before-after.md`（前后对照） |
 | 作者 | 砚（提议） → 主人（拍板） |
 
 ---

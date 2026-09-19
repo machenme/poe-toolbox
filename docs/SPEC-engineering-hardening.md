@@ -2,14 +2,14 @@
 
 > 本文是**历史计划**：记的是「为什么这样拆、当时怎么决定、每一步实测到什么」。当前状态（谁能引用谁、哪几条不变式）以 `docs/ARCHITECTURE.md` 为准，两者冲突时以它为准。
 >
-> 配套文档：`docs/PRD-engineering-hardening.md`（需求与验收，含 D1~D5 拍板表）、`docs/REVIEW-software-engineering.md`（体检报告，证据来源）、`CHANGELOG.md`（对外变更记录）
+> 配套文档：`docs/PRD-engineering-hardening.md`（需求与验收，含 D1~D5 拍板表）、`docs/REVIEW-software-engineering.md`（体检报告，证据来源）、`docs/REVIEW-engineering-hardening-before-after.md`（本轮改动前后逐面对照）、`CHANGELOG.md`（对外变更记录）
 >
 > 本文不含机器相关信息：游戏客户端绝对路径、账号、机器名一律不写。
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v2（2026-09-19 实施后回写） |
-| 日期 | 2026-09-19 |
+| 文档版本 | v3（2026-09-20 收尾回写：写路径实测 §9.1、D3/D5/P1-5 关闭） |
+| 日期 | 2026-09-19 立项 / 2026-09-20 收尾 |
 | 基线 | `cb7bc4791`，`version.json` = 0.2.3 |
 | 前置阅读 | PRD §4 分批、§6 验收标准、§7 约束 |
 
@@ -31,9 +31,9 @@
 | W7b `PoEToolbox.Ui` | ✅ 完成 | 见 §7.2；`OutputPanel`/`UiStatus`/`FxEngineRunner` 已移出 Shared，Shared 不再引用 WPF |
 | W8 Sdk 定位 | ✅ 完成（PRD D2 选 b2） | `Sdk` → `Abstractions`；`IPlugin` 去掉 `CreateView()`，界面插件改实现 `PoEToolbox.Ui.IUiPlugin`，Abstractions 不再引用 WPF。见 §8 |
 
-**实测结果**：Release **195 通过 / 0 失败**（基线 176 → S1 后 185 → 补 ptr 用例 188 → S7 补 P-4 后 189 → §4.3 网络提示 3 条后 192 → C14 补 config 分支 3 条后 **195**；S3~**S8**、W7b/W8 每步复测均绿）；**Debug 也 195 全绿**（C21 关掉了那条长期挂着的 `DisposeWithoutSave_*`，见 §12 的 D4 一行——本项目 Debug 首次全绿）。**HEAD `f03d7b5de` 中两个配置各复测一次，均 195 绿**（Release 34s / Debug 36s）；`dotnet publish -c Release -m:1` 出包成功且 publish 无 loose json（W8 后重测：单 `PoEToolbox.exe` 6,282,397 字节，`PoEToolbox.Ui.dll` / `Abstractions` / `Shared` / `Core` 均在包内）。
+**实测结果**：Release **195 通过 / 0 失败**（基线 176 → S1 后 185 → 补 ptr 用例 188 → S7 补 P-4 后 189 → §4.3 网络提示 3 条后 192 → C14 补 config 分支 3 条后 **195**；S3~**S8**、W7b/W8 每步复测均绿）；**Debug 也 195 全绿**（C21 关掉了那条长期挂着的 `DisposeWithoutSave_*`，见 §12 的 D4 一行——本项目 Debug 首次全绿）。**HEAD `060fb453b`（C28，PRD D3 / D5 / P1-5 三项全部落地之后）中两个配置各复测一次，均 195 绿**（Release 34s / Debug 34s）；`dotnet publish -c Release -m:1` 出包成功且 publish 无 loose json（重测：单 `PoEToolbox.exe` 6,294,804 字节，`PoEToolbox.Ui.dll` / `Abstractions` / `Shared` / `Core` 均以单文件形式包在 exe 内，发布目录只剩 pdb/xml）。
 
-> **CI 原本只跑 Release**（`.github/workflows` 里 `--configuration Release`），Debug 全绿只有本地跑得到，`#if DEBUG` 里的断言在 CI 上等于不执行。**PRD D5 已拍板并落地**（`7e07f81c5`）：CI 现在是 Release + Debug 两条测试腿，多花一次 36s。
+> **CI 原本只跑 Release**（`.github/workflows` 里 `--configuration Release`），Debug 全绿只有本地跑得到，`#if DEBUG` 里的断言在 CI 上等于不执行。**PRD D5 已拍板并落地**（`7e07f81c5`）：CI 现在是 Release + Debug 两条测试腿，多花一次 34~36s。
 
 **本轮修正的四处 SPEC 错误**（实施时发现原方案不可行或不准）：
 
@@ -595,14 +595,40 @@ dotnet publish "src\PoEToolbox.App\PoEToolbox.App.csproj" -c Release -r win-x64 
 | B3 | W2 S1.5 + S2 | 全量测试 | — | ✅ 185 绿（数据模型提到命名空间；datc64 指针逻辑进 `Shared/Fx/`） |
 | B3 | W2 S2 的补齐 | 3 条 ptr 性质测试 | — | ✅ 188 绿；两次破坏均红 |
 | B3 | W2 S3 | 全量测试 | — | ✅ 188 绿（文本编解码并入 `TextEncodingDetector`） |
-| B3 | W2 S4~S6 | 全量测试 | 内置补丁 apply→查询→revert；整包替换型 apply→revert；purge；彻底还原；diff 生成 | ⚠️ 自动化全绿（S4/S5/S6 各一次）；**写入路径的手工验证仍未执行**：要在真实游戏目录上跑 apply→revert，改的是用户机器上的索引，需本人确认后再做 |
-| B3 | W2 S7 | 全量测试 + 三轮破坏自检 | 真实客户端只读 `status` | ✅ 189 绿；破坏 `ExecuteEditText` / `ComputeState` 各红 3 条（已还原）；删除 `OverallOf` 参半分支 → 只有新增的 P-4 红。**只读手工已过**：本轮对本机真实 `Path of Exile 2/Bundles2/_.index.bin` 跑 `fx-oilmod <gd> all status`，两个内置补丁共 9 条 op 三态判定正确，`patchptr-byid` 在真实 `miscanimated.datc64` 上定位到 ROW[8307/8311/8312/8313]。**写路径手工（apply→revert）未执行**——要改的是用户机器上的游戏索引，属外部共享状态，需本人确认 |
-| B3 | W2 S8 | 全量测试 + 活代码自检 | 真实客户端只读 `list` / `status` | ✅ 189 绿；让 `CmdApplyOrRevert` 直接返回 0（不写盘）→ 全量红 12 / 绿 177，证明命令层确为活代码而非影子副本（已还原）。真实客户端 `list` 输出 ☐/☐、`status` 单补丁三态正常。写路径手工仍未执行，见下行 |
+| B3 | W2 S4~S6 | 全量测试 | 内置补丁 apply→查询→revert；整包替换型 apply→revert；purge；彻底还原；diff 生成 | ✅ 自动化全绿（S4/S5/S6 各一次）；**写入路径的手工验证已在本机真实客户端上跑完**（本人同意后执行，逐字节 SHA 对账，结果与三条新事实见 §9.1） |
+| B3 | W2 S7 | 全量测试 + 三轮破坏自检 | 真实客户端只读 `status` | ✅ 189 绿；破坏 `ExecuteEditText` / `ComputeState` 各红 3 条（已还原）；删除 `OverallOf` 参半分支 → 只有新增的 P-4 红。**只读手工已过**：本轮对本机真实 `Path of Exile 2/Bundles2/_.index.bin` 跑 `fx-oilmod <gd> all status`，两个内置补丁共 9 条 op 三态判定正确，`patchptr-byid` 在真实 `miscanimated.datc64` 上定位到 ROW[8307/8311/8312/8313]。**写路径手工已跑完**（本人同意后执行，见 §9.1） |
+| B3 | W2 S8 | 全量测试 + 活代码自检 | 真实客户端只读 `list` / `status` | ✅ 189 绿；让 `CmdApplyOrRevert` 直接返回 0（不写盘）→ 全量红 12 / 绿 177，证明命令层确为活代码而非影子副本（已还原）。真实客户端 `list` 输出 ☐/☐、`status` 单补丁三态正常。写路径手工已跑完，见 §9.1 |
 | B3 | W7a | 全量测试 | 主题切换（light/dark）正常 | ✅ 自动化：192 绿，App 与 4 个插件工程均 0 警告 0 错误；`git mv` 被识别为 rename（98% 相似），改动只有命名空间与一行注释路径。**加载路径静态可证不变**：`pack://application:,,,/themes/*.xaml` 指向入口程序集，而 `light.xaml` / `dark.xaml` 搬家前就在 `PoEToolbox.App/Themes/`（`git show HEAD~1` 可查），搬的只是加载器。全仓已无 `Shared.ThemeManager` 残留引用。**剩下的视觉确认需要人开一次程序**：点主题按钮看 light/dark/跟随系统三态是否正常 |
 | B4 | W7b（U1 新建 `PoEToolbox.Ui`） | 全量测试 + 搬家完整性自检 | 打开程序，逐插件看输出面板与状态栏是否正常 | ✅ 192 绿，0 警告 0 错误。4 个搬走的文件全部被 `git diff -M` 认成 rename（内容未改）；Shared/Abstractions/Ui 三个 dll 的 WPF 元数据计数见 §7.3。**UI 目视确认未执行**（需人开一次程序） |
 | B4 | W8（U3 改名 + U2 拆契约） | 全量测试 + 差异比对 | 导航栏 10 项仍在、分组与顺序不变 | ✅ U3、U2 各测一次均 192 绿。U3 的差异比对：35 个改动行除 `IPlugin.cs` 删掉的一行自引用 `using` 外全是标识符本身。U2 的差异比对：11 个插件类各只 +1 行 `using` / 1 行基接口换名，`MainWindow` 只动 6 处类型与 1 处 `OfType`；`RegisterAll()` 注册的是 10 个插件（Voyager 未注册），10 个都已实现 `IUiPlugin`，所以 `OfType<IUiPlugin>()` 过滤后集合大小不变——**这是静态推断，不是目视确认**，开一次程序看导航栏仍与 W7a/W7b 的视觉确认合并成一次。`dotnet publish` 重测：单 exe 6,282,397 字节、无 loose 文件、`PoEToolbox.Ui.dll` 在包内 |
 
 **全量基线**：Release **192 通过 / 0 失败**（改动前 176）。当时 Debug 184 通过 / **1 失败** = 既有 `DisposeWithoutSave_DoesNotPersistPendingMutation`（`Index.Dispose` 的 `Debug.Fail`）——**该条已于 C21 关闭**，现在两个配置都 195 全绿，见 §12 的 D4 一行。
+
+### 9.1 补丁写入路径的本机实测（2026-09-20，本人同意后执行）
+
+对象是本机 Steam 客户端的 `Bundles2\_.index.bin`（115,073,230 字节，SHA-256 前 8 位 `680a7dc1`）。每一步之后都重算整文件 SHA 并看 `PATCHED\` 的大小；下表所有 SHA 都只留前 8 位，不含任何机器可定位信息。
+
+| # | 操作 | 索引 SHA / 字节 | 旁证 |
+|---|---|---|---|
+| 0 | 基线（Steam 完整性校验后的原版） | `680a7dc1` / 115,073,230 | 无 `backup\`、无 `PATCHED\` |
+| 1 | 内置「手雷」补丁 apply（文本替换型） | `425477d7` / 120,667,626（+5.6 MB） | 新增 bundle 885 B；`backup\_.index.bin` 记下基线；账本 1 条 |
+| 2 | 同一补丁再 apply 一次 | SHA 不变 | 幂等，不重复写 |
+| 3 | revert | `e7153619` / 120,667,630 | bundle 885 → 990 B——**revert 之后文件不等于基线** |
+| 4 | purge | — | 报「没有新增文件」，该补丁没有新增文件型 op，判定正确 |
+| 5 | restore（彻底还原） | `680a7dc1` / 115,073,230 | 与基线**逐字节相同** |
+| 6 | 内置「地面」补丁 apply（整包替换型） | `6aa406bc` / 122,403,351 | 10/10 条 op 成功，含 4 处 datc64 指针重定位（ROW[8307/8311/8312/8313] +8）；bundle 1,393,407 B；账本 1 条 |
+| 7 | revert | `c696f876` | 替换型的文件副本按设计保留，bundle 涨到 2,786,283 B |
+| 8 | purge | `9384098a` / 122,403,113（−235 B） | 只删无人引用的 bundle |
+| 9 | cleanup | — | 报「没有孤儿补丁 Bundle」，正确：该 bundle 仍被引用 |
+| 10 | restore | `680a7dc1` / 115,073,230 | 逐字节回到基线，`PATCHED\` 消失，`list` 两个补丁都回到 ☐ |
+
+三条以前没写下来、且会影响后续判断的事实：
+
+1. **`revert` 恢复的是语义不是字节**（第 3、7 步）。要逐字节回到原版只有 `restore`。UI 文案已经把「启用 / 还原 / 卸载 / 彻底还原游戏客户端」分开了，不用改；但文档和注释都不许再写「revert 可逆到原状」。
+2. **打一个补丁会把 115 MB 的索引撑大 4.9%~6.4%**（第 1、6 步）。不是泄漏，是索引重写时新增记录与对齐的代价，但用户看到游戏目录凭空变大时会以为坏了。
+3. **打过补丁的索引与 Steam 的记录不一致**，Steam 再做一次完整性校验就会把索引换回原版，而补丁账本还留着。所以三态判定读实际索引内容、不读账本是对的（W3 的性质测试正是为它服务），这条设计不许反过来「优化」成读账本。
+
+**一个没能复现的分歧（开放项，不是结论）**：第一次验证用的是校验前的旧索引（mtime 早于同目录的 bundle 文件），`status` 报「未应用 / 原文存在」，而 `apply` 的预检对同一条 `edittext` 报「冲突：新旧文本同时缺失/存在」，于是中止且零写入——SHA、mtime、`backup\`、`PATCHED\` 四项都核过，确认盘没动。事后逐项排查：`edittext` 的判定与 `applying` 方向无关（`FxPatchState.ComputeStates` 只在 addfile 派生分支读 `applying`）、补丁 json 自 09-19 起未改、`Content`/`Folders` 无更新的文件——三条理论都没命中，而那块旧索引随后被 Steam 校验覆盖，再也取不到现场。**下次遇到同样组合，先复制一份 `_.index.bin` 留现场再排查**。
 
 ---
 
@@ -624,7 +650,7 @@ SPEC 的**编码项已全部做完**（P2-2 架构文档、P2-5 可诊断性、C
 
 ---
 
-## 10.5 提交切分方案 — ✅ 已执行（`cb7bc4791` → `7e07f81c5`，共 27 个提交 C1~C27；C28 是同批文档收尾）
+## 10.5 提交切分方案 — ✅ 已执行（代码提交 `cb7bc4791` → `060fb453b`，共 28 个 C1~C28；C29 是本轮的文档回填，不含代码）
 
 工作区里堆着两轮的全部改动，未提交。回切成 6 个提交以恢复二分定位能力：
 
@@ -681,7 +707,8 @@ C8~C24 是后续几轮追加的，同样不在原方案里；C8~C12、C14、C16 
 | C25 | `e21cd1059` | P1-5 第一步：纯 Win32/GDI 的输入与屏幕网格类型从 BagCleaner 沉到 `Core` | 6 文件 `git mv`（rename 全部被识别）+ 约 50 处 using；两插件各加一条对 Core 的引用；195 绿 |
 | C26 | `5e73be5f2` | P1-5 第二步：热键契约提到 Abstractions + 工厂倒置，删掉 `Voyager → BagCleaner` 工程引用 | **报告 P1-5 关闭**；ARCHITECTURE 立不变式 12（插件间不得互引）；插件之间已无直接依赖 |
 | C27 | `7e07f81c5` | CI 加一条 Debug 测试腿 | **PRD D5 关闭**；Debug 腿专门跑 `#if DEBUG` 断言；ARCHITECTURE 不变式 11 的「CI 收不到」口径随之更正 |
-| C28 | 本次 | PRD/SPEC 定稿移入 `docs/` 并入库 + 三份文档互相指向写清 + `.gitignore` 通配换成两条锚定文件 | **PRD D3 关闭**；入库前逐行扫过机器相关信息（无绝对路径/账号/机器名） |
+| C28 | `060fb453b` | PRD/SPEC 定稿移入 `docs/` 并入库 + 三份文档互相指向写清 + `.gitignore` 通配换成两条锚定文件 | **PRD D3 关闭**；入库前逐行扫过机器相关信息（无绝对路径/账号/机器名） |
+| C29 | 本提交 | 写路径实测结果回填（§9.1 + ARCHITECTURE 不变式 13）+ 用户要的「改动前后对比」文档 `docs/REVIEW-engineering-hardening-before-after.md` | 纯文档，无代码；两份基线头部随之下修到 `060fb453b`，实测在 C28 复测（Release 34s / Debug 34s，均 195 绿，publish 无 loose json） |
 
 ---
 
@@ -701,7 +728,7 @@ C8~C24 是后续几轮追加的，同样不在原方案里；C8~C12、C14、C16 
 
 | 项 | 来源 | 说明 |
 |---|---|---|
-| ~~P2-2 缺架构文档~~ | 报告 §风险清单 | ✅ 已做（`9398f1b20`）：`docs/ARCHITECTURE.md`（分层与三条规则 / 20 个工程清单 / 三条运行期数据流 / 不变式（现 12 条）/ 落盘位置 / 已知结构债），README「项目结构」同步重排（原树缺 4 个插件工程，也没有 W8 之后的 `Abstractions` 与 `Ui`）。**做法：只写机器可核对的条目，每条写完后回仓库指认**——由此改掉 5 处想当然：`IAppState` 在 `Shared/GameSessionState.cs` 不在 `Abstractions`；`oo2core.dll` 是 `EmbeddedResource` 启动时释放（不是随包外置）；路径注入的先例是 `AffixColorScheme.StorageDirectoryOverride`（该缝已在 C16 并入根缝、类型不再存在）；>1k 行的文件数已漂移，改成约数；依赖图用 ASCII 框在 CJK 宽度下对不齐，换成缩进列表。**本文不写行号**（教训见本节末「SPEC 自身的行号」一行） |
+| ~~P2-2 缺架构文档~~ | 报告 §风险清单 | ✅ 已做（`9398f1b20`）：`docs/ARCHITECTURE.md`（分层与三条规则 / 20 个工程清单 / 三条运行期数据流 / 不变式（现 13 条）/ 落盘位置 / 已知结构债），README「项目结构」同步重排（原树缺 4 个插件工程，也没有 W8 之后的 `Abstractions` 与 `Ui`）。**做法：只写机器可核对的条目，每条写完后回仓库指认**——由此改掉 5 处想当然：`IAppState` 在 `Shared/GameSessionState.cs` 不在 `Abstractions`；`oo2core.dll` 是 `EmbeddedResource` 启动时释放（不是随包外置）；路径注入的先例是 `AffixColorScheme.StorageDirectoryOverride`（该缝已在 C16 并入根缝、类型不再存在）；>1k 行的文件数已漂移，改成约数；依赖图用 ASCII 框在 CJK 宽度下对不齐，换成缩进列表。**本文不写行号**（教训见本节末「SPEC 自身的行号」一行） |
 | ~~P2-5 空 `catch`~~ | 报告 §风险清单 | ✅ 已做（`9290f15a9`）。**实测口径与报告不同**：全仓 29 处，其中 10 处在 `tests/` 的 teardown 里（吞掉清理异常是对的），`src/` 下 19 处。逐处判定后分成两类——**补日志 4 处**（`ConfigService` 的 config 解析失败与插件段反序列化失败、`SchemaManager` 的 schema 下载失败、`FxPatchPackage` 的旧临时目录清理失败），**写明有意吞掉 15 处**（搜索/预览的取消 ×2、剪贴板 100ms 轮询、注册表逐个试探、进程退出竞态、WorkingSet 修剪、字体名非法已有视觉回显、`FileLogger` 自身 6 处、解压安全拒绝后的目录清理）。全加日志会让日志文件在正常使用下就被刷爆 |
 | ~~`ConfigService` 的路径不可注入~~ | P2-5 实施 | ✅ 已做（`f83d2d7f6`）。加了 `internal static Func<string>? DataDirectoryOverride`，六个派生路径由 `static readonly` 字段改为即时求值属性（21 处调用点无需改动，字段→属性对读取端源码兼容）。P2-5 那两条 Warn 现在有了测试：损坏 → 返回空 + 原文件改名 `config.json.corrupt.<ts>` 可查 + `LastReadError` 有值；段形状不符 → 回落 `new T()` 并 Warn。**顺带修掉一处污染**：`FxBuiltInPatchTests` 原先真的往用户 AppData 写内置补丁描述，现在整类在临时目录跑；两类都动这条进程级静态，挂同一个 `ConfigPathTestCollection` 串行。**当时的两个边界已由 C16 清零**（`e93260476`）：① `SchemaManager.WorkDir`、`PriceTaggerView.PoeNinjaDir`/`WorkDir` 三处 `static readonly` 快照改成即时求值属性，现在跟着根缝走；② `AffixColorScheme.StorageDirectoryOverride` 整条删除，方案目录并入根缝，affix 两个测试类与 config、内置补丁三类同挂 `ConfigPathTestCollection`（声明收拢到 `AffixColorSchemeTests.cs` 一处）。缝的注释里现在只留**一个**例外：`FileLogger.App` 在首次被触碰时就按当时根目录建好句柄，之后改缝不影响它——要断言日志内容订阅 `FileLogger.EntryLogged`，不要去读日志文件。 |
 | **注入缝的账：跨 collection 的并发把别的测试产物删了** | C14/C16 的回归 | ✅ 已修（`34f50e849`）。加完根缝后我只跑了「一次全量绿」就当收尾，实测是**偶发**：强制重建后连跑 3 次挂 3 次，每次挂的不是同一条（`FxDiffPackagingTests` 两次、`ConfigServiceTests` 一次），单跑任一条都绿。根因两条，都是缝带来的而非既有：① **xUnit 默认只串行化同一 collection 内的类，跨组仍并发**——`FxPatchPackage.ExtractZipPatch` 的解压根目录由 `ConfigService.PatchesDirectory` 派生，不在串行组里的 `FxDiffPackagingTests` 于是把补丁解压进了别的类正持有的临时树，对方 `Dispose` 的 `Directory.Delete(recursive)` 把它的产物一并删掉（表现就是 `File.Exists(extracted)` 为假）。上一轮我写「挂同一个 collection 就安全」，**漏了「谁间接读这条缝」根本数不过来**；② `FileLogger.EntryLogged` 是进程级静态事件，`ConfigServiceTests` 的处理器往 `List` 里加，而 `Assert.Contains` 正在枚举它 → `Collection was modified`。**取舍**：方案 A 是整个测试程序集 `DisableTestParallelization`，方案 B 是继续手工补 collection 归属清单。实测**并行 26~36s / 串行 34~37s**——这套测试是 I/O 受限的，并行几乎没换来时间，那 A 用一行属性换掉一张「漏一个就偶发挂」的清单。`[Collection]` 标注保留但降级为「谁共享哪个静态」的记录。教训写进 `docs/ARCHITECTURE.md` §4 不变式 9、10 |
@@ -721,5 +748,6 @@ C8~C24 是后续几轮追加的，同样不在原方案里；C8~C12、C14、C16 
 | ~~**PRD D5：CI 要不要加一条 Debug 测试腿**~~ | D4 的遗留 | ✅ 已拍板「加」并落地（`7e07f81c5`）。实测 Debug **36s** / Release 34s，两条串跑约 70s，一次 CI 多花 36s 换 `#if DEBUG` 里的守卫断言（含 `CapturedDebugFail` 那条）真在 CI 上执行。落地形态不是 matrix：同一次 restore 后加一个 `Test (Debug)` 步骤，避免整条 job（checkout/setup/restore/publish/打包）复制一遍 |
 | ~~**PRD D3：PRD/SPEC 是否入库**~~ | 本轮自决 | ✅ 已拍板「入库」并落地：两份定稿移到 `docs/`（原名不变，`docs/PRD-engineering-hardening.md` / `docs/SPEC-engineering-hardening.md`），`.gitignore` 的整条 `PRD-*.md`/`SPEC-*.md` 通配换成两条**锚在根目录**的具体文件（词缀上色那对属于已收口的旧特性，不在本轮范围）。同步把三份文档的互相指向写清：ARCHITECTURE = 现状、SPEC = 历史计划、PRD = 拍板记录，冲突以 ARCHITECTURE 为准。**入库前逐行扫过机器相关信息**：两份文档里没有任何客户端绝对路径、账号或机器名（本轮写路径验证的实测数字入文时同样只写「本机 Steam 客户端目录」）。剩余风险：以后新写的根目录草稿不再被自动忽略，会出现在 `git status` 里——这是有意的，草稿要么定稿入库要么删掉，不该长期隐形 |
 | ~~PRD D1~~ | §1.1 | ✅ 已关闭（`07fdfa49c`）。**处置方式就是那条决策本身：不改生命周期，把它写清楚**——`AffixDataService._gd` 上加了注释，说明常驻到下次 Connect 或 Dispose 是有意的（列表要持续按行读 csd/uisettings，每次访问重开索引不现实），并写明重连前与 Dispose 时都会释放。回收问题早已由 W1 下沉解决，剩下的只是「下一个人会不会误判成漏回收」 |
+| ~~补丁写入路径的本机手工验证~~ | §9 B3 三行 | ✅ 已做完（2026-09-20，本人同意后），见 §9.1：两个内置补丁各跑 apply → 幂等 re-apply → revert → purge → cleanup → restore 全链，每步重算整文件 SHA，最后逐字节回到基线。**产出了三条新事实**（revert 不承诺字节还原、打补丁会让索引撑大 4.9%~6.4%、打过补丁的索引与 Steam 记录不一致），已写进 `docs/ARCHITECTURE.md` 不变式 13。**留一个开放项**：校验前的旧索引上 `status` 与 `apply` 预检对同一条 `edittext` 判定不一致（未应用 / 冲突），三条理论逐一排查均未命中，那块索引随即被 Steam 校验覆盖无法复现——下次先留现场副本再看。 |
 | ~~状态归约层的测试缺口~~ | S7 破坏自检 | 曾删掉 `OverallOf` 的参半分支后 8 条性质测试全绿。已补 P-4 `HalfAppliedPatch_OverallIsConflict`（用第二个补丁手工制造参半状态）封住：破坏该分支 → 红 1 / 绿 8，恰好只有新用例受影响 |
 | **SPEC 自身的行号** | 全文 | 本文行号以 `cb7bc4791` 为准，**已全部失效**：`FxPatchEngine.cs` 从 1754 行缩到 211 行，逻辑分散到 `Shared/Fx/` 九个模块。引用本文行号前请以 C5 提交后的代码重新定位 |

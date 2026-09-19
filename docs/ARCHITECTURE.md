@@ -1,14 +1,15 @@
 # PoE Toolbox 架构总览
 
-- 日期：2026-09-19
-- 代码基线：`9290f15a9`（main），版本 `version.json` = 0.2.3
-- 实测：全量测试 **195 通过 / 0 失败**，Release 34s、Debug 36s，CI 两条腿各跑一次（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
+- 日期：2026-09-20
+- 代码基线：`060fb453b`（main，PRD D3/D5 与 P1-5 全部落地那一提交），版本 `version.json` = 0.2.3
+- 实测：全量测试 **195 通过 / 0 失败**，Release 34s、Debug 34s，CI 两条腿各跑一次（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
 - 范围：结构、依赖方向与运行期不变式。**不写行号**——本项目行号在一次提交内就漂移过，一律以类型名 / 唯一字符串定位
 
 > 本文回答「东西在哪、谁能引用谁、哪几条规矩破了自己会死」。
 > 具体功能设计看 `DESIGN-fx-patch-engine.md`、`DESIGN-bundles2-storage.md`；
 > 写作流程看 `GUIDE-patch-authoring.md`；已知结构债看 `REVIEW-software-engineering.md` 的风险清单；
-> 本轮工程加固为什么这样定，看 `PRD-engineering-hardening.md`（拍板）与 `SPEC-engineering-hardening.md`（计划）。
+> 本轮工程加固为什么这样定，看 `PRD-engineering-hardening.md`（拍板）与 `SPEC-engineering-hardening.md`（计划）；
+> 只想看「加固前后差在哪」，看 `REVIEW-engineering-hardening-before-after.md`（对照，不含理由）。
 
 ---
 
@@ -111,6 +112,7 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 10 | **进程级静态事件的订阅者不要直接枚举自己攒的列表**。`FileLogger.EntryLogged` 谁记一条都会回调，包括后台线程；断言前先加锁取快照 | `tests/.../ConfigServiceTests.cs` |
 | 11 | **`Debug.Fail` 类防线要在测试里被断言，而不是被跳过**。.NET 的 `Debug.Fail` 走 `Trace.Listeners` 派发，测试主机把它翻成异常才让用例挂；测试期间临时换上自己的监听器就能既躲开异常、又断言「守卫确实响了」（`CapturedDebugFail`）。CI 有 Release + Debug 两条测试腿，Debug 腿专门为了让 `#if DEBUG` 里的断言在 CI 上真跑一次——只有 Release 覆盖的守卫等于没被守住 | `tests/.../CapturedDebugFail.cs`、`LibBundle3/Index.cs` 的 `Dispose`、`.github/workflows/build.yml` |
 | 12 | **插件工程之间不许互相引用**。要复用别的插件里的东西，只有两条路：类型本身是纯 Win32/GDI/领域逻辑就下沉到 `Core`（它有桌面框架引用，System.Drawing 放这里不再增加依赖），或者留在原插件、把契约提到 `Abstractions` 用工厂倒置、由组合根 `PluginManager` 注入。第三条路（`Ui → Core`）会新增一条跨层边，不走 | `Abstractions/IHotkeyServiceFactory.cs`、`Core/Input/`、`Core/ScreenGrid/`（报告 P1-5 的落地形态） |
+| 13 | **`revert` 只把语义还原成「未打」，不承诺字节回到原版**；逐字节还原只有 `restore`。实测：文本替换型 revert 后索引与基线 SHA 不同（bundle 885→990 B），整包替换型 revert 后文件副本仍在（bundle 涨到 2,786,283 B），`purge`/`cleanup` 也各自只回收无人引用的部分。UI 文案已按「启用 / 还原 / 卸载 / 彻底还原游戏客户端」四档分开措辞，别合并也别写成「撤销」。另一条实测：打一个补丁会让 115 MB 的索引撑大 4.9%~6.4%，且打过补丁的索引与 Steam 的校验记录不一致——Steam 再校验一次就把索引换回原版而账本还在，所以不变式 4 的三态判定必须读实际索引内容 | 本机写路径实测，`docs/SPEC-engineering-hardening.md` §9.1 |
 
 ## 5. 落盘位置与内嵌资源
 
@@ -135,4 +137,4 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 超大文件 | 单文件 1k 行以上还有 5 个：`LibBundle3/Index.cs`、`AffixWorkbenchView`、`DataBrowserView`、`CsdDocument`、`FxPatchView`（基线时分别约 1450/1380/1350/1030/1020 行，不逐次更新，别当准数用） | 报告 P0/P1 |
 | 日志器单例不吃测试缝 | `FileLogger.App` 在第一次被触碰时就按当时的根目录建好了文件句柄，之后改注入缝不影响它。断言日志内容请订阅 `FileLogger.EntryLogged`，不要去读日志文件 | — |
 | 未被使用的上游 API | `LibDat2.DatContainer.DownloadSchemaMin()`（`SchemaMin` 全仓无人置真）与 `LibGGPK3.PatchClient.UpdateNodeAsync`（无调用方）**不是本项目的死代码**：两者都随 `src/Lib*` 一起从上游 vendored 进来、初版提交（`02ef81c47`）就存在，是库对外的公共 API。删它们只是增加与上游的分歧（本项目已在 `LibBundle3/Index.cs` 带着注释改过上游 bug，分歧要省着用），留着也不占运行时时。**唯一的实际风险是下一个人照它们做设计**，所以在此标注而不是删除 | SPEC §4.3 |
-| CLI 仍需桌面框架 | `Core` 的 DDS 渲染用 GDI+，且 `Cli` 的 TFM 本身是 `net10.0-windows`；WPF 已经拿掉了，桌面框架还没拿掉 | SPEC §11 |
+| CLI 仍需桌面框架 | GDI+ 有两处：`Core` 的 DDS 渲染，以及 `Cli` 自己的 `DdsTextReplacer`（它的 csproj 还写着一句在 .NET 10 SDK 上空转的 `<UseSystemDrawing>`，能编译其实靠 `Core` 传下来的框架引用）。加上 `Cli` 的 TFM 本身就是 `net10.0-windows`。WPF 已经拿掉了，桌面框架还没拿掉 | SPEC §11 |
