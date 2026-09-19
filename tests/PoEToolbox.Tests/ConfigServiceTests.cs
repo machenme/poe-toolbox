@@ -1,0 +1,89 @@
+using System.IO;
+using PoEToolbox.Shared;
+using Xunit;
+
+namespace PoEToolbox.Tests;
+
+/// <summary>
+/// 把动了 <see cref="ConfigService.DataDirectoryOverride"/> 的测试串起来。
+/// 那是进程级静态：并行时 A 的临时目录会被 B 的读取看到（表现为偶发的「找不到刚写下的文件」）。
+/// </summary>
+internal static class ConfigPathTestCollection
+{
+    internal const string Name = "poetoolbox-config-paths";
+}
+
+/// <summary>
+/// config.json 的容错分支。P2-5 给这两条静默回落补了日志，但当时写不出测试——
+/// 路径是 static readonly，要复现就得往真实的 %LocalAppData% 里写坏文件。有了注入缝才谈得上验证。
+/// </summary>
+[Collection(ConfigPathTestCollection.Name)]
+public sealed class ConfigServiceTests : IDisposable
+{
+    private readonly string _dir;
+    private readonly List<(LogLevel Level, string Message)> _logged = [];
+
+    public ConfigServiceTests()
+    {
+        _dir = Path.Combine(Path.GetTempPath(), "poetoolbox-config-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_dir);
+        ConfigService.DataDirectoryOverride = () => _dir;
+        FileLogger.EntryLogged += OnEntry;
+    }
+
+    private void OnEntry(LogLevel level, string message, Exception? _) => _logged.Add((level, message));
+
+    public void Dispose()
+    {
+        FileLogger.EntryLogged -= OnEntry;
+        ConfigService.DataDirectoryOverride = null;
+        try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
+    }
+
+    private sealed class SampleConfig
+    {
+        public string Title { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    [Fact]
+    public void CorruptConfig_ReturnsEmpty_RenamesAsideAndWarns()
+    {
+        File.WriteAllText(ConfigService.ConfigPath, "{ 这不是 json ");
+
+        Assert.Empty(ConfigService.ReadFullConfig());
+        Assert.NotNull(ConfigService.LastReadError);
+
+        // 坏文件必须留在原地可查，而不是被覆盖掉
+        Assert.False(File.Exists(ConfigService.ConfigPath));
+        var corrupt = Assert.Single(Directory.GetFiles(_dir, "config.json.corrupt.*"));
+        Assert.Contains("这不是 json", File.ReadAllText(corrupt));
+        Assert.Contains(_logged, e => e.Level == LogLevel.Warn && e.Message.Contains("config.json 解析失败"));
+    }
+
+    [Fact]
+    public void PluginSectionOfWrongShape_FallsBackToDefaultsAndWarns()
+    {
+        // 段落存在但形状不对：整段是个字符串，反序列化成 SampleConfig 会抛
+        File.WriteAllText(ConfigService.ConfigPath, """{"SomePlugin": "oops"}""");
+
+        var cfg = ConfigService.GetPluginConfig<SampleConfig>("SomePlugin");
+
+        Assert.NotNull(cfg);
+        Assert.Equal("", cfg.Title);
+        Assert.Equal(0, cfg.Count);
+        Assert.Contains(_logged, e =>
+            e.Level == LogLevel.Warn && e.Message.Contains("SomePlugin/SampleConfig"));
+    }
+
+    [Fact]
+    public void Save_WritesUnderTheOverriddenDirectoryOnly()
+    {
+        ConfigService.SavePluginConfig("SomePlugin", new SampleConfig { Title = "标题", Count = 7 });
+
+        Assert.True(File.Exists(ConfigService.ConfigPath));
+        var json = File.ReadAllText(ConfigService.ConfigPath);
+        Assert.Contains("\"Count\": 7", json);
+        Assert.Contains("标题", json);
+    }
+}

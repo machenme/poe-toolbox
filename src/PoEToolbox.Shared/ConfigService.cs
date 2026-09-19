@@ -11,16 +11,29 @@ namespace PoEToolbox.Shared;
 /// </summary>
 public static class ConfigService
 {
-    public static readonly string DataDirectory = Path.Combine(
+    private static readonly string DefaultDataDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PoEToolbox");
-    public static readonly string ConfigPath = Path.Combine(DataDirectory, "config.json");
-    public static readonly string BackupDirectory = Path.Combine(DataDirectory, "backups");
-    public static readonly string CacheDirectory = Path.Combine(DataDirectory, "cache");
+
+    /// <summary>
+    /// 测试缝：把整个数据根目录换到别处（通常是临时目录），这样「配置文件损坏」「缺目录」这类
+    /// 分支能在不碰用户真实 %LocalAppData% 的前提下复现。生产代码一律留 null。
+    ///
+    /// 两个已知边界：一是各目录变成即时求值的属性，读一次算一次（都是字符串拼接，可忽略）；
+    /// 二是**已经在静态字段初始化里快照过路径的模块不吃这条缝**（如 `SchemaManager.WorkDir`），
+    /// 它们在自己的类型首次使用时定一次，之后不再跟随。另外 <see cref="AffixColorScheme.StorageDirectoryOverride"/>
+    /// 是比这条更早、也更窄的一条缝（只挪方案目录），两者互不相干。
+    /// </summary>
+    internal static Func<string>? DataDirectoryOverride { get; set; }
+
+    public static string DataDirectory => DataDirectoryOverride?.Invoke() ?? DefaultDataDirectory;
+    public static string ConfigPath => Path.Combine(DataDirectory, "config.json");
+    public static string BackupDirectory => Path.Combine(DataDirectory, "backups");
+    public static string CacheDirectory => Path.Combine(DataDirectory, "cache");
     /// <summary>生成的补丁包（fx-patch diff 产物）输出目录。</summary>
-    public static readonly string PatchesDirectory = Path.Combine(DataDirectory, "patches");
+    public static string PatchesDirectory => Path.Combine(DataDirectory, "patches");
     /// <summary>词缀上色的上色方案目录。</summary>
-    public static readonly string AffixSchemesDirectory = Path.Combine(DataDirectory, "affix-schemes");
+    public static string AffixSchemesDirectory => Path.Combine(DataDirectory, "affix-schemes");
     private static readonly string LegacyConfigPath = Path.Combine(AppContext.BaseDirectory, "work", "config.json");
 
     private static readonly JsonSerializerOptions JsonOpts = new()
