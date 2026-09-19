@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
@@ -13,10 +13,10 @@ public partial class FxPatchView : UserControl
 
     private sealed class BuiltInRow
     {
-        public required FxPatchEngine.BuiltInPatchDef Def;
+        public required BuiltInPatchDef Def;
         public required CheckBox Check;
         public required TextBlock StateText;
-        public FxPatchEngine.PatchState? State;
+        public PatchState? State;
     }
 
     private sealed class ThirdPartyRow
@@ -31,7 +31,7 @@ public partial class FxPatchView : UserControl
     private CheckBox? _affixCheck;
     private TextBlock? _affixStateText;
     private Button? _affixExportButton;
-    private FxPatchEngine.PatchState? _affixState;
+    private PatchState? _affixState;
     /// <summary>程序化设置勾选时抑制「用户改过勾选」标记。</summary>
     private bool _suppressCheckEvents;
     /// <summary>用户手动改过勾选后，自动刷新不再覆盖他的选择（除非显式点刷新）。</summary>
@@ -58,7 +58,7 @@ public partial class FxPatchView : UserControl
     /// 每行 = 勾选框 + 右侧启用状态（读了补丁记录后填入）。</summary>
     private void BuildBuiltInChecks()
     {
-        foreach (var def in FxPatchEngine.BuiltIns)
+        foreach (var def in FxBuiltInPatches.BuiltIns)
         {
             var grid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -85,7 +85,7 @@ public partial class FxPatchView : UserControl
             grid.Children.Add(check);
             grid.Children.Add(stateText);
             Grid.SetColumn(stateText, 1);
-            var export = MakeExportButton(FxPatchEngine.TryResolveBuiltInPatchPath(def.Id));
+            var export = MakeExportButton(FxBuiltInPatches.TryResolveBuiltInPatchPath(def.Id));
             if (export is not null)
             {
                 grid.Children.Add(export);
@@ -158,11 +158,11 @@ public partial class FxPatchView : UserControl
             return;
 
         _affixState = entries.Any(IsAffixPatchEntry)
-            ? FxPatchEngine.PatchState.Applied
-            : FxPatchEngine.PatchState.NotApplied;
+            ? PatchState.Applied
+            : PatchState.NotApplied;
         _affixStateText.Text = FriendlyState(_affixState.Value);
         _affixStateText.SetResourceReference(TextBlock.ForegroundProperty, BrushKeyOf(_affixState.Value));
-        _affixStateText.ToolTip = !File.Exists(AffixPatchJsonPath) && _affixState == FxPatchEngine.PatchState.Applied
+        _affixStateText.ToolTip = !File.Exists(AffixPatchJsonPath) && _affixState == PatchState.Applied
             // 账本说打过、但补丁产物不在这台机器上（换过电脑 / 清理过补丁目录）：
             // 这种情况下本页没有可执行的还原入口，得说清楚让用户回「词缀上色」补一次。
             ? "游戏里已经应用了词缀修改，但本机找不到对应的补丁文件（记录来自其他机器或补丁目录被清理过）。"
@@ -182,7 +182,7 @@ public partial class FxPatchView : UserControl
                 ? "由「词缀上色」页生成并维护：调整颜色 / 规则去那个页，本页只负责启用、还原与卸载。"
                 : "还没有生成过词缀补丁：先到「词缀上色」页连接游戏并点「应用词缀修改」，之后就能在这里启停。";
             if (overwriteUserSelection)
-                _affixCheck.IsChecked = _affixState == FxPatchEngine.PatchState.Applied;
+                _affixCheck.IsChecked = _affixState == PatchState.Applied;
         }
         finally
         {
@@ -250,11 +250,11 @@ public partial class FxPatchView : UserControl
         var appliedIds = new HashSet<string>(
             entries.Select(e => e.Id), StringComparer.OrdinalIgnoreCase);
 
-        var states = new Dictionary<string, (FxPatchEngine.PatchState State, string Tip)>();
+        var states = new Dictionary<string, (PatchState State, string Tip)>();
         foreach (var row in _builtInRows)
             states[row.Def.Id] = appliedIds.Contains(row.Def.Id)
-                ? (FxPatchEngine.PatchState.Applied, TooltipOf(FxPatchEngine.PatchState.Applied, ""))
-                : (FxPatchEngine.PatchState.NotApplied, TooltipOf(FxPatchEngine.PatchState.NotApplied, ""));
+                ? (PatchState.Applied, TooltipOf(PatchState.Applied, ""))
+                : (PatchState.NotApplied, TooltipOf(PatchState.NotApplied, ""));
 
         ApplyStates(states, overwriteUserSelection);
         UpdateAffixRow(entries, overwriteUserSelection);
@@ -266,8 +266,8 @@ public partial class FxPatchView : UserControl
 
     private string BuiltInSummaryHint()
     {
-        var applied = _builtInRows.Count(r => r.State == FxPatchEngine.PatchState.Applied)
-                      + (_affixState == FxPatchEngine.PatchState.Applied ? 1 : 0);
+        var applied = _builtInRows.Count(r => r.State == PatchState.Applied)
+                      + (_affixState == PatchState.Applied ? 1 : 0);
         return applied == 0
             ? "当前没有已启用的内置补丁，勾选后点「启用特效补丁」即可。"
             : $"已启用 {applied} 个内置补丁，已自动勾选；需要还原直接点「彻底还原游戏客户端」。";
@@ -495,7 +495,7 @@ public partial class FxPatchView : UserControl
     };
 
     private void ApplyStates(
-        IReadOnlyDictionary<string, (FxPatchEngine.PatchState State, string Tip)> states,
+        IReadOnlyDictionary<string, (PatchState State, string Tip)> states,
         bool overwriteUserSelection)
     {
         _suppressCheckEvents = true;
@@ -515,7 +515,7 @@ public partial class FxPatchView : UserControl
                 row.StateText.SetResourceReference(TextBlock.ForegroundProperty, BrushKeyOf(status.State));
                 row.StateText.ToolTip = status.Tip;
                 if (overwriteUserSelection)
-                    row.Check.IsChecked = status.State == FxPatchEngine.PatchState.Applied;
+                    row.Check.IsChecked = status.State == PatchState.Applied;
             }
         }
         finally
@@ -527,27 +527,27 @@ public partial class FxPatchView : UserControl
             _userEditedSelection = false;
     }
 
-    private static string FriendlyState(FxPatchEngine.PatchState state) => state switch
+    private static string FriendlyState(PatchState state) => state switch
     {
-        FxPatchEngine.PatchState.Applied => "已启用",
-        FxPatchEngine.PatchState.NotApplied => "未启用",
-        FxPatchEngine.PatchState.Conflict => "状态异常",
+        PatchState.Applied => "已启用",
+        PatchState.NotApplied => "未启用",
+        PatchState.Conflict => "状态异常",
         _ => "不兼容",
     };
 
-    private static string BrushKeyOf(FxPatchEngine.PatchState state) => state switch
+    private static string BrushKeyOf(PatchState state) => state switch
     {
-        FxPatchEngine.PatchState.Applied => "SuccessBrush",
-        FxPatchEngine.PatchState.NotApplied => "TextSecondaryBrush",
-        FxPatchEngine.PatchState.Conflict => "WarningBrush",
+        PatchState.Applied => "SuccessBrush",
+        PatchState.NotApplied => "TextSecondaryBrush",
+        PatchState.Conflict => "WarningBrush",
         _ => "ErrorBrush",
     };
 
-    private static string TooltipOf(FxPatchEngine.PatchState state, string detail) => state switch
+    private static string TooltipOf(PatchState state, string detail) => state switch
     {
-        FxPatchEngine.PatchState.Applied => "补丁已写入游戏；勾选后可执行还原或卸载。",
-        FxPatchEngine.PatchState.NotApplied => "还没启用；勾选后点「启用特效补丁」即可。",
-        FxPatchEngine.PatchState.Conflict => "改动只生效了一部分，或内容与补丁不一致，建议先「彻底还原游戏客户端」再重新启用。"
+        PatchState.Applied => "补丁已写入游戏；勾选后可执行还原或卸载。",
+        PatchState.NotApplied => "还没启用；勾选后点「启用特效补丁」即可。",
+        PatchState.Conflict => "改动只生效了一部分，或内容与补丁不一致，建议先「彻底还原游戏客户端」再重新启用。"
                                              + (detail.Length == 0 ? "" : $"\n引擎提示：{detail}"),
         _ => "当前游戏数据与这个补丁不匹配。"
              + (detail.Length == 0 ? "" : $"\n引擎提示：{detail}"),
@@ -793,7 +793,7 @@ public partial class FxPatchView : UserControl
         {
             if (!quiet)
                 SetStateHint("正在核对补丁状态（要打开游戏数据，通常需要十几秒到一分钟）……");
-            var statuses = await Task.Run(() => FxPatchEngine.QueryBuiltInStatus(path));
+            var statuses = await Task.Run(() => FxBuiltInPatches.QueryBuiltInStatus(path));
             if ((_gameDataPath ?? GameDataPathPreference.Get())?.Trim() != path)
                 return;
 
@@ -803,7 +803,7 @@ public partial class FxPatchView : UserControl
                 .ToList();
             foreach (var s in statuses)
             {
-                if (s.State != FxPatchEngine.PatchState.Applied)
+                if (s.State != PatchState.Applied)
                     continue;
                 ledger.Add(new FxPatchStateStore.AppliedPatch(
                     s.Id, s.DisplayName, FxPatchStateStore.KindBuiltIn, null, DateTimeOffset.UtcNow));
@@ -811,7 +811,7 @@ public partial class FxPatchView : UserControl
             FxPatchStateStore.SaveAll(path, ledger);
 
             var entries = FxPatchStateStore.Read(path);
-            var states = new Dictionary<string, (FxPatchEngine.PatchState State, string Tip)>();
+            var states = new Dictionary<string, (PatchState State, string Tip)>();
             foreach (var s in statuses)
                 states[s.Id] = (s.State, TooltipOf(s.State, s.Detail));
             ApplyStates(states, overwriteUserSelection: true);
@@ -837,16 +837,16 @@ public partial class FxPatchView : UserControl
             var applied = 0;
             foreach (var row in _builtInRows)
             {
-                var mark = row.State == FxPatchEngine.PatchState.Applied ? "☑" : row.State is null ? "?" : "☐";
-                if (row.State == FxPatchEngine.PatchState.Applied)
+                var mark = row.State == PatchState.Applied ? "☑" : row.State is null ? "?" : "☐";
+                if (row.State == PatchState.Applied)
                     applied++;
                 AppendLog($"  {mark} {row.Def.DisplayName}（{row.Def.Id}）—— {row.StateText.Text}");
             }
             // 「内置词缀修改补丁」固定在内置区、但不进 _builtInRows，单独补一行：
             // 否则核对结果里缺它，用户明明启用过却在输出里找不到。
-            var affixMark = _affixState == FxPatchEngine.PatchState.Applied ? "☑"
+            var affixMark = _affixState == PatchState.Applied ? "☑"
                 : _affixState is null ? "?" : "☐";
-            if (_affixState == FxPatchEngine.PatchState.Applied)
+            if (_affixState == PatchState.Applied)
                 applied++;
             AppendLog($"  {affixMark} 内置词缀修改补丁（{AffixPatchBuilder.PatchId}）—— {_affixStateText?.Text ?? "待检测"}");
             AppendLog("");
@@ -878,7 +878,7 @@ public partial class FxPatchView : UserControl
             || (PendingFileParticipates() && IsRawPackSource(PendingPatchPath!));
         if (appliesRawPack)
         {
-            var affixNote = _affixState == FxPatchEngine.PatchState.Applied
+            var affixNote = _affixState == PatchState.Applied
                 ? "\n\n当前已启用词缀修改补丁：应用本补丁后它会失效，请在完成后到「词缀上色」重新点「应用词缀修改」。"
                 : "\n\n建议顺序：先应用普通补丁和整包替换型补丁，最后再到「词缀上色」应用词缀修改。";
             var confirm = MessageBox.Show(

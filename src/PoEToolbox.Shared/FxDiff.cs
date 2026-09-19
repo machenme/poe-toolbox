@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using PoEToolbox.Shared;
@@ -96,13 +96,6 @@ public static class FxDiff
             LogErr($"Error: {ex.Message}");
             return 1;
         }
-        finally
-        {
-            // Both indexes used to be held until the next natural collection: this is the only
-            // place in the toolbox that has two of them alive at once (~2 GB), so hand the memory
-            // back explicitly once the diff is written.
-            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
-        }
     }
 
     private static int Diff(GameDataAccess gdA, GameDataAccess gdB, string outDir, string patchId, string bundleName, string? version, bool datPtr)
@@ -148,14 +141,14 @@ public static class FxDiff
             Log($"  [警告] 原版有而修改后没有（补丁引擎无法删除文件，忽略）: {p}");
 
         // ── 第三层：候选文件归类 ──
-        var ops = new List<FxPatchEngine.PatchOp>();
+        var ops = new List<PatchOp>();
         var assetIndex = 0;
         Directory.CreateDirectory(Path.Combine(outDir, "assets"));
 
         foreach (var (path, content) in added)
         {
             var asset = WriteAsset(outDir, assetIndex++, path, content, null, out _);
-            ops.Add(new FxPatchEngine.PatchOp { Op = "addfile-asset", Dst = path, Asset = asset });
+            ops.Add(new PatchOp { Op = "addfile-asset", Dst = path, Asset = asset });
             Log($"  [新增→asset] {path}（{content.Length:N0} B）");
         }
 
@@ -178,7 +171,7 @@ public static class FxDiff
                     Log($"  [dat] {path} 行布局有差异或无法安全表达 → 整表 asset");
                 }
                 var a2 = WriteAsset(outDir, assetIndex++, path, newB, oldB, out var orig2);
-                ops.Add(new FxPatchEngine.PatchOp { Op = "addfile-asset", Dst = path, Asset = a2, OriginalAsset = orig2 });
+                ops.Add(new PatchOp { Op = "addfile-asset", Dst = path, Asset = a2, OriginalAsset = orig2 });
                 Log($"  [dat→asset] {path}（{newB.Length:N0} B）");
                 continue;
             }
@@ -186,14 +179,14 @@ public static class FxDiff
             // 2) 文本文件 → 公共前后缀 → edittext
             if (IsTextFile(path) && TryTextDiff(oldB, newB, out var midOld, out var midNew))
             {
-                ops.Add(new FxPatchEngine.PatchOp { Op = "edittext", Path = path, Old = midOld, New = midNew });
+                ops.Add(new PatchOp { Op = "edittext", Path = path, Old = midOld, New = midNew });
                 Log($"  [文本→edittext] {path}（改动 {midOld.Length}→{midNew.Length} 字符）");
                 continue;
             }
 
             // 3) 兜底：成品字节 asset
             var asset = WriteAsset(outDir, assetIndex++, path, newB, oldB, out var orig);
-            ops.Add(new FxPatchEngine.PatchOp { Op = "addfile-asset", Dst = path, Asset = asset, OriginalAsset = orig });
+            ops.Add(new PatchOp { Op = "addfile-asset", Dst = path, Asset = asset, OriginalAsset = orig });
             Log($"  [二进制→asset] {path}（{newB.Length:N0} B{(orig is null ? "，原版过大未存 revert 字节" : "")}）");
         }
 
@@ -204,7 +197,7 @@ public static class FxDiff
         }
 
         // ── 写出补丁描述 ──
-        var patch = new FxPatchEngine.PatchDef
+        var patch = new PatchDef
         {
             PatchId = patchId,
             BundleName = bundleName,
@@ -227,13 +220,13 @@ public static class FxDiff
 
     /// <summary>dat 表逐行 diff：同布局前提下，行为单位对比；锚点（两版一致的字符串字段）作 Id，
     /// 变化的指针字段生成 patchptr-byid。任何无法表达的差异 → null（调用方 fallback asset）。</summary>
-    private static List<FxPatchEngine.PatchOp>? TryDatDiff(string path, byte[] oldB, byte[] newB)
+    private static List<PatchOp>? TryDatDiff(string path, byte[] oldB, byte[] newB)
     {
-        FxPatchEngine.DatLayout la, lb;
+        FxDatc64Pointers.DatLayout la, lb;
         try
         {
-            la = FxPatchEngine.ParseLayout(oldB);
-            lb = FxPatchEngine.ParseLayout(newB);
+            la = FxDatc64Pointers.ParseLayout(oldB);
+            lb = FxDatc64Pointers.ParseLayout(newB);
         }
         catch (Exception ex)
         {
@@ -244,7 +237,7 @@ public static class FxDiff
         if (la.RowCount != lb.RowCount || la.RowLen != lb.RowLen || la.DataOffset != lb.DataOffset)
             return null;
 
-        var ops = new List<FxPatchEngine.PatchOp>();
+        var ops = new List<PatchOp>();
         var skippedRows = new List<string>();
         for (var r = 0; r < la.RowCount; r++)
         {
@@ -287,15 +280,15 @@ public static class FxDiff
                 }
                 // 生成前唯一性验证：该 op 必须能在原版表上被 LocatePtrField 唯一定位，
                 // 且命中的行/字段与本 diff 所见一致。碎片锚点（跨界解码）在此被拒绝。
-                var probe = FxPatchEngine.LocatePtrField(oldB, la, anchor!, sA, sB);
+                var probe = FxDatc64Pointers.LocatePtrField(oldB, la, anchor!, sA, sB);
                 if (probe is null || probe.Row != r || probe.FieldOffset != off
-                    || probe.State != FxPatchEngine.PatchState.NotApplied)
+                    || probe.State != PatchState.NotApplied)
                 {
                     skippedRows.Add($"ROW[{r}]（定位验证失败: \"{FxTruncate(sA, 30)}\"，锚点可能不唯一）");
                     rowOps = -1;
                     break;
                 }
-                ops.Add(new FxPatchEngine.PatchOp
+                ops.Add(new PatchOp
                 {
                     Op = "patchptr-byid",
                     Table = path,
@@ -327,7 +320,7 @@ public static class FxDiff
 
     /// <summary>解码一行内所有"指针可解析且内容为可打印 ASCII"的字符串字段，按字段偏移索引。
     /// 仅接受 4 字节对齐的字段位置——未对齐位置几乎都是跨界解码碎片（假锚点/假路径的来源）。</summary>
-    private static Dictionary<int, string> DecodeRowFields(byte[] data, FxPatchEngine.DatLayout layout, int row)
+    private static Dictionary<int, string> DecodeRowFields(byte[] data, FxDatc64Pointers.DatLayout layout, int row)
     {
         var result = new Dictionary<int, string>();
         var rowStart = 4 + row * layout.RowLen;
@@ -339,7 +332,7 @@ public static class FxDiff
             var abs = (long)v + layout.DataOffset - 8;
             if (abs < layout.DataOffset || abs >= data.Length)
                 continue;
-            var s = FxPatchEngine.DecodeUtf16At(data, (int)abs);
+            var s = FxDatc64Pointers.DecodeUtf16At(data, (int)abs);
             if (s.Length is < 3 or > 260)
                 continue;
             var printable = true;
@@ -361,8 +354,8 @@ public static class FxDiff
     private static bool TryTextDiff(byte[] oldB, byte[] newB, out string midOld, out string midNew)
     {
         midOld = midNew = "";
-        var a = FxPatchEngine.DecodeText(oldB, out _, out _);
-        var b = FxPatchEngine.DecodeText(newB, out _, out _);
+        var a = TextEncodingDetector.Decode(oldB, out _, out _);
+        var b = TextEncodingDetector.Decode(newB, out _, out _);
         var p = 0;
         while (p < a.Length && p < b.Length && a[p] == b[p])
             p++;

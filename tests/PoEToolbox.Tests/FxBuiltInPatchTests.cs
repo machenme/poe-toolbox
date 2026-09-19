@@ -14,11 +14,11 @@ public sealed class FxBuiltInPatchTests
     [Fact]
     public void EveryBuiltInPatch_IsEmbeddedAndMaterializesToDisk()
     {
-        Assert.NotEmpty(FxPatchEngine.BuiltIns);
+        Assert.NotEmpty(FxBuiltInPatches.BuiltIns);
 
-        foreach (var def in FxPatchEngine.BuiltIns)
+        foreach (var def in FxBuiltInPatches.BuiltIns)
         {
-            var path = FxPatchEngine.TryResolveBuiltInPatchPath(def.Id);
+            var path = FxBuiltInPatches.TryResolveBuiltInPatchPath(def.Id);
             Assert.False(string.IsNullOrWhiteSpace(path), $"内置补丁 {def.Id} 没有可用的描述文件");
             Assert.True(File.Exists(path), $"内置补丁 {def.Id} 释放失败：{path}");
             Assert.EndsWith(def.FileName, path!, StringComparison.Ordinal);
@@ -32,7 +32,7 @@ public sealed class FxBuiltInPatchTests
     [Fact]
     public void MaterializedPatch_IsUnderToolboxDataDirectory()
     {
-        var path = FxPatchEngine.TryResolveBuiltInPatchPath("oil-ground-fx-lite");
+        var path = FxBuiltInPatches.TryResolveBuiltInPatchPath("oil-ground-fx-lite");
         Assert.False(string.IsNullOrWhiteSpace(path));
 
         var full = Path.GetFullPath(path!);

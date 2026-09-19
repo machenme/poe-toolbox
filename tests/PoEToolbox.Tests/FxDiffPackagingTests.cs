@@ -75,7 +75,7 @@ public sealed class FxDiffPackagingTests : IDisposable
         var zipPath = outDir + ".zip";
         FxDiff.CreateZip(outDir, zipPath);
 
-        var extracted = FxPatchEngine.ExtractZipPatch(zipPath);
+        var extracted = FxPatchPackage.ExtractZipPatch(zipPath);
         Assert.NotNull(extracted);
         Assert.True(File.Exists(extracted));
         Assert.Equal("MyPatch2.patch.json", Path.GetFileName(extracted));

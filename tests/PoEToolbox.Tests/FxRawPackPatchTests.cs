@@ -64,7 +64,7 @@ public sealed class FxRawPackPatchTests : IDisposable
     [Fact]
     public void TryDetectRawPack_RootsPathsAtTheIndexFileFolder()
     {
-        var pack = FxPatchEngine.TryDetectRawPack(Path.Combine(_root, "pack"), "Tiny");
+        var pack = FxRawPackPatch.TryDetectRawPack(Path.Combine(_root, "pack"), "Tiny");
 
         Assert.NotNull(pack);
         Assert.Equal("Tiny", pack!.PatchId);
@@ -82,11 +82,11 @@ public sealed class FxRawPackPatchTests : IDisposable
         var zipPath = Path.Combine(_root, "[Poe2]_功能补丁_V7.3_正式版.zip");
         System.IO.Compression.ZipFile.CreateFromDirectory(Path.Combine(_root, "pack"), zipPath);
 
-        var patchJson = FxPatchEngine.ExtractZipPatch(zipPath, out var dir);
+        var patchJson = FxPatchPackage.ExtractZipPatch(zipPath, out var dir);
 
         Assert.Null(patchJson);
         Assert.False(string.IsNullOrEmpty(dir));
-        var pack = FxPatchEngine.TryDetectRawPack(dir!, Path.GetFileNameWithoutExtension(zipPath));
+        var pack = FxRawPackPatch.TryDetectRawPack(dir!, Path.GetFileNameWithoutExtension(zipPath));
         Assert.NotNull(pack);
         Assert.Equal(new[] { "_.index.bin", "Tiny.V0.1.bundle.bin" }, pack!.Files.Select(f => f.RelativePath));
         Assert.Equal(NewIndex, File.ReadAllText(pack.Files[0].SourcePath));
@@ -100,14 +100,14 @@ public sealed class FxRawPackPatchTests : IDisposable
         Directory.CreateDirectory(onlyIndex);
         File.WriteAllText(Path.Combine(onlyIndex, "_.index.bin"), NewIndex);
 
-        Assert.Null(FxPatchEngine.TryDetectRawPack(onlyIndex, "Tiny"));
+        Assert.Null(FxRawPackPatch.TryDetectRawPack(onlyIndex, "Tiny"));
 
         var assetsOnly = Path.Combine(_root, "assets-only");
         Directory.CreateDirectory(Path.Combine(assetsOnly, "assets"));
         File.WriteAllText(Path.Combine(assetsOnly, "x.patch.json"), "{}");
         File.WriteAllText(Path.Combine(assetsOnly, "assets", "0001_grd.ao"), "ao");
 
-        Assert.Null(FxPatchEngine.TryDetectRawPack(assetsOnly, "Tiny"));
+        Assert.Null(FxRawPackPatch.TryDetectRawPack(assetsOnly, "Tiny"));
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class FxRawPackPatchTests : IDisposable
         if (GameIsRunning())
             return;
 
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, Detect(), "apply"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, Detect(), "apply"));
 
         Assert.Equal(NewIndex, File.ReadAllText(_indexPath));
         Assert.Equal(NewBundle, File.ReadAllText(GamePath("Tiny.V0.1.bundle.bin")));
@@ -131,8 +131,8 @@ public sealed class FxRawPackPatchTests : IDisposable
             return;
 
         var pack = Detect();
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "apply"));
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "revert"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, pack, "apply"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, pack, "revert"));
 
         Assert.Equal(OriginalIndex, File.ReadAllText(_indexPath));
         Assert.Equal(OriginalBundle, File.ReadAllText(GamePath("Tiny.V0.1.bundle.bin")));
@@ -147,10 +147,10 @@ public sealed class FxRawPackPatchTests : IDisposable
         File.WriteAllText(PackPath("Extra.V0.1.bundle.bin"), "EXTRA");
         var pack = Detect();
 
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "apply"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, pack, "apply"));
         Assert.True(File.Exists(GamePath("Extra.V0.1.bundle.bin")));
 
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "revert"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, pack, "revert"));
         Assert.False(File.Exists(GamePath("Extra.V0.1.bundle.bin")));
     }
 
@@ -165,7 +165,7 @@ public sealed class FxRawPackPatchTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(baseline)!);
         File.WriteAllText(baseline, OriginalIndex);
 
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, Detect(), "apply"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, Detect(), "apply"));
 
         Assert.False(File.Exists(BackupPath("_.index.bin")));
         Assert.Equal(OriginalBundle, File.ReadAllText(BackupPath("Tiny.V0.1.bundle.bin")));
@@ -179,9 +179,9 @@ public sealed class FxRawPackPatchTests : IDisposable
             return;
 
         var pack = Detect();
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "status"));
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "apply"));
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, pack, "status"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, pack, "status"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, pack, "apply"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, pack, "status"));
     }
 
     /// <summary>
@@ -194,12 +194,12 @@ public sealed class FxRawPackPatchTests : IDisposable
         if (GameIsRunning())
             return;
 
-        Assert.Equal(0, FxPatchEngine.RunRawPack(_indexPath, Detect(), "apply"));
+        Assert.Equal(0, FxRawPackPatch.RunRawPack(_indexPath, Detect(), "apply"));
 
         // 补丁包本体被删（用户没有 zip 了），只能靠 backup/<补丁名>/manifest.txt 还原。
         Directory.Delete(Path.Combine(_root, "pack"), recursive: true);
 
-        Assert.Equal(0, FxPatchEngine.RevertRawPackFromLedger(_indexPath, "Tiny"));
+        Assert.Equal(0, FxRawPackPatch.RevertRawPackFromLedger(_indexPath, "Tiny"));
 
         Assert.Equal(OriginalIndex, File.ReadAllText(_indexPath));
         Assert.Equal(OriginalBundle, File.ReadAllText(GamePath("Tiny.V0.1.bundle.bin")));
@@ -213,10 +213,10 @@ public sealed class FxRawPackPatchTests : IDisposable
         if (GameIsRunning())
             return;
 
-        Assert.NotEqual(0, FxPatchEngine.RevertRawPackFromLedger(_indexPath, "Tiny"));
+        Assert.NotEqual(0, FxRawPackPatch.RevertRawPackFromLedger(_indexPath, "Tiny"));
     }
 
-    private FxPatchEngine.RawPack Detect()
-        => FxPatchEngine.TryDetectRawPack(Path.Combine(_root, "pack"), "Tiny")
+    private FxRawPackPatch.RawPack Detect()
+        => FxRawPackPatch.TryDetectRawPack(Path.Combine(_root, "pack"), "Tiny")
            ?? throw new InvalidOperationException("测试用的整包补丁未被识别。");
 }

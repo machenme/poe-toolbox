@@ -38,4 +38,28 @@ public static class TextEncodingDetector
         }
         return highZero * 10 >= chars * 9;
     }
+
+    /// <summary>探测并解码。<paramref name="bomLength"/> 是原文件的 BOM 字节数，
+    /// 回写时要交给 <see cref="Encode"/> 才能保持「原来不带 BOM 就不加」。</summary>
+    internal static string Decode(byte[] bytes, out Encoding encoding, out int bomLength)
+    {
+        (encoding, bomLength) = Detect(bytes);
+        return encoding.GetString(bytes, bomLength, bytes.Length - bomLength);
+    }
+
+    /// <summary>按探测到的编码回写，并按 <paramref name="bomLength"/> 原样决定要不要带 BOM。</summary>
+    internal static byte[] Encode(string text, Encoding encoding, int bomLength)
+    {
+        var body = encoding.GetBytes(text);
+        if (bomLength == 0)
+            return body;
+        var result = new byte[bomLength + body.Length];
+        var bom = bomLength == 3 ? stackalloc byte[] { 0xEF, 0xBB, 0xBF }
+            : encoding.CodePage == Encoding.BigEndianUnicode.CodePage
+                ? stackalloc byte[] { 0xFE, 0xFF }
+                : stackalloc byte[] { 0xFF, 0xFE };
+        bom.CopyTo(result);
+        body.CopyTo(result, bomLength);
+        return result;
+    }
 }

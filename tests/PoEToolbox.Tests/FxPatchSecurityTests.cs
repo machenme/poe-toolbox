@@ -15,7 +15,7 @@ public sealed class FxPatchSecurityTests
     {
         var root = Path.Combine(Path.GetTempPath(), "poe-toolbox-test-root", Guid.NewGuid().ToString("N"));
 
-        Assert.False(FxPatchEngine.TryGetSafeChildPath(root, relativePath, out _));
+        Assert.False(FxPatchPackage.TryGetSafeChildPath(root, relativePath, out _));
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public sealed class FxPatchSecurityTests
     {
         var root = Path.Combine(Path.GetTempPath(), "poe-toolbox-test-root", Guid.NewGuid().ToString("N"));
 
-        Assert.True(FxPatchEngine.TryGetSafeChildPath(root, "assets\\effect.ao", out var destination));
+        Assert.True(FxPatchPackage.TryGetSafeChildPath(root, "assets\\effect.ao", out var destination));
         Assert.StartsWith(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
             destination, StringComparison.OrdinalIgnoreCase);
     }
@@ -42,7 +42,7 @@ public sealed class FxPatchSecurityTests
                 archive.CreateEntry("../outside.txt").Open().Dispose();
             }
 
-            Assert.Null(FxPatchEngine.ExtractZipPatch(zipPath));
+            Assert.Null(FxPatchPackage.ExtractZipPatch(zipPath));
             Assert.False(File.Exists(Path.Combine(tempRoot, "outside.txt")));
         }
         finally
