@@ -1,6 +1,6 @@
 # 内置特效补丁说明
 
-本文档详细介绍工具内置的两个特效补丁（fx-patch 引擎 `FxPatchEngine.BuiltIns`，见 `src/PoEToolbox.Shared/FxPatchEngine.cs:48-51`）各自修改了哪些文件、哪些内容。补丁定义文件位于 `src/PoEToolbox.Shared/Patches/`（编译为程序集内嵌资源，运行时释放到工具箱数据目录 `AppData\Roaming\PoEToolbox\patches\builtin\` 读取；exe 旁不再需要 `Patches` 目录）。
+本文档详细介绍工具内置的两个特效补丁（fx-patch 引擎 `FxPatchEngine.BuiltIns`，见 `src/PoEToolbox.Shared/FxPatchEngine.cs:48-51`）各自修改了哪些文件、哪些内容。补丁定义文件位于 `src/PoEToolbox.Shared/Patches/`（编译为程序集内嵌资源，运行时释放到工具箱数据目录 `AppData\Local\PoEToolbox\patches\builtin\` 读取；exe 旁不再需要 `Patches` 目录）。
 
 ## 为什么要「复制副本 + 改引用」，而不是直接替换游戏文件？
 
