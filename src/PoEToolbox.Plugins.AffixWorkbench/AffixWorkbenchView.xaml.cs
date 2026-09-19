@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.AffixWorkbench;

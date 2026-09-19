@@ -1,4 +1,4 @@
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.App;

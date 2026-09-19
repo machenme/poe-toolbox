@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using PoEToolbox.Plugins.DataBrowser.Services;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.DataBrowser;

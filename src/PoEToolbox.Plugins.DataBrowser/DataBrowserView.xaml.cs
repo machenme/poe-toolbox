@@ -8,7 +8,7 @@ using System.Windows.Input;
 using LibBundle3.Nodes;
 using LibBundle3.Records;
 using Microsoft.Win32;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Plugins.DataBrowser.Models;
 using PoEToolbox.Plugins.DataBrowser.Services;
 using PoEToolbox.Shared;

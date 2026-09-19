@@ -1,4 +1,4 @@
-namespace PoEToolbox.Sdk;
+namespace PoEToolbox.Abstractions;
 
 /// <summary>
 /// Simple logger interface for plugins.

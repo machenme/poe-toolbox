@@ -3,7 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.FxPatch;

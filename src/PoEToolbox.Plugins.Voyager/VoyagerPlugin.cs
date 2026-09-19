@@ -6,7 +6,7 @@ using PoEToolbox.Plugins.Voyager.Core;
 using PoEToolbox.Plugins.Voyager.Models;
 using PoEToolbox.Plugins.Voyager.Views;
 using PoEToolbox.Shared;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 
 namespace PoEToolbox.Plugins.Voyager;
 

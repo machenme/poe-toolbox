@@ -9,7 +9,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using Microsoft.Win32;
 using LibDat2;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Core.Pipeline;
 
 namespace PoEToolbox.Plugins.PriceTagger;

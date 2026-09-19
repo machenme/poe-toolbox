@@ -1,4 +1,4 @@
-namespace PoEToolbox.Sdk;
+namespace PoEToolbox.Abstractions;
 
 /// <summary>
 /// Lightweight pub/sub event bus for in-process plugin communication.

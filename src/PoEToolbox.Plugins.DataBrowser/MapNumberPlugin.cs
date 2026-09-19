@@ -1,5 +1,5 @@
 using System.Windows.Controls;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.DataBrowser;

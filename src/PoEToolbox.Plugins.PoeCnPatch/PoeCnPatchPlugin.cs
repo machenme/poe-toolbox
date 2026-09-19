@@ -1,5 +1,5 @@
 using System.Windows.Controls;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 
 namespace PoEToolbox.Plugins.PoeCnPatch;
 

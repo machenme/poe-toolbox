@@ -1,4 +1,4 @@
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using PoEToolbox.Shared;

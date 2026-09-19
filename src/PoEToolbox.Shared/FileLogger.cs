@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 
 namespace PoEToolbox.Shared;
 

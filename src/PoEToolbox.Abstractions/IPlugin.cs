@@ -1,7 +1,6 @@
-using PoEToolbox.Sdk;
 using System.Windows.Controls;
 
-namespace PoEToolbox.Sdk;
+namespace PoEToolbox.Abstractions;
 
 /// <summary>
 /// Plugin contract for the PoE Toolbox shell.

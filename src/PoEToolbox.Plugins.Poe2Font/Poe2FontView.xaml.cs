@@ -5,7 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using PoEToolbox.Shared;
-using PoEToolbox.Sdk;
+using PoEToolbox.Abstractions;
 
 namespace PoEToolbox.Plugins.Poe2Font;
 
