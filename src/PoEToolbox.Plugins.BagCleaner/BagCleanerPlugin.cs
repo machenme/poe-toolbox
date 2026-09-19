@@ -126,7 +126,7 @@ public class BagCleanerPlugin : IUiPlugin
                 cfg.Timing.MoveSettleDelayMs, _cleanCts.Token,
                 BagCleanerContext.PoeDetector.IsPoeForeground);
         }
-        catch (BC.HotkeyRegistrationException ex)
+        catch (HotkeyRegistrationException ex)
         {
             _logger?.Error("[BagCleaner] 无法注册紧急停止热键", ex);
         }

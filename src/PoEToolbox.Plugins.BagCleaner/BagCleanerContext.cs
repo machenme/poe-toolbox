@@ -1,3 +1,4 @@
+using PoEToolbox.Abstractions;
 using PoEToolbox.Plugins.BagCleaner.Core;
 using PoEToolbox.Shared;
 using PoEToolbox.Plugins.BagCleaner.Services;

@@ -294,7 +294,7 @@ MapNumberView.xaml.cs          507
 | P1-1 / P1-2 | 部分 | P1-2 补成 9 条性质测试（非 3 条）；P1-1 MVVM 明确排除在本轮外，见 `SPEC-engineering-hardening.md` §11 |
 | P1-3 | ✅ | `NetworkDefaults` 统一超时 + 调用点降级与中文失败原因（`2327ae8c9`、`12bd84929`） |
 | P1-4 | ✅ | 选改名 `Abstractions`（`574404bd4`），同时拆出 `IUiPlugin`（`2463179fe`） |
-| P1-5 | ❌ **判定有误** | 不是误引：Voyager 有 8 处 `using PoEToolbox.Plugins.BagCleaner.*`，是真依赖。而且**本报告只给了行号级证据**（`Voyager.csproj` → `BagCleaner.csproj`），读起来像删一行引用就能了。沉到哪一层是选型题，未做，见 SPEC §12 |
+| P1-5 | ✅ **判定有误，但选型已做完并落地** | 不是误引：Voyager 有 8 处 `using PoEToolbox.Plugins.BagCleaner.*`，是真依赖，而且**本报告只给了行号级证据**（`Voyager.csproj` → `BagCleaner.csproj`），读起来像删一行引用就能了。沉到哪一层实测过三个选项，最终：纯 Win32/GDI 的 `Input/` + `ScreenGrid/` 下沉 `Core`（`e21cd1059`），WPF 的 `HotkeyService` 留在 BagCleaner、契约 `IHotkeyService`/`IHotkeyServiceFactory` 提到 Abstractions 倒置注入；`Voyager → BagCleaner` 工程引用已删 |
 | P1-6 | ✅ | 新建 `PoEToolbox.Ui`（`c8cabcbd4`）、`ThemeManager` 移入 App（`69645d931`），`Shared` 不再引用 WPF |
 | P1-7 | ✅ | App + Cli 均挂兜底（`f154c507f`） |
 | P2-1 | ✅ | `build.bat` 补 `-m:1`（`d6b3d46ba`） |

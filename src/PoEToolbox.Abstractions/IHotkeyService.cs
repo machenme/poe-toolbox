@@ -1,10 +1,11 @@
-namespace PoEToolbox.Plugins.BagCleaner.Services;
+namespace PoEToolbox.Abstractions;
 
 /// <summary>
 /// 全局热键服务接口 (符合 SPEC §4.2.1)。
-/// WPF 专用实现：通过 <see cref="System.Windows.Interop.HwndSource.AddHook"/> 拦截 WM_HOTKEY 消息。
+/// 实现依赖 WPF 的 HwndSource 消息钩子，因此接口与实现分离：接口在此，
+/// 实现留在 BagCleaner，由 <see cref="IHotkeyServiceFactory"/> 交给使用方。
 /// </summary>
-public interface IHotkeyService
+public interface IHotkeyService : IDisposable
 {
     /// <summary>触发清包热键 (默认 F2) 被按下时触发。</summary>
     event Action? Triggered;
@@ -14,6 +15,9 @@ public interface IHotkeyService
 
     /// <summary>校准标记热键 (默认 F3) 被按下时触发 — 仅在校准态下有意义。</summary>
     event Action? CalibratePressed;
+
+    /// <summary>是否已完成 <see cref="Initialize"/>。</summary>
+    bool IsInitialized { get; }
 
     /// <summary>
     /// 初始化：把全局消息钩子挂到指定 WPF 窗口的 HWND。

@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using PoEToolbox.Core.Input;
-using PoEToolbox.Plugins.BagCleaner.Services;
 using PoEToolbox.Plugins.Voyager.Core;
 using PoEToolbox.Plugins.Voyager.Models;
 using PoEToolbox.Plugins.Voyager.Views;
@@ -18,14 +17,14 @@ public class VoyagerPlugin : IUiPlugin
     public int Order => 20;
 
     private VoyagerView? _view;
-    private HotkeyService? _hotkey;       // copy mode: offset 0x10
-    private HotkeyService? _smartHotkey;  // smart click: offset 0x20
+    private IHotkeyService? _hotkey;       // copy mode: offset 0x10
+    private IHotkeyService? _smartHotkey;  // smart click: offset 0x20
     private InputSimulator? _input;
     private VoyageEngine? _copyEngine;
     private SmartClickEngine? _smartEngine;
     private VoyagerConfig _config;
 
-    public VoyagerPlugin()
+    public VoyagerPlugin(IHotkeyServiceFactory hotkeys)
     {
         _config = PoEToolbox.Shared.ConfigService.GetPluginConfig<VoyagerConfig>("Voyager")
                   ?? new VoyagerConfig();
@@ -38,12 +37,12 @@ public class VoyagerPlugin : IUiPlugin
         _smartEngine = new SmartClickEngine(_input, _config);
 
         // Copy mode hotkeys (offset 0x10)
-        _hotkey = new HotkeyService(baseIdOffset: 0x10);
+        _hotkey = hotkeys.Create(baseIdOffset: 0x10);
         _hotkey.Triggered += () => _ = DoVoyage();
         _hotkey.CalibratePressed += DoCopyCalibration;
 
         // Smart click hotkeys (offset 0x20)
-        _smartHotkey = new HotkeyService(baseIdOffset: 0x20);
+        _smartHotkey = hotkeys.Create(baseIdOffset: 0x20);
         _smartHotkey.Triggered += () => _ = DoSmartClick();
     }
 

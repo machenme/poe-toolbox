@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using PoEToolbox.Abstractions;
 using PoEToolbox.Core.Input;
 using static PoEToolbox.Core.Input.NativeMethods;
 
@@ -14,7 +15,7 @@ namespace PoEToolbox.Plugins.BagCleaner.Services;
 /// 关键点：RegisterHotKey 的第一个参数必须传具体窗口 HWND（不能是 IntPtr.Zero），
 /// 否则 WM_HOTKEY 是 thread-bound message，HwndSource.AddHook 收不到。
 /// </summary>
-public sealed class HotkeyService : IHotkeyService, IDisposable
+public sealed class HotkeyService : IHotkeyService
 {
     private readonly int _hotkeyIdTrigger;
     private readonly int _hotkeyIdStop;

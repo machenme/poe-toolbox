@@ -34,7 +34,7 @@ PoEToolbox.Tests
  └─ Core + Shared + 4 个插件工程（不引用 App / Ui / Cli）
 ```
 
-**允许的引用方向只有自上而下**。唯一反例是已知的结构债：`Plugins.Voyager → Plugins.BagCleaner`（见 §6）。
+**允许的引用方向只有自上而下**，插件之间没有任何直接引用。历史上唯一反例是 `Plugins.Voyager → Plugins.BagCleaner`（报告 P1-5），现已拆掉：纯 Win32/GDI 的输入与网格类型下沉到 `Core`，WPF 热键服务留在 BagCleaner、由 `Abstractions.IHotkeyServiceFactory` 倒置注入。
 
 三条不能破的规则：
 
@@ -48,15 +48,15 @@ PoEToolbox.Tests
 
 | 层 | 工程 | TFM | WPF | 职责 |
 |---|---|---|---|---|
-| 契约 | `Abstractions` | `net10.0-windows` | — | `IPlugin`（只有生命周期与元数据）、`IEventBus`、`ILogger`、`IConfigService`。`IAppState` 不在这里，它在 `Shared/GameSessionState.cs` |
+| 契约 | `Abstractions` | `net10.0-windows` | — | `IPlugin`（只有生命周期与元数据）、`IEventBus`、`ILogger`、`IConfigService`、`IHotkeyService` + `IHotkeyServiceFactory`（热键契约，WPF 实现在 `BagCleaner`）。`IAppState` 不在这里，它在 `Shared/GameSessionState.cs` |
 | 共享 | `Shared` | `net10.0-windows` | — | `GameDataAccess`、补丁引擎门面 `FxPatchEngine` + `Fx/` 九模块、`ConfigService`、`FileLogger`、`EventBus`、`PoeDetector`、`NetworkDefaults` |
 | 界面共享 | `Ui` | `net10.0-windows` | ✅ | `OutputPanel`、`UiStatus`、`FxEngineRunner`（进程级互斥的引擎执行器）、`IUiPlugin` |
-| 领域 | `Core` | `net10.0-windows` | — | datc64 二进制、`SchemaManager`、翻译目录、poe.ninja 抓取管线、DDS 贴图渲染 |
+| 领域 | `Core` | `net10.0-windows` | — | datc64 二进制、`SchemaManager`、翻译目录、poe.ninja 抓取管线、DDS 贴图渲染、`Input/`（Win32 鼠标键盘模拟）、`ScreenGrid/`（客户区比例 ↔ 屏幕绝对坐标） |
 | 入口 | `App` | `net10.0-windows` | ✅ | 主窗、主题（`Themes/`，含 `ThemeManager`）、`PluginManager`；**`AssemblyName` 是 `PoEToolbox`** |
 | 入口 | `Cli` | `net10.0-windows` | — | 命令行，仅 `Core` + `LibDat2`；`fx-oilmod` / `fx-patch` 等 |
 | 插件 | `PriceTagger` `DataBrowser` `BagCleaner` `Voyager` `TermTranslator` `PoeCnPatch` `Poe2Font` `FxPatch` `AffixWorkbench` | `net10.0-windows` | ✅ | 每个一个 `IUiPlugin` + 若干 `UserControl` |
 | 基础 | `LibGGPK3` `LibBundle3` `LibDat2` `LibBundledGGPK3` | `net10.0` | — | GGPK / Bundles2 / DAT 的格式读写；不依赖上层 |
-| 测试 | `PoEToolbox.Tests` | `net10.0-windows` | — | 192 条；引用 `Core` + 4 个插件 + `Shared`，**不引用 `App` / `Ui` / `Cli`** |
+| 测试 | `PoEToolbox.Tests` | `net10.0-windows` | — | 195 条；引用 `Core` + 4 个插件 + `Shared`，**不引用 `App` / `Ui` / `Cli`** |
 
 ## 3. 运行期数据流
 
@@ -109,6 +109,7 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 9 | **测试程序集整体关并行**（`tests/.../AssemblyInfo.cs` 的 `DisableTestParallelization`）。进程级静态太多（路径注入缝、日志器静态事件、回收链、游戏数据），而 xUnit 默认只串行化**同一 collection 内**的类——跨组的并发照样能毁产物：`FxDiffPackagingTests` 会把补丁解压进别的类正在用的临时树，对方 `Dispose` 递归删目录，它的文件就凭空消失。实测并行 26~36s、串行 34~37s，I/O 受限下并行没换来时间。**`[Collection]` 标注保留**，作用是记录哪些类共享哪个静态；若将来要重新开启并行，必须先照这条把清单补全 | `tests/.../AssemblyInfo.cs`、`AffixColorSchemeTests.cs`（`ConfigPathTestCollection`，四个类同挂） |
 | 10 | **进程级静态事件的订阅者不要直接枚举自己攒的列表**。`FileLogger.EntryLogged` 谁记一条都会回调，包括后台线程；断言前先加锁取快照 | `tests/.../ConfigServiceTests.cs` |
 | 11 | **`Debug.Fail` 类防线要在测试里被断言，而不是被跳过**。.NET 的 `Debug.Fail` 走 `Trace.Listeners` 派发，测试主机把它翻成异常才让用例挂；测试期间临时换上自己的监听器就能既躲开异常、又断言「守卫确实响了」（`CapturedDebugFail`）。注意 `#if DEBUG` 里的断言 **CI 收不到**——CI 只跑 Release | `tests/.../CapturedDebugFail.cs`、`LibBundle3/Index.cs` 的 `Dispose` |
+| 12 | **插件工程之间不许互相引用**。要复用别的插件里的东西，只有两条路：类型本身是纯 Win32/GDI/领域逻辑就下沉到 `Core`（它有桌面框架引用，System.Drawing 放这里不再增加依赖），或者留在原插件、把契约提到 `Abstractions` 用工厂倒置、由组合根 `PluginManager` 注入。第三条路（`Ui → Core`）会新增一条跨层边，不走 | `Abstractions/IHotkeyServiceFactory.cs`、`Core/Input/`、`Core/ScreenGrid/`（报告 P1-5 的落地形态） |
 
 ## 5. 落盘位置与内嵌资源
 
@@ -129,7 +130,6 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 
 | 项 | 现状 | 出处 |
 |---|---|---|
-| 插件间直接依赖 | `Voyager` 复用 `BagCleaner` 的 P/Invoke、`GridCalculator`、`Models`、`Services`（8 处 `using`）。**是真依赖，不是误引**，正确解法是把这几样下沉到 `Shared`/`Core` | 报告 P1-5 |
 | UI 组织 | 59 处 `MessageBox.Show` 散落各 View，无 `IDialogService`；插件 View 多为 code-behind 而非 ViewModel | 报告 P1-1 / P2-6 |
 | 超大文件 | 单文件 1k 行以上还有 5 个：`LibBundle3/Index.cs`、`AffixWorkbenchView`、`DataBrowserView`、`CsdDocument`、`FxPatchView`（基线时分别约 1450/1380/1350/1030/1020 行，不逐次更新，别当准数用） | 报告 P0/P1 |
 | 日志器单例不吃测试缝 | `FileLogger.App` 在第一次被触碰时就按当时的根目录建好了文件句柄，之后改注入缝不影响它。断言日志内容请订阅 `FileLogger.EntryLogged`，不要去读日志文件 | — |
