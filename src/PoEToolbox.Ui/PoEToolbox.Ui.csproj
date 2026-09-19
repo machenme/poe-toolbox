@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>PoEToolbox.Ui</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FxEngineRunner 是 internal：它的 busy 互斥标志必须跨视图共享，不能变成公开契约。
+         第一条 PoEToolbox 不是笔误——主窗工程叫 PoEToolbox.App.csproj，但 AssemblyName 是 PoEToolbox。 -->
+    <InternalsVisibleTo Include="PoEToolbox" />
+    <InternalsVisibleTo Include="PoEToolbox.Plugins.FxPatch" />
+    <InternalsVisibleTo Include="PoEToolbox.Plugins.AffixWorkbench" />
+  </ItemGroup>
+
+</Project>

@@ -1,7 +1,7 @@
 <UserControl x:Class="PoEToolbox.Plugins.FxPatch.FxPatchCreatorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:shared="clr-namespace:PoEToolbox.Shared;assembly=PoEToolbox.Shared"
+             xmlns:ui="clr-namespace:PoEToolbox.Ui;assembly=PoEToolbox.Ui"
              Background="{DynamicResource WindowBgBrush}">
     <Grid Margin="0,8,0,8">
         <Grid.RowDefinitions>
@@ -86,7 +86,7 @@
 
         <!-- ── 右下：输出面板 ── -->
         <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource CardBorder}" Padding="12">
-            <shared:OutputPanel x:Name="Output" Title="引擎输出"/>
+            <ui:OutputPanel x:Name="Output" Title="引擎输出"/>
         </Border>
 
         <Border Grid.Row="2" Grid.ColumnSpan="3" Margin="0,8,0,0"

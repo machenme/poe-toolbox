@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using PoEToolbox.Plugins.DataBrowser.Services;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.DataBrowser;
 

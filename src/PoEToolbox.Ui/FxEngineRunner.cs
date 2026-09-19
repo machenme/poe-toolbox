@@ -1,7 +1,9 @@
-using System.IO;
+﻿using System.IO;
 using System.Threading;
 
-namespace PoEToolbox.Shared;
+using PoEToolbox.Shared;
+
+namespace PoEToolbox.Ui;
 
 /// <summary>
 /// 引擎执行器：busy 防重入、路径校验、日志钩子装卸与结果汇总。

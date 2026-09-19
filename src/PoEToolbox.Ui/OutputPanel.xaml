@@ -1,4 +1,4 @@
-<UserControl x:Class="PoEToolbox.Shared.OutputPanel"
+﻿<UserControl x:Class="PoEToolbox.Ui.OutputPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- 统一输出面板：日志区 + 语义化状态栏。所有插件复用同一实现，保证成功/失败反馈一致。 -->

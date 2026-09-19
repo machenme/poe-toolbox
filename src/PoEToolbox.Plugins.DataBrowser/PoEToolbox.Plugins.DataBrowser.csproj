@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
+    <ProjectReference Include="../PoEToolbox.Ui/PoEToolbox.Ui.csproj" />
     <ProjectReference Include="..\PoEToolbox.Core\PoEToolbox.Core.csproj" />
     <ProjectReference Include="..\LibDat2\LibDat2.csproj" />
     <Resource Include="../../images/mapBackground.png" Link="Assets/mapBackground.png" />

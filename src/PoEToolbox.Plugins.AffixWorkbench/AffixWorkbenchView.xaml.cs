@@ -8,6 +8,7 @@ using System.Windows.Media;
 using Microsoft.Win32;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.AffixWorkbench;
 

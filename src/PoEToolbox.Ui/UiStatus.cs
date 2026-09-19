@@ -1,7 +1,7 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 
-namespace PoEToolbox.Shared;
+namespace PoEToolbox.Ui;
 
 /// <summary>
 /// Semantic status-bar feedback. Makes the outcome of an operation unmistakable:

@@ -1,8 +1,8 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace PoEToolbox.Shared;
+namespace PoEToolbox.Ui;
 
 /// <summary>
 /// Unified output panel for plugins: a log area plus a semantic status bar.

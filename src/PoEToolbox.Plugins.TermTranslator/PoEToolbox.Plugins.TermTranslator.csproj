@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Abstractions\PoEToolbox.Abstractions.csproj" />
     <ProjectReference Include="..\PoEToolbox.Core\PoEToolbox.Core.csproj" />
+    <ProjectReference Include="../PoEToolbox.Ui/PoEToolbox.Ui.csproj" />
   </ItemGroup>
 
 </Project>

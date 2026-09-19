@@ -12,6 +12,7 @@ using PoEToolbox.Abstractions;
 using PoEToolbox.Plugins.DataBrowser.Models;
 using PoEToolbox.Plugins.DataBrowser.Services;
 using PoEToolbox.Shared;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.DataBrowser;
 

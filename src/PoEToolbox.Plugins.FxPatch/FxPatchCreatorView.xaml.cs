@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using Microsoft.Win32;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.FxPatch;
 

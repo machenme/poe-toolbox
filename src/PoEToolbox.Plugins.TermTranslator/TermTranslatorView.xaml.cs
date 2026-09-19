@@ -4,6 +4,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using PoEToolbox.Core.Translation;
 using PoEToolbox.Shared;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.TermTranslator;
 

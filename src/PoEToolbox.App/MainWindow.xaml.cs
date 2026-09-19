@@ -10,6 +10,7 @@ using System.IO;
 using System.Threading;
 using System.Windows.Media;
 using PoEToolbox.Shared;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.App;
 

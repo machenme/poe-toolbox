@@ -1,7 +1,7 @@
 <UserControl x:Class="PoEToolbox.Plugins.AffixWorkbench.AffixWorkbenchView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:shared="clr-namespace:PoEToolbox.Shared;assembly=PoEToolbox.Shared"
+             xmlns:ui="clr-namespace:PoEToolbox.Ui;assembly=PoEToolbox.Ui"
              xmlns:local="clr-namespace:PoEToolbox.Plugins.AffixWorkbench"
              Background="{DynamicResource WindowBgBrush}">
     <UserControl.Resources>
@@ -328,7 +328,7 @@
                     </DockPanel>
                 </Border>
                 <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="12" Margin="0,8,0,0">
-                    <shared:OutputPanel x:Name="Output" Title="任务日志"/>
+                    <ui:OutputPanel x:Name="Output" Title="任务日志"/>
                 </Border>
             </Grid>
         </Grid>
