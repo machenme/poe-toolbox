@@ -268,23 +268,32 @@ dotnet run --project src\PoEToolbox.Cli -- restore <game-data>
 
 ## 项目结构
 
+按依赖方向从上到下（上层可依赖下层，反向不行）：
+
 ```text
 src/
 |- PoEToolbox.App/                 WPF 主程序与插件导航
 |- PoEToolbox.Cli/                 命令行工具
-|- PoEToolbox.Core/                物价标注、DATC64 与名称词典
-|- PoEToolbox.Shared/              配置、客户端检测、统一数据访问与特效补丁引擎
 |- PoEToolbox.Plugins.PriceTagger/ 物价标注界面
 |- PoEToolbox.Plugins.DataBrowser/ 数据浏览与地图标签插件
 |- PoEToolbox.Plugins.FxPatch/     特效补丁与补丁生成器界面
-|- PoEToolbox.Plugins.Poe2Font/   POE2 字体配置与实时预览
+|- PoEToolbox.Plugins.AffixWorkbench/ 词缀上色
+|- PoEToolbox.Plugins.Poe2Font/    POE2 字体配置与实时预览
 |- PoEToolbox.Plugins.PoeCnPatch/  PoB 国服补丁
 |- PoEToolbox.Plugins.BagCleaner/  背包清理
+|- PoEToolbox.Plugins.TermTranslator/ 攻略翻译
+|- PoEToolbox.Plugins.Voyager/     航海助手（暂不在导航中显示）
+|- PoEToolbox.Ui/                  共享控件与引擎执行器（只有带界面的插件引用）
+|- PoEToolbox.Core/                物价标注、DATC64 与名称词典
+|- PoEToolbox.Shared/              配置、客户端检测、统一数据访问与特效补丁引擎
+|- PoEToolbox.Abstractions/        插件契约，不引用 WPF
 |- LibGGPK3/                       GGPK 容器读写
 |- LibBundle3/                     Bundles2 与 Oodle 解压
 |- LibBundledGGPK3/                GGPK / Bundles2 统一访问
 `- LibDat2/                        DAT 数据解析
 ```
+
+WPF 只允许出现在 `App`、`Ui` 和各个插件工程里。各层的职责划分、运行期数据流（浏览/编辑、打补丁、联网）以及必须保持的不变式（引擎互斥、写路径先备份、补丁状态三态归约）见 [架构说明](docs/ARCHITECTURE.md)。
 
 ## 本地数据
 
