@@ -59,6 +59,11 @@ jobs:
       - name: Test
         run: dotnet test $env:TEST_PROJECT --configuration Release --no-restore
 
+      # Debug 腿不为提速，只为那些只在 #if DEBUG 里生效的断言（如 Index.Dispose 的 Debug.Fail
+      # 守卫）能在 CI 上真正跑一次。restore 与配置无关，所以复用同一次还原。
+      - name: Test (Debug)
+        run: dotnet test $env:TEST_PROJECT --configuration Debug --no-restore
+
       - name: Publish
         run: >-
           dotnet publish $env:PROJECT

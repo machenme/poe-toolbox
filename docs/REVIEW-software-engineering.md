@@ -304,7 +304,7 @@ MapNumberView.xaml.cs          507
 | P2-5 | ✅ **口径修正** | 不是 18 处：全仓 29 处，`src/` 下 19 处，逐处判定后补日志 4 处、写明有意吞掉 15 处。「全部加 FileLogger」会让日志在正常使用下被刷爆（`9290f15a9`） |
 | P2-6 | 不动 | 与 MVVM 同批，SPEC §11 排除 |
 | P2-7 | ✅ | `.txt` 已删（`62816cf26`）。补充事实：它是 `.md` 的严格子集，且 `.md` 之后又更正过两轮，双份必然再分叉 |
-| P2-8 | ✅ **两个原方案都没采纳** | 既没改 `Index` 也没给用例加 Debug 跳过：测试期间接管 `Trace.Listeners`，把守卫本身断言下来（`587f6a96a`）。Debug 首次 195 全绿，且 `Debug.Fail` 从此有回归保护。注意 CI 只跑 Release，这条 `#if DEBUG` 断言在 CI 上不执行 |
+| P2-8 | ✅ **两个原方案都没采纳** | 既没改 `Index` 也没给用例加 Debug 跳过：测试期间接管 `Trace.Listeners`，把守卫本身断言下来（`587f6a96a`）。Debug 首次 195 全绿，且 `Debug.Fail` 从此有回归保护。CI 已加 Debug 测试腿，这条 `#if DEBUG` 断言现在真的会在 CI 上跑 |
 
 
 ---

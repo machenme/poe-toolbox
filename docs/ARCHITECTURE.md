@@ -2,7 +2,7 @@
 
 - 日期：2026-09-19
 - 代码基线：`9290f15a9`（main），版本 `version.json` = 0.2.3
-- 实测：Release 全量测试 **192 通过 / 0 失败**（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
+- 实测：全量测试 **195 通过 / 0 失败**，Release 34s、Debug 36s，CI 两条腿各跑一次（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
 - 范围：结构、依赖方向与运行期不变式。**不写行号**——本项目行号在一次提交内就漂移过，一律以类型名 / 唯一字符串定位
 
 > 本文回答「东西在哪、谁能引用谁、哪几条规矩破了自己会死」。
@@ -108,7 +108,7 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 8 | **`InternalsVisibleTo` 要写 `PoEToolbox`，不是 `PoEToolbox.App`**。入口工程的 `AssemblyName` 与 csproj 文件名不同名 | `App/PoEToolbox.App.csproj` |
 | 9 | **测试程序集整体关并行**（`tests/.../AssemblyInfo.cs` 的 `DisableTestParallelization`）。进程级静态太多（路径注入缝、日志器静态事件、回收链、游戏数据），而 xUnit 默认只串行化**同一 collection 内**的类——跨组的并发照样能毁产物：`FxDiffPackagingTests` 会把补丁解压进别的类正在用的临时树，对方 `Dispose` 递归删目录，它的文件就凭空消失。实测并行 26~36s、串行 34~37s，I/O 受限下并行没换来时间。**`[Collection]` 标注保留**，作用是记录哪些类共享哪个静态；若将来要重新开启并行，必须先照这条把清单补全 | `tests/.../AssemblyInfo.cs`、`AffixColorSchemeTests.cs`（`ConfigPathTestCollection`，四个类同挂） |
 | 10 | **进程级静态事件的订阅者不要直接枚举自己攒的列表**。`FileLogger.EntryLogged` 谁记一条都会回调，包括后台线程；断言前先加锁取快照 | `tests/.../ConfigServiceTests.cs` |
-| 11 | **`Debug.Fail` 类防线要在测试里被断言，而不是被跳过**。.NET 的 `Debug.Fail` 走 `Trace.Listeners` 派发，测试主机把它翻成异常才让用例挂；测试期间临时换上自己的监听器就能既躲开异常、又断言「守卫确实响了」（`CapturedDebugFail`）。注意 `#if DEBUG` 里的断言 **CI 收不到**——CI 只跑 Release | `tests/.../CapturedDebugFail.cs`、`LibBundle3/Index.cs` 的 `Dispose` |
+| 11 | **`Debug.Fail` 类防线要在测试里被断言，而不是被跳过**。.NET 的 `Debug.Fail` 走 `Trace.Listeners` 派发，测试主机把它翻成异常才让用例挂；测试期间临时换上自己的监听器就能既躲开异常、又断言「守卫确实响了」（`CapturedDebugFail`）。CI 有 Release + Debug 两条测试腿，Debug 腿专门为了让 `#if DEBUG` 里的断言在 CI 上真跑一次——只有 Release 覆盖的守卫等于没被守住 | `tests/.../CapturedDebugFail.cs`、`LibBundle3/Index.cs` 的 `Dispose`、`.github/workflows/build.yml` |
 | 12 | **插件工程之间不许互相引用**。要复用别的插件里的东西，只有两条路：类型本身是纯 Win32/GDI/领域逻辑就下沉到 `Core`（它有桌面框架引用，System.Drawing 放这里不再增加依赖），或者留在原插件、把契约提到 `Abstractions` 用工厂倒置、由组合根 `PluginManager` 注入。第三条路（`Ui → Core`）会新增一条跨层边，不走 | `Abstractions/IHotkeyServiceFactory.cs`、`Core/Input/`、`Core/ScreenGrid/`（报告 P1-5 的落地形态） |
 
 ## 5. 落盘位置与内嵌资源
