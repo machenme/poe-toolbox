@@ -254,9 +254,7 @@ static int CmdLang(string[] a)
     return GameDataLoader.Use(path, GameDataMode.ReadWrite, gd =>
     {
         // Load definitions
-        var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
-        if (!File.Exists(defPath)) { Console.Error.WriteLine($"Not found: {defPath}"); return 1; }
-        DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
+        DatContainer.ReloadDefinitionsFromEmbedded();
 
         // Read Languages.dat
         if (!gd.Index.TryGetFile("Data/Languages.dat", out var langFr))
@@ -318,9 +316,7 @@ static int CmdUI(string[] a)
 
         // Lang swap: French <-> TC
         Console.WriteLine("[2] Lang swap French <-> TC...");
-        var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
-        if (!File.Exists(defPath)) { Console.Error.WriteLine("  DatDefinitions.json missing!"); return 1; }
-        DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
+        DatContainer.ReloadDefinitionsFromEmbedded();
         if (!gd.Index.TryGetFile("Data/Languages.dat", out var lf))
         { Console.WriteLine("  Languages.dat not found!"); return 1; }
         var dat = new DatContainer(lf.Read().ToArray(), "Languages.dat");
@@ -650,9 +646,7 @@ static int CmdPatch(string[] a)
 
         // ── 2. Lang swap: French <-> TC ──
         Console.WriteLine("[2] Lang swap French <-> TC...");
-        var defPath = Path.Combine(AppContext.BaseDirectory, "DatDefinitions.json");
-        if (!File.Exists(defPath)) { Console.Error.WriteLine("  DatDefinitions.json missing!"); return 1; }
-        DatContainer.ReloadDefinitions(File.ReadAllBytes(defPath));
+        DatContainer.ReloadDefinitionsFromEmbedded();
 
         if (!gd.Index.TryGetFile("Data/Languages.dat", out var langFile))
         { Console.WriteLine("  Languages.dat not found!"); return 1; }

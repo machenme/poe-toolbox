@@ -42,7 +42,7 @@
 
   <ItemGroup>
     <Resource Include="Themes\*.xaml" />
-    <EmbeddedResource Include="..\LibDat2\DatDefinitions.json" Link="DatDefinitions.json" />
+    <!-- DatDefinitions.json 由 LibDat2 内嵌，App 不再重复嵌一份 -->
     <EmbeddedResource Include="../../oo2core.dll" Link="oo2core.dll" />
   </ItemGroup>
 

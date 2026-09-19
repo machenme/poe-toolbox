@@ -77,6 +77,12 @@ jobs:
             throw "Published executable was not found: $exe"
           }
           Get-Item $exe | Select-Object FullName, Length
+          # 运行时要读的数据必须编译进 exe：发布包只装 exe，落在外面的 .json 会让功能在用户机器上直接失效
+          # （v0.2.2 就是这样把内置特效补丁弄坏的）。
+          $loose = Get-ChildItem -Path $env:PUBLISH_DIR -Filter '*.json' -File -Recurse -ErrorAction SilentlyContinue
+          if ($loose) {
+            throw "Publish output contains loose .json files that are not packaged: $($loose.FullName -join ', ')"
+          }
 
       - name: Create release archive
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'

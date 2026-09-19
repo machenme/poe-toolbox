@@ -24,14 +24,8 @@ public partial class App : Application
 
         try
         {
-            var asm = typeof(App).Assembly;
-            using var stream = asm.GetManifestResourceStream("PoEToolbox.App.DatDefinitions.json");
-            if (stream is not null)
-            {
-                using var ms = new MemoryStream();
-                stream.CopyTo(ms);
-                DatContainer.ReloadDefinitions(ms.ToArray());
-            }
+            // 定义文件内嵌在 LibDat2 里，随程序走，不读 exe 旁的文件
+            DatContainer.ReloadDefinitionsFromEmbedded();
         }
         catch (Exception ex)
         {
@@ -66,7 +60,6 @@ public partial class App : Application
         var directory = Path.Combine(ConfigService.DataDirectory, "native");
         Directory.CreateDirectory(directory);
         var dest = Path.Combine(directory, filename);
-        if (File.Exists(dest)) return dest;
 
         try
         {
@@ -74,6 +67,11 @@ public partial class App : Application
             var resourceName = $"PoEToolbox.App.{filename}";
             using var stream = asm.GetManifestResourceStream(resourceName);
             if (stream is null) throw new FileNotFoundException($"Embedded resource was not found: {resourceName}");
+
+            // 已存在且大小一致就复用；大小不同（程序升级换了原生库）就重写，避免永远用着旧的那份
+            if (File.Exists(dest) && new FileInfo(dest).Length == stream.Length)
+                return dest;
+
             using var fs = File.Create(dest);
             stream.CopyTo(fs);
             return dest;

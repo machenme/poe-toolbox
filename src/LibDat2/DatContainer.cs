@@ -489,19 +489,40 @@ namespace LibDat2 {
 		/// </summary>
 		[MemberNotNull(nameof(DatDefinitions))]
 		public static void ReloadDefinitions() {
-			if (File.Exists("DatDefinitions.json"))
-				ReloadDefinitions("DatDefinitions.json");
-			else {
-				var path = Path.GetDirectoryName(Assembly.GetExecutingAssembly()?.Location);
-				if (string.IsNullOrEmpty(path))
-					path = AppContext.BaseDirectory;
-				if (string.IsNullOrEmpty(path))
-					path = Path.GetDirectoryName(Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName);
-				if (string.IsNullOrEmpty(path))
-					ReloadDefinitions("DatDefinitions.json"); // throws FileNotFoundException
-				else
-					ReloadDefinitions(Path.GetFullPath("DatDefinitions.json", path));
-			}
+			// 优先用程序旁边放的那份（便于替换/调试），没有就退回程序内嵌的那份：
+			// 单文件发布后 exe 旁什么都没有，读磁盘那一步必然失败。
+			var candidates = new List<string> { "DatDefinitions.json" };
+			var path = Path.GetDirectoryName(Assembly.GetExecutingAssembly()?.Location);
+			if (string.IsNullOrEmpty(path))
+				path = AppContext.BaseDirectory;
+			if (string.IsNullOrEmpty(path))
+				path = Path.GetDirectoryName(Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName);
+			if (!string.IsNullOrEmpty(path))
+				candidates.Add(Path.GetFullPath("DatDefinitions.json", path));
+
+			foreach (var candidate in candidates)
+				if (File.Exists(candidate)) {
+					ReloadDefinitions(candidate);
+					return;
+				}
+
+			ReloadDefinitionsFromEmbedded();
+		}
+
+		/// <summary>内嵌定义文件的资源名（与 LibDat2.csproj 的 EmbeddedResource LogicalName 对齐）。</summary>
+		public const string EmbeddedDefinitionsResource = "LibDat2.DatDefinitions.json";
+
+		/// <summary>
+		/// Reload DatDefinitions from the copy embedded in this assembly.
+		/// 与部署形态无关：exe 旁没有 DatDefinitions.json 也能用。
+		/// </summary>
+		[MemberNotNull(nameof(DatDefinitions))]
+		public static void ReloadDefinitionsFromEmbedded() {
+			using var stream = typeof(DatContainer).Assembly.GetManifestResourceStream(EmbeddedDefinitionsResource)
+				?? throw new FileNotFoundException($"Embedded resource was not found: {EmbeddedDefinitionsResource}");
+			using var ms = new MemoryStream();
+			stream.CopyTo(ms);
+			ReloadDefinitions(ms.ToArray());
 		}
 
 		/// <summary>

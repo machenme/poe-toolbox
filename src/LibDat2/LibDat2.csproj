@@ -8,7 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Update="DatDefinitions.json" />
+    <!-- 内嵌一份：运行时不再依赖 exe 旁是否有 DatDefinitions.json（单文件发布后没有） -->
+    <EmbeddedResource Include="DatDefinitions.json" LogicalName="LibDat2.DatDefinitions.json" />
   </ItemGroup>
 
 </Project>
