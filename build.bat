@@ -19,7 +19,7 @@ if "%APP_VERSION%"=="" (
 echo Version: %APP_VERSION%
 
 echo Publishing PoEToolbox...
-dotnet publish "src\PoEToolbox.App\PoEToolbox.App.csproj" -c Release -r win-x64 --self-contained false -o "publish" -p:Version=%APP_VERSION% -p:DebugSymbols=false -p:DebugType=None -p:GenerateDocumentationFile=false
+dotnet publish "src\PoEToolbox.App\PoEToolbox.App.csproj" -c Release -r win-x64 --self-contained false -o "publish" -m:1 -p:Version=%APP_VERSION% -p:DebugSymbols=false -p:DebugType=None -p:GenerateDocumentationFile=false
 if errorlevel 1 (
     goto :failed
 )
