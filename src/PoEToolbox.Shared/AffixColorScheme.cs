@@ -83,10 +83,8 @@ public sealed class AffixColorScheme
 
     // ═══ 持久化 ═════════════════════════════════════════════════
 
-    /// <summary>测试缝：覆盖方案存储目录（默认 ConfigService.AffixSchemesDirectory）。</summary>
-    internal static Func<string>? StorageDirectoryOverride { get; set; }
-
-    private static string StorageDirectory => StorageDirectoryOverride?.Invoke() ?? ConfigService.AffixSchemesDirectory;
+    // 方案目录不再单开测试缝：整棵数据根目录由 ConfigService.DataDirectoryOverride 一处重定向。
+    private static string StorageDirectory => ConfigService.AffixSchemesDirectory;
 
     public static IReadOnlyList<string> ListSchemeNames()
     {

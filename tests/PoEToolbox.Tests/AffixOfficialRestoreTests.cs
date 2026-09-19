@@ -10,7 +10,7 @@ namespace PoEToolbox.Tests;
 /// （本工具的 + 第三方补丁的），恢复官方默认显示；uisettings 不进补丁。
 /// 原版 csd 实测不含任何颜色标签，所以全剥即官方默认。
 /// </summary>
-[Collection(AffixSchemeTestCollection.Name)]
+[Collection(ConfigPathTestCollection.Name)]
 public sealed class AffixOfficialRestoreTests : IDisposable
 {
     private readonly string _root;
@@ -115,8 +115,8 @@ public sealed class AffixOfficialRestoreTests : IDisposable
     [Fact]
     public void EnsureOriginalExists_CreatesFile_AndSurvivesReload()
     {
-        var dir = Path.Combine(_root, "schemes");
-        AffixColorScheme.StorageDirectoryOverride = () => dir;
+        // 方案目录不再单开缝，整棵数据根目录重定向到 _root，方案落在 _root/affix-schemes
+        ConfigService.DataDirectoryOverride = () => _root;
         try
         {
             Assert.DoesNotContain(AffixColorScheme.OriginalName, AffixColorScheme.ListSchemeNames());
@@ -129,7 +129,7 @@ public sealed class AffixOfficialRestoreTests : IDisposable
         }
         finally
         {
-            AffixColorScheme.StorageDirectoryOverride = null;
+            ConfigService.DataDirectoryOverride = null;
         }
     }
 

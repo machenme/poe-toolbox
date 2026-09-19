@@ -5,15 +5,6 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
-/// 把动了 <see cref="ConfigService.DataDirectoryOverride"/> 的测试串起来。
-/// 那是进程级静态：并行时 A 的临时目录会被 B 的读取看到（表现为偶发的「找不到刚写下的文件」）。
-/// </summary>
-internal static class ConfigPathTestCollection
-{
-    internal const string Name = "poetoolbox-config-paths";
-}
-
-/// <summary>
 /// config.json 的容错分支。P2-5 给这两条静默回落补了日志，但当时写不出测试——
 /// 路径是 static readonly，要复现就得往真实的 %LocalAppData% 里写坏文件。有了注入缝才谈得上验证。
 /// </summary>

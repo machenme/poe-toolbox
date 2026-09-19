@@ -19,10 +19,10 @@ public static class ConfigService
     /// 测试缝：把整个数据根目录换到别处（通常是临时目录），这样「配置文件损坏」「缺目录」这类
     /// 分支能在不碰用户真实 %LocalAppData% 的前提下复现。生产代码一律留 null。
     ///
-    /// 两个已知边界：一是各目录变成即时求值的属性，读一次算一次（都是字符串拼接，可忽略）；
-    /// 二是**已经在静态字段初始化里快照过路径的模块不吃这条缝**（如 `SchemaManager.WorkDir`），
-    /// 它们在自己的类型首次使用时定一次，之后不再跟随。另外 <see cref="AffixColorScheme.StorageDirectoryOverride"/>
-    /// 是比这条更早、也更窄的一条缝（只挪方案目录），两者互不相干。
+    /// 下面六个派生路径一律做成即时求值属性，不要退回 `static readonly` 快照——快照会在类型首次
+    /// 使用时就把真实路径钉死，这条缝对它就不再生效（字符串拼接，读一次算一次，开销可忽略）。
+    /// 唯一的例外是 <see cref="FileLogger.App"/>：它在第一次被碰到时就按当时的根目录建好了文件句柄，
+    /// 之后再改缝不影响它——要断言日志内容请订阅 <see cref="FileLogger.EntryLogged"/>，别去读日志文件。
     /// </summary>
     internal static Func<string>? DataDirectoryOverride { get; set; }
 

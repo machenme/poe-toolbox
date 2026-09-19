@@ -4,32 +4,32 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
-/// 把动到 <see cref="AffixColorScheme.StorageDirectoryOverride"/> 的测试串起来。
-/// 那是个进程级静态：两个测试类并行时各自的临时目录会互相覆盖，
-/// 于是 ListSchemeNames() 会看到对方写进去的方案（表现为偶发的「多出一条 官方原版」）。
+/// 把动到 <see cref="ConfigService.DataDirectoryOverride"/> 的测试类串起来（本类、
+/// <see cref="AffixOfficialRestoreTests"/>、<see cref="ConfigServiceTests"/>、<see cref="FxBuiltInPatchTests"/>）。
+/// 那是个进程级静态：并行时各自的临时目录会互相覆盖（表现为偶发的「多出一条 官方原版」或「找不到刚写下的文件」）。
 /// </summary>
-internal static class AffixSchemeTestCollection
+internal static class ConfigPathTestCollection
 {
-    internal const string Name = "poetoolbox-affix-schemes";
+    internal const string Name = "poetoolbox-config-paths";
 }
 
-/// <summary>上色方案的持久化与校验。通过 StorageDirectoryOverride 隔离到临时目录。</summary>
-[Collection(AffixSchemeTestCollection.Name)]
+/// <summary>上色方案的持久化与校验。通过整棵数据根目录的注入缝隔离到临时目录。</summary>
+[Collection(ConfigPathTestCollection.Name)]
 public sealed class AffixColorSchemeTests : IDisposable
 {
-    private readonly string _dir;
+    private readonly string _root;
 
     public AffixColorSchemeTests()
     {
-        _dir = Path.Combine(Path.GetTempPath(), "poetoolbox-scheme-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_dir);
-        AffixColorScheme.StorageDirectoryOverride = () => _dir;
+        _root = Path.Combine(Path.GetTempPath(), "poetoolbox-scheme-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_root);
+        ConfigService.DataDirectoryOverride = () => _root;
     }
 
     public void Dispose()
     {
-        AffixColorScheme.StorageDirectoryOverride = null;
-        try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
+        ConfigService.DataDirectoryOverride = null;
+        try { Directory.Delete(_root, recursive: true); } catch (IOException) { }
     }
 
     private static AffixColorScheme Sample(string name) => new()
@@ -63,7 +63,7 @@ public sealed class AffixColorSchemeTests : IDisposable
     public void ExportImport_RoundTrip_Equal()
     {
         var scheme = Sample("分享");
-        var exportPath = Path.Combine(_dir, "shared.json");
+        var exportPath = Path.Combine(_root, "shared.json");
         scheme.Export(exportPath);
 
         var imported = AffixColorScheme.Import(exportPath, "导入方案");
@@ -166,7 +166,7 @@ public sealed class AffixColorSchemeTests : IDisposable
     [Fact]
     public void Load_LegacyJsonWithoutAlpha_DefaultsToOpaque()
     {
-        var path = Path.Combine(_dir, "legacy.json");
+        var path = Path.Combine(_root, "legacy.json");
         File.WriteAllText(path,
             """{"SchemaVersion":1,"Name":"legacy","Colors":[{"Id":"Lucky","R":10,"G":20,"B":30}],"Rules":[],"Assignments":[]}""");
 
@@ -204,7 +204,7 @@ public sealed class AffixColorSchemeTests : IDisposable
     [Fact]
     public void Load_LegacyJsonWithoutLineText_AssignmentIsWholeStat()
     {
-        var path = Path.Combine(_dir, "legacy-assign.json");
+        var path = Path.Combine(_root, "legacy-assign.json");
         File.WriteAllText(path,
             """{"SchemaVersion":1,"Name":"legacy","Colors":[{"Id":"Lucky","R":10,"G":20,"B":30}],"Rules":[],"Assignments":[{"StatKey":"stat_a","FilePath":"data/x.csd","ColorId":"Lucky"}]}""");
 

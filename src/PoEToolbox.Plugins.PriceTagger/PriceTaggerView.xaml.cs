@@ -16,11 +16,10 @@ namespace PoEToolbox.Plugins.PriceTagger;
 
 public partial class PriceTaggerView : UserControl
 {
-    private static readonly string PoeNinjaDir = Path.Combine(
-        ConfigService.CacheDirectory,
-        "poe_ninja");
+    // 都用即时求值的属性：ConfigService 的数据根目录有测试注入缝，static readonly 快照会把真实路径钉死。
+    private static string PoeNinjaDir => Path.Combine(ConfigService.CacheDirectory, "poe_ninja");
     // 中间产物也放工具箱数据目录：exe 旁目录可能不可写（装在 Program Files 时会直接失败）
-    private static readonly string WorkDir = Path.Combine(ConfigService.CacheDirectory, "work");
+    private static string WorkDir => Path.Combine(ConfigService.CacheDirectory, "work");
 
     private string[] _categories = PoeNinjaFetcher.Poe1ExchangeTypes;
     private readonly List<ToggleButton> _catToggles = [];

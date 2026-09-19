@@ -106,7 +106,7 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 6 | **插件是编译期静态注册的**，`PluginManager.RegisterAll()` 是唯一真相，没有动态加载。所以程序集名不承担 ABI 含义，改名安全；也所以「给契约加版本号」目前无人消费 | `App/PluginManager.cs` |
 | 7 | **`IPlugin` 无界面、`IUiPlugin` 带界面**。`Abstractions` 因此不引用 WPF。导航只列 `OfType<IUiPlugin>()`；无界面插件照样注册、照样收生命周期回调 | `Abstractions/IPlugin.cs`、`Ui/IUiPlugin.cs` |
 | 8 | **`InternalsVisibleTo` 要写 `PoEToolbox`，不是 `PoEToolbox.App`**。入口工程的 `AssemblyName` 与 csproj 文件名不同名 | `App/PoEToolbox.App.csproj` |
-| 9 | **动进程级静态（测试缝、回收链、游戏数据）的测试类必须挂 collection 串行**。`ConfigService.DataDirectoryOverride` / `AffixColorScheme.StorageDirectoryOverride` 这类缝是全进程一份，两个测试类并行时后设置的会把前一个的临时目录盖掉，表现为偶发「找不到刚写下的文件」 | `tests/.../ConfigServiceTests.cs`、`AffixColorSchemeTests.cs` |
+| 9 | **动进程级静态（测试缝、回收链、游戏数据）的测试类必须挂 collection 串行**。`ConfigService.DataDirectoryOverride` 这类缝是全进程一份，两个测试类并行时后设置的会把前一个的临时目录盖掉，表现为偶发「找不到刚写下的文件」。当前挂在 `ConfigPathTestCollection` 上的有四个类：config 分支、方案持久化、官方原版还原、内置补丁释放 | `tests/.../AffixColorSchemeTests.cs`（collection 定义在此）、`ConfigServiceTests.cs` |
 
 ## 5. 落盘位置与内嵌资源
 
@@ -129,8 +129,7 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 插件间直接依赖 | `Voyager` 复用 `BagCleaner` 的 P/Invoke、`GridCalculator`、`Models`、`Services`（8 处 `using`）。**是真依赖，不是误引**，正确解法是把这几样下沉到 `Shared`/`Core` | 报告 P1-5 |
 | UI 组织 | 59 处 `MessageBox.Show` 散落各 View，无 `IDialogService`；插件 View 多为 code-behind 而非 ViewModel | 报告 P1-1 / P2-6 |
 | 超大文件 | 单文件 1k 行以上还有 5 个：`LibBundle3/Index.cs`、`AffixWorkbenchView`、`DataBrowserView`、`CsdDocument`、`FxPatchView`（基线时分别约 1450/1380/1350/1030/1020 行，不逐次更新，别当准数用） | 报告 P0/P1 |
-| 测试缝重复 | 数据根目录有 `ConfigService.DataDirectoryOverride`（整棵树），方案目录另有 `AffixColorScheme.StorageDirectoryOverride`（单个叶子）。后者早于前者，可以并进根缝，但会牵动 affix 那两个测试类的 collection 归属 | — |
-| 快照型路径不吃测试缝 | `SchemaManager.WorkDir`、`PriceTaggerView` 的两处在静态字段初始化里拼好路径，之后不再跟随根缝；要在测试里重定向它们，得先把它们改成即时求值的属性 | — |
+| 日志器单例不吃测试缝 | `FileLogger.App` 在第一次被触碰时就按当时的根目录建好了文件句柄，之后改注入缝不影响它。断言日志内容请订阅 `FileLogger.EntryLogged`，不要去读日志文件 | — |
 | 死掉的联网分支 | `DatContainer.DownloadSchemaMin()`（`SchemaMin` 全仓无人置真）、`PatchClient.UpdateNodeAsync`（无调用方）。要么删要么接，挂着最糟 | SPEC §4.3 |
 | CLI 仍需桌面框架 | `Core` 的 DDS 渲染用 GDI+，且 `Cli` 的 TFM 本身是 `net10.0-windows`；WPF 已经拿掉了，桌面框架还没拿掉 | SPEC §11 |
 | 工程根目录躺着一个 `src/PoEToolbox.Core/LibDat2.dll` | 2026-07-27 的构建残留，应在 `bin/` 而不是工程根。`.gitignore` 第 7 行的 `*.dll` 让它不出现在 `git status` 里，所以谁都可能踩到；删除前先确认没人依赖 | — |

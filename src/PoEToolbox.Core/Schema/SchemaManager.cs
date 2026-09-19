@@ -15,7 +15,9 @@ public static class SchemaManager
     private const string BackupUrl =
         "https://github.com/poe-tool-dev/dat-schema/releases/download/latest/schema.min.json";
 
-    private static readonly string WorkDir = Path.Combine(ConfigService.DataDirectory, "schema");
+    // 即时求值而不是 static readonly 快照：ConfigService 的数据根目录有测试注入缝，
+    // 快照会在类型首次使用时把真实路径钉死，缝就失效了。
+    private static string WorkDir => Path.Combine(ConfigService.DataDirectory, "schema");
     private static string SchemaPath => Path.Combine(WorkDir, "schema.min.json");
 
     private static List<TableSchema>? _cachedTables;
