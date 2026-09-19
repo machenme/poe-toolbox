@@ -13,6 +13,7 @@ public sealed class ConfigServiceTests : IDisposable
 {
     private readonly string _dir;
     private readonly List<(LogLevel Level, string Message)> _logged = [];
+    private readonly object _loggedSync = new();
 
     public ConfigServiceTests()
     {
@@ -22,7 +23,17 @@ public sealed class ConfigServiceTests : IDisposable
         FileLogger.EntryLogged += OnEntry;
     }
 
-    private void OnEntry(LogLevel level, string message, Exception? _) => _logged.Add((level, message));
+    // EntryLogged 是进程级静态事件，任何线程记一条都会回调到这里；
+    // 直接枚举原列表会在「后台补记一条」时撞上「Collection was modified」。加锁 + 取快照断言。
+    private void OnEntry(LogLevel level, string message, Exception? _)
+    {
+        lock (_loggedSync) _logged.Add((level, message));
+    }
+
+    private (LogLevel Level, string Message)[] Logged()
+    {
+        lock (_loggedSync) return [.. _logged];
+    }
 
     public void Dispose()
     {
@@ -49,7 +60,7 @@ public sealed class ConfigServiceTests : IDisposable
         Assert.False(File.Exists(ConfigService.ConfigPath));
         var corrupt = Assert.Single(Directory.GetFiles(_dir, "config.json.corrupt.*"));
         Assert.Contains("这不是 json", File.ReadAllText(corrupt));
-        Assert.Contains(_logged, e => e.Level == LogLevel.Warn && e.Message.Contains("config.json 解析失败"));
+        Assert.Contains(Logged(), e => e.Level == LogLevel.Warn && e.Message.Contains("config.json 解析失败"));
     }
 
     [Fact]
@@ -63,7 +74,7 @@ public sealed class ConfigServiceTests : IDisposable
         Assert.NotNull(cfg);
         Assert.Equal("", cfg.Title);
         Assert.Equal(0, cfg.Count);
-        Assert.Contains(_logged, e =>
+        Assert.Contains(Logged(), e =>
             e.Level == LogLevel.Warn && e.Message.Contains("SomePlugin/SampleConfig"));
     }
 

@@ -106,7 +106,8 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 6 | **插件是编译期静态注册的**，`PluginManager.RegisterAll()` 是唯一真相，没有动态加载。所以程序集名不承担 ABI 含义，改名安全；也所以「给契约加版本号」目前无人消费 | `App/PluginManager.cs` |
 | 7 | **`IPlugin` 无界面、`IUiPlugin` 带界面**。`Abstractions` 因此不引用 WPF。导航只列 `OfType<IUiPlugin>()`；无界面插件照样注册、照样收生命周期回调 | `Abstractions/IPlugin.cs`、`Ui/IUiPlugin.cs` |
 | 8 | **`InternalsVisibleTo` 要写 `PoEToolbox`，不是 `PoEToolbox.App`**。入口工程的 `AssemblyName` 与 csproj 文件名不同名 | `App/PoEToolbox.App.csproj` |
-| 9 | **动进程级静态（测试缝、回收链、游戏数据）的测试类必须挂 collection 串行**。`ConfigService.DataDirectoryOverride` 这类缝是全进程一份，两个测试类并行时后设置的会把前一个的临时目录盖掉，表现为偶发「找不到刚写下的文件」。当前挂在 `ConfigPathTestCollection` 上的有四个类：config 分支、方案持久化、官方原版还原、内置补丁释放 | `tests/.../AffixColorSchemeTests.cs`（collection 定义在此）、`ConfigServiceTests.cs` |
+| 9 | **测试程序集整体关并行**（`tests/.../AssemblyInfo.cs` 的 `DisableTestParallelization`）。进程级静态太多（路径注入缝、日志器静态事件、回收链、游戏数据），而 xUnit 默认只串行化**同一 collection 内**的类——跨组的并发照样能毁产物：`FxDiffPackagingTests` 会把补丁解压进别的类正在用的临时树，对方 `Dispose` 递归删目录，它的文件就凭空消失。实测并行 26~36s、串行 34~37s，I/O 受限下并行没换来时间。**`[Collection]` 标注保留**，作用是记录哪些类共享哪个静态；若将来要重新开启并行，必须先照这条把清单补全 | `tests/.../AssemblyInfo.cs`、`AffixColorSchemeTests.cs`（`ConfigPathTestCollection`，四个类同挂） |
+| 10 | **进程级静态事件的订阅者不要直接枚举自己攒的列表**。`FileLogger.EntryLogged` 谁记一条都会回调，包括后台线程；断言前先加锁取快照 | `tests/.../ConfigServiceTests.cs` |
 
 ## 5. 落盘位置与内嵌资源
 
