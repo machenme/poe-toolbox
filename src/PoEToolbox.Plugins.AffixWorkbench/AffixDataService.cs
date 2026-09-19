@@ -95,6 +95,10 @@ public sealed class AffixDataService : IDisposable
     private readonly List<(string Path, CsdDocument Doc, byte[] Sha)> _csd = [];
     private UISettingsDoc? _uiDoc;
     private byte[] _uiSha = [];
+    /// <summary>
+    /// 有意长期持有到下次 Connect 或 <see cref="Dispose"/>，不是漏回收：列表要持续按行读
+    /// csd 与 uisettings，每次访问都重开一遍索引不现实。重连前与 Dispose 时都会释放它。
+    /// </summary>
     private GameDataAccess? _gd;
     private bool _stale = true;
     private ModTierIndex? _tierIndex;
