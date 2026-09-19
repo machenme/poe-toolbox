@@ -168,15 +168,27 @@ public sealed class LibBundle3AddFileTests : IDisposable
         Assert.Equal(seedBytes, original!.Read().ToArray());
     }
 
+    /// <summary>
+    /// 没 <c>Save()</c> 就 Dispose：改动不落盘（这是本用例要保的行为），同时
+    /// <c>Index.Dispose</c> 里那条「你是不是忘了 Save」的守卫确实响了。
+    ///
+    /// 后者在 Debug 下原本会把用例炸掉（测试主机把 <c>Debug.Fail</c> 翻成异常），
+    /// 于是这条一直只在 Release 下算数。接管掉之后，Debug 与 Release 都跑同一套断言，
+    /// 而且**守卫本身第一次有了回归保护**——它被删掉或条件写反，Debug 跑就会红。
+    /// </summary>
     [Fact]
     public void DisposeWithoutSave_DoesNotPersistPendingMutation()
     {
         var indexPath = BuildSeedIndex();
 
+        using var guard = new CapturedDebugFail();
         using (var index = new Index(indexPath, parsePaths: true))
         {
             index.AddFile(NewPath, Encoding.UTF8.GetBytes("pending"), saveIndex: false);
         }
+
+        // 守卫是在 Dispose 里响的，所以断言必须等上面那个 using 块结束
+        guard.AssertFired("haven't been saved");
 
         using var reopened = new Index(indexPath, parsePaths: true);
         Assert.Equal(2, reopened.Files.Count);
