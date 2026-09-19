@@ -19,7 +19,7 @@ public static class SchemaManager
     private static string SchemaPath => Path.Combine(WorkDir, "schema.min.json");
 
     private static List<TableSchema>? _cachedTables;
-    private static readonly HttpClient _http = new();
+    private static readonly HttpClient _http = new() { Timeout = NetworkDefaults.RequestTimeout };
     private const long MaxSchemaBytes = 16L * 1024 * 1024;
 
     /// <summary>

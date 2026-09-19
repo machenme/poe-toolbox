@@ -34,7 +34,9 @@ namespace LibDat2 {
 		/// Download schema.min.json into <see cref="SchemaMinDatDefinitions"/>
 		/// </summary>
 		public static void DownloadSchemaMin() {
-			var http = new HttpClient() { Timeout = Timeout.InfiniteTimeSpan };
+			// 网络挂住时不永久等待：给一个上限，让"拿不到"变成一次可提示的失败。
+			// 本库不引用 PoEToolbox.Shared，所以这里用自己的常量而不是 NetworkDefaults。
+			var http = new HttpClient() { Timeout = TimeSpan.FromSeconds(30) };
 			try {
 				http.DefaultRequestHeaders.Add("User-Agent", "LibDat2");
 				var s = http.GetStringAsync("http://github.com/poe-tool-dev/dat-schema/releases/download/latest/schema.min.json").Result;

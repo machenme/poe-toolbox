@@ -268,7 +268,8 @@ public class PatchClient : IDisposable {
 
 		cancellationToken.ThrowIfCancellationRequested();
 		var endPoint = socket.RemoteEndPoint!;
-		using var http = new HttpClient(new SocketsHttpHandler { UseCookies = false }) { BaseAddress = new(CdnUrl!), Timeout = timeoutEachFile ?? Timeout.InfiniteTimeSpan };
+		// 网络挂住时不永久等待（本库不引用 PoEToolbox.Shared，用本地默认值；调用方仍可传 timeoutEachFile 覆盖）
+		using var http = new HttpClient(new SocketsHttpHandler { UseCookies = false }) { BaseAddress = new(CdnUrl!), Timeout = timeoutEachFile ?? TimeSpan.FromSeconds(30) };
 		try {
 			return await UpdateCore(node, path, node.Hash).ConfigureAwait(false);
 		} finally {
