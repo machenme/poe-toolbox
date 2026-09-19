@@ -219,7 +219,7 @@
     </Style>
 
     <!-- ═══ BagCleaner compatibility aliases ══════════════ -->
-    <!-- Unified with primary brushes above. See PoEToolbox.Shared/ThemeManager.cs. -->
+    <!-- Unified with primary brushes above. See Themes/ThemeManager.cs. -->
     <SolidColorBrush x:Key="BgBase" Color="#F5F5F7"/>
     <SolidColorBrush x:Key="BgCard" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="BgHover" Color="#F0F0F0"/>

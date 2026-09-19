@@ -1,7 +1,7 @@
 using System.Windows;
 using Microsoft.Win32;
 
-namespace PoEToolbox.Shared;
+namespace PoEToolbox.App;
 
 /// <summary>
 /// Theme management. Loads dark/light XAML ResourceDictionaries
