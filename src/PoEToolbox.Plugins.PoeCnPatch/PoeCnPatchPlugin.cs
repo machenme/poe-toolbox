@@ -1,9 +1,10 @@
 using System.Windows.Controls;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.PoeCnPatch;
 
-public sealed class PoeCnPatchPlugin : IPlugin
+public sealed class PoeCnPatchPlugin : IUiPlugin
 {
     private PoeCnPatchView? _view;
 

@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     private const string ReleasesUrl = "https://github.com/machenme/poe-toolbox/releases/";
     private readonly PluginManager _pluginManager;
     private readonly IAppState _sessionState;
-    private IPlugin? _activePlugin;
+    private IUiPlugin? _activePlugin;
     private bool _initialGameDataHintShown;
     private int _gameDataDetectionVersion;
     private bool _windowClosed;
@@ -513,7 +513,9 @@ public partial class MainWindow : Window
 
     private ICollectionView CreateNavigationView()
     {
+        // 导航只列带界面的插件；无界面的 IPlugin 仍然注册、仍然收到生命周期回调。
         var entries = _pluginManager.Plugins
+            .OfType<IUiPlugin>()
             .Select(plugin => new NavigationEntry(
                 GetPluginGroup(plugin),
                 GetGroupOrder(plugin),
@@ -532,7 +534,7 @@ public partial class MainWindow : Window
         return view;
     }
 
-    private static string GetPluginGroup(IPlugin plugin)
+    private static string GetPluginGroup(IUiPlugin plugin)
         => plugin is PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin
             ? "POE1"
             : plugin is PoEToolbox.Plugins.Poe2Font.Poe2FontPlugin
@@ -541,7 +543,7 @@ public partial class MainWindow : Window
                 ? "POE2"
             : "菜单";
 
-    private static bool IsPluginAvailable(IPlugin? plugin, PoeGameKind game)
+    private static bool IsPluginAvailable(IUiPlugin? plugin, PoeGameKind game)
         => plugin switch
         {
             PoEToolbox.Plugins.PoeCnPatch.PoeCnPatchPlugin => game == PoeGameKind.Poe1,
@@ -551,7 +553,7 @@ public partial class MainWindow : Window
             _ => plugin is not null,
         };
 
-    private static int GetGroupOrder(IPlugin plugin)
+    private static int GetGroupOrder(IUiPlugin plugin)
         => GetPluginGroup(plugin) switch
         {
             "POE1" => 1,
@@ -563,7 +565,7 @@ public partial class MainWindow : Window
         string GroupName,
         int GroupOrder,
         int PluginOrder,
-        IPlugin? Plugin,
+        IUiPlugin? Plugin,
         Func<PoeGameKind> GameProvider)
     {
         public string Name => Plugin?.Name ?? string.Empty;

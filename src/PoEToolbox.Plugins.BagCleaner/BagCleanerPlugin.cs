@@ -1,4 +1,5 @@
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 using System.Windows;
 using System.Windows.Controls;
 using PoEToolbox.Plugins.BagCleaner.Core;
@@ -10,7 +11,7 @@ using BC = PoEToolbox.Plugins.BagCleaner.Services;
 
 namespace PoEToolbox.Plugins.BagCleaner;
 
-public class BagCleanerPlugin : IPlugin
+public class BagCleanerPlugin : IUiPlugin
 {
     public string Name => "背包清理";
     public string IconGlyph => "\uE894"; // Segoe MDL2 Assets: Clear（清除，贴合「背包清理」）

@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Ui\PoEToolbox.Ui.csproj" />
   </ItemGroup>
 
   <ItemGroup>

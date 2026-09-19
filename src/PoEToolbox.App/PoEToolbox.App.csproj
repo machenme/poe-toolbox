@@ -29,7 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
-    <ProjectReference Include="../PoEToolbox.Ui/PoEToolbox.Ui.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Ui\PoEToolbox.Ui.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.PriceTagger\PoEToolbox.Plugins.PriceTagger.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.DataBrowser\PoEToolbox.Plugins.DataBrowser.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.BagCleaner\PoEToolbox.Plugins.BagCleaner.csproj" />

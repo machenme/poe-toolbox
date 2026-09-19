@@ -1,10 +1,11 @@
 using System.Windows.Controls;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.DataBrowser;
 
-public sealed class MapNumberPlugin : IPlugin
+public sealed class MapNumberPlugin : IUiPlugin
 {
     private readonly IEventBus _eventBus;
     private MapNumberView? _view;

@@ -7,10 +7,11 @@ using PoEToolbox.Plugins.Voyager.Models;
 using PoEToolbox.Plugins.Voyager.Views;
 using PoEToolbox.Shared;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.Voyager;
 
-public class VoyagerPlugin : IPlugin
+public class VoyagerPlugin : IUiPlugin
 {
     public string Name => "航海助手";
     public string IconGlyph => "\uE7E3"; // Segoe MDL2 Assets: Ferry（船，贴合「航海助手」）

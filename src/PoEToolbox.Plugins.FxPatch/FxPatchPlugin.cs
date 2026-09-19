@@ -1,10 +1,11 @@
 using System.Windows.Controls;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.FxPatch;
 
-public sealed class FxPatchPlugin : IPlugin
+public sealed class FxPatchPlugin : IUiPlugin
 {
     private readonly IEventBus _eventBus;
     private FxPatchView? _view;

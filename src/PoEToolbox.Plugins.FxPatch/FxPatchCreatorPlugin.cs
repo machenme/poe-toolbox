@@ -1,11 +1,12 @@
 using System.Windows.Controls;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.FxPatch;
 
 /// <summary>「创建补丁」模块：特效补丁管理介绍 + 补丁生成器（POE2）。</summary>
-public sealed class FxPatchCreatorPlugin : IPlugin
+public sealed class FxPatchCreatorPlugin : IUiPlugin
 {
     private readonly IEventBus _eventBus;
     private FxPatchCreatorView? _view;

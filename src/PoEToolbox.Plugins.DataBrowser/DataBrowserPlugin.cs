@@ -1,10 +1,11 @@
 using System.Windows.Controls;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.DataBrowser;
 
-public class DataBrowserPlugin : IPlugin
+public class DataBrowserPlugin : IUiPlugin
 {
     private readonly IEventBus _eventBus;
 

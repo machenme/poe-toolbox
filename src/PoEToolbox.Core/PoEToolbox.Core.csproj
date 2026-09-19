@@ -14,7 +14,15 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <UseSystemDrawing>true</UseSystemDrawing>
   </PropertyGroup>
+
+  <!--
+    DDS 贴图渲染用 GDI+（System.Drawing.Bitmap）。System.Drawing.Common 属于桌面框架包的
+    WindowsForms 分组，必须在这里显式声明：原先写的 UseSystemDrawing 在 .NET 10 SDK 上是空转属性，
+    之所以能编译，是靠 Shared 的 UseWPF 把框架引用传递过来——Shared 去掉 WPF 后就断了。
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+  </ItemGroup>
 
 </Project>

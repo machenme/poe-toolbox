@@ -1,10 +1,11 @@
 using System.Windows.Controls;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.Poe2Font;
 
-public sealed class Poe2FontPlugin : IPlugin
+public sealed class Poe2FontPlugin : IUiPlugin
 {
     private readonly IEventBus _eventBus;
     private Poe2FontView? _view;

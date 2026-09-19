@@ -1,11 +1,12 @@
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.PriceTagger;
 
-public class PriceTaggerPlugin : IPlugin
+public class PriceTaggerPlugin : IUiPlugin
 {
     /// <summary>
     /// How long the module stays alive after the user switches to another one.

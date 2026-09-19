@@ -1,9 +1,10 @@
 using System.Windows.Controls;
 using PoEToolbox.Abstractions;
+using PoEToolbox.Ui;
 
 namespace PoEToolbox.Plugins.TermTranslator;
 
-public sealed class TermTranslatorPlugin : IPlugin
+public sealed class TermTranslatorPlugin : IUiPlugin
 {
     private TermTranslatorView? _view;
 
