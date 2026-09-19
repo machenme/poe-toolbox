@@ -66,6 +66,7 @@ public sealed class PoeDetector : IPoeDetector
                         if (found is not null) return found;
                     }
                 }
+                // 未安装的那个数键根本不存在，权限不足时也打不开；这里就是逐个试探，失败是预期结果。
                 catch { }
             }
         }
@@ -148,6 +149,7 @@ public sealed class PoeDetector : IPoeDetector
             using var proc = Process.GetProcessById((int)pid);
             if (IsPoeProcess(proc.ProcessName)) return hwnd;
         }
+        // 取 pid 与取进程之间进程可能刚好退出，属正常竞态，按「不是 PoE 窗口」处理。
         catch { }
         return IntPtr.Zero;
     }

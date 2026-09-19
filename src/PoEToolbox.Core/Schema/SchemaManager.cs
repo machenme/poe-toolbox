@@ -198,7 +198,13 @@ public static class SchemaManager
         }
         catch (Exception ex)
         {
-            try { if (File.Exists(dest)) File.Delete(dest); } catch { }
+            try { if (File.Exists(dest)) File.Delete(dest); }
+            catch (Exception cleanupEx)
+            {
+                Console.WriteLine($"  Could not remove partial download: {dest} ({cleanupEx.Message})");
+            }
+            // GUI 里 Console 不可见，而 schema 拉不下来会让 datc64 浏览莫名其妙地失败，必须留痕。
+            FileLogger.App.Warn($"Schema 下载失败（{url}）：{ex.Message}", ex);
             Console.WriteLine($"  Download failed: {ex.Message}");
             return false;
         }

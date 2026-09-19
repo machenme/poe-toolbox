@@ -106,6 +106,7 @@ public class VoyageEngine
 
                 // Read clipboard
                 string? text = null;
+                // 剪贴板被别的进程占着是常态（每 100ms 轮询一次），记日志会刷屏；读不到就走下面的空值分支。
                 try { text = Clipboard.GetText(); } catch { }
 
                 if (string.IsNullOrEmpty(text))

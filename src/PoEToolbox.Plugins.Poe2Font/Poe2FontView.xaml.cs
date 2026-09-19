@@ -176,6 +176,7 @@ public partial class Poe2FontView : UserControl
             }
             catch (ArgumentException)
             {
+                // 字体名来自配置文件，非法时用 WarningBrush + 系统字体回显，用户看得见，不必记日志。
             }
         }
 

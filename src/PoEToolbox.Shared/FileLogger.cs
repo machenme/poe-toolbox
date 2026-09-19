@@ -8,6 +8,9 @@ public enum LogLevel { Debug, Info, Warn, Error }
 
 /// <summary>
 /// Simple file logger: daily rolling, 7-day retention.
+/// 本文件里所有空的 <c>catch</c> 都是故意的：日志器不能靠自己去记「日志器写不进去」，
+/// 否则第一次失败会引发第二次失败。这些位置静默降级为「不记」，<see cref="EntryLogged"/>
+/// 的订阅者抛错也一样——UI 上一个坏处理器不该让业务路径跟着炸。
 /// </summary>
 public sealed class FileLogger : IDisposable, ILogger
 {

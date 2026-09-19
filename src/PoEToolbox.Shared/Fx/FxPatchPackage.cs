@@ -82,6 +82,7 @@ internal static class FxPatchPackage
                 if (!TryGetSafeChildPath(baseDir, relative, out var destination))
                 {
                     FxPatchEngine.LogErr($"压缩包包含不安全路径，拒绝解压: {entry.FullName}");
+                    // 拒绝解压要紧，临时目录删不掉次要——它由 CleanStalePatchTempDirs 兜底，那条路径会记日志。
                     try { Directory.Delete(baseDir, recursive: true); } catch { }
                     return null;
                 }
@@ -153,10 +154,13 @@ internal static class FxPatchPackage
             foreach (var dir in Directory.EnumerateDirectories(root, "poe-toolbox-patch-*"))
             {
                 try { if (dir != currentDir && Directory.GetLastWriteTime(dir) < cutoff) Directory.Delete(dir, recursive: true); }
-                catch { }
+                catch (Exception ex) { FileLogger.App.Warn($"旧补丁解压目录未清理，会在数据目录下继续占空间：{dir}（{ex.Message}）"); }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            FileLogger.App.Warn($"扫描旧补丁解压目录失败，本次跳过清理：{ex.Message}");
+        }
     }
 
     private static void ValidatePatch(PatchDef patch)

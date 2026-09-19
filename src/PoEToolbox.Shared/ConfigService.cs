@@ -50,8 +50,17 @@ public static class ConfigService
             catch (Exception ex)
             {
                 LastReadError = ex.Message;
+                // 之后所有配置都会当成「不存在」处理（各插件回到默认值），不留日志就查不出是谁改的。
+                FileLogger.App.Warn($"config.json 解析失败，本轮按空配置继续：{ex.Message}", ex);
                 var corruptPath = ConfigPath + ".corrupt." + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                try { File.Move(ConfigPath, corruptPath, false); } catch { }
+                try
+                {
+                    File.Move(ConfigPath, corruptPath, false);
+                }
+                catch (Exception moveEx)
+                {
+                    FileLogger.App.Warn($"损坏的 config.json 无法备份到 {corruptPath}：{moveEx.Message}");
+                }
                 return [];
             }
         }
@@ -64,7 +73,11 @@ public static class ConfigService
         if (cfg.TryGetValue(pluginName, out var element))
         {
             try { return JsonSerializer.Deserialize<T>(element.GetRawText(), JsonOpts); }
-            catch { }
+            catch (Exception ex)
+            {
+                // 静默回落到默认值看起来像「配置没生效」，不留痕迹就只能靠猜。
+                FileLogger.App.Warn($"插件配置 {pluginName}/{typeof(T).Name} 反序列化失败，改用默认值：{ex.Message}");
+            }
         }
         return new T();
     }

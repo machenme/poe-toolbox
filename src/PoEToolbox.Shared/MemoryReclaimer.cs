@@ -215,6 +215,7 @@ public static class MemoryReclaimer
             using var p = Process.GetCurrentProcess();
             SetProcessWorkingSetSize(p.Handle, -1, -1);
         }
+        // 只是「把已空闲的页从工作集里摘出去」的锦上添花，权限不足或进程退出竞态时静默跳过即可。
         catch { }
     }
 

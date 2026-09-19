@@ -402,6 +402,7 @@ public partial class DataBrowserView : UserControl
             await Task.Delay(200, cancellationToken);
             await DoSearchAsync(cancellationToken);
         }
+        // 取消是常态：输入框每敲一个字就作废上一次查询，记日志会把文件淹掉。
         catch (OperationCanceledException) { }
         finally
         {
@@ -757,6 +758,7 @@ public partial class DataBrowserView : UserControl
             if (!cts.IsCancellationRequested)
                 ApplyPreview(document);
         }
+        // 换选中行就会取消上一次预览，属正常流程。
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
