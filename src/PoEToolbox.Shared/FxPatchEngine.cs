@@ -293,7 +293,7 @@ public static class FxPatchEngine
             PatchDef patch;
             try
             {
-                patch = LoadPatchFile(ResolveBuiltInPatchPath(def.FileName));
+                patch = LoadBuiltInPatch(def);
             }
             catch (Exception ex)
             {
@@ -306,35 +306,96 @@ public static class FxPatchEngine
                 exit = code;
         }
         return exit;
-    }    private static string ResolveBuiltInPatchPath(string fileName)
-    {
-        // 部署形态兼容：exe 同目录或 Patches\ 子目录（csproj PreserveNewest 复制会保留目录结构）
-        var sub = Path.Combine(AppContext.BaseDirectory, "Patches", fileName);
-        if (File.Exists(sub))
-            return sub;
-        return Path.Combine(AppContext.BaseDirectory, fileName);
     }
 
-    /// <summary>按 id 解析内置补丁描述文件路径（导出补丁文件用）；补丁不存在或文件缺失返回 null。</summary>
+    /// <summary>加载内置补丁：先把程序内嵌的那份释放到工具箱数据目录（AppData），再从磁盘读。
+    /// 来源只有一处（内嵌资源），不再依赖 exe 旁有没有 Patches 目录，部署缺文件的问题不复现。</summary>
+    private static PatchDef LoadBuiltInPatch(BuiltInPatchDef def)
+    {
+        var path = MaterializeBuiltInPatch(def);
+        if (path is not null)
+            return LoadPatchFile(path);
+
+        // 释放失败（目录不可写）时退回直接读内嵌资源，功能不受影响，只是「导出」按钮没了落盘来源
+        var embedded = ReadEmbeddedPatchJson(def.FileName);
+        if (embedded is not null)
+            return ParsePatchJson(embedded, basePath: null);
+
+        throw new FileNotFoundException($"找不到内置补丁描述文件：{def.FileName}（程序内嵌资源缺失）。");
+    }
+
+    /// <summary>内嵌补丁资源的名字前缀，与 csproj 的 EmbeddedResource LogicalName 对齐。</summary>
+    private const string EmbeddedPatchPrefix = "Patches.";
+
+    /// <summary>读程序内嵌的补丁描述 JSON（<see cref="EmbeddedPatchPrefix"/> + 文件名）；没嵌入返回 null。</summary>
+    private static string? ReadEmbeddedPatchJson(string fileName)
+    {
+        var asm = typeof(FxPatchEngine).Assembly;
+        var name = asm.GetManifestResourceNames().FirstOrDefault(n =>
+            n.Equals(EmbeddedPatchPrefix + fileName, StringComparison.Ordinal)
+            || n.EndsWith("." + fileName, StringComparison.OrdinalIgnoreCase));
+        if (name is null)
+            return null;
+
+        using var stream = asm.GetManifestResourceStream(name);
+        if (stream is null)
+            return null;
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
+    /// <summary>内置补丁在工具箱数据目录（AppData）里的释放位置。</summary>
+    private static string BuiltInPatchDirectory => Path.Combine(ConfigService.PatchesDirectory, "builtin");
+
+    /// <summary>把内嵌的内置补丁描述释放到工具箱数据目录并返回其路径；释放失败返回 null。
+    /// 已存在且内容一致就跳过写入；内容不同（工具升级改了补丁）以程序内嵌版本为准覆盖。</summary>
+    private static string? MaterializeBuiltInPatch(BuiltInPatchDef def)
+    {
+        var json = ReadEmbeddedPatchJson(def.FileName);
+        if (json is null)
+            return null;
+        try
+        {
+            var dir = BuiltInPatchDirectory;
+            Directory.CreateDirectory(dir);
+            var target = Path.Combine(dir, def.FileName);
+            if (!File.Exists(target) || !string.Equals(File.ReadAllText(target), json, StringComparison.Ordinal))
+                File.WriteAllText(target, json, new UTF8Encoding(false));
+            return target;
+        }
+        catch (Exception ex)
+        {
+            FileLogger.App.Warn($"[fx-patch] 内置补丁 {def.Id} 释放到数据目录失败: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>按 id 解析内置补丁描述文件路径（导出补丁文件用）；补丁不存在或无法释放返回 null。</summary>
     public static string? TryResolveBuiltInPatchPath(string patchId)
     {
         var def = BuiltIns.FirstOrDefault(b => b.Id.Equals(patchId, StringComparison.OrdinalIgnoreCase));
-        if (def is null)
-            return null;
-        var path = ResolveBuiltInPatchPath(def.FileName);
-        return File.Exists(path) ? path : null;
+        return def is null ? null : MaterializeBuiltInPatch(def);
+    }
+
+    private static readonly JsonSerializerOptions PatchJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+    };
+
+    /// <summary>解析并校验补丁描述；<paramref name="basePath"/> 是包内资源（assets）相对路径基准，可为 null。</summary>
+    private static PatchDef ParsePatchJson(string json, string? basePath)
+    {
+        var patch = JsonSerializer.Deserialize<PatchDef>(json, PatchJsonOptions)
+            ?? throw new InvalidOperationException("补丁描述解析为空。");
+        patch.BasePath = basePath;
+        ValidatePatch(patch);
+        return patch;
     }
 
     /// <summary>读取并校验一份 .patch.json，注入 BasePath（assets 相对路径基准）。</summary>
     private static PatchDef LoadPatchFile(string path)
-    {
-        var patch = JsonSerializer.Deserialize<PatchDef>(File.ReadAllText(path),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip })
-            ?? throw new InvalidOperationException("补丁描述解析为空。");
-        patch.BasePath = Path.GetDirectoryName(Path.GetFullPath(path));
-        ValidatePatch(patch);
-        return patch;
-    }
+        => ParsePatchJson(File.ReadAllText(path), Path.GetDirectoryName(Path.GetFullPath(path)));
 
     private static int DispatchPatch(string resolved, PatchDef patch, string action, string? sourceFile = null)
         => action switch
@@ -951,7 +1012,7 @@ public static class FxPatchEngine
                 PatchDef patch;
                 try
                 {
-                    patch = LoadPatchFile(ResolveBuiltInPatchPath(def.FileName));
+                    patch = LoadBuiltInPatch(def);
                 }
                 catch (Exception ex)
                 {
@@ -1014,7 +1075,7 @@ public static class FxPatchEngine
                 PatchDef patch;
                 try
                 {
-                    patch = LoadPatchFile(ResolveBuiltInPatchPath(def.FileName));
+                    patch = LoadBuiltInPatch(def);
                 }
                 catch (Exception ex)
                 {

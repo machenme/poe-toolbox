@@ -23,7 +23,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Patches\**\*.patch.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 内置补丁源文件只有这一处：编译进 exe，运行时释放到工具箱数据目录（AppData）读取。
+         不再往输出目录复制，避免「exe 旁副本 / 数据目录副本」两个来源不一致。 -->
+    <EmbeddedResource Include="Patches\**\*.patch.json" LogicalName="Patches.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

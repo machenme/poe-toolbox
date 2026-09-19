@@ -83,6 +83,7 @@ jobs:
         shell: pwsh
         run: |
           $archive = "PoEToolbox-win-x64.zip"
+          # 单文件 exe：内置补丁描述已编译进 exe，运行时自行释放到 AppData，发布只需带 exe
           Compress-Archive -Path (Join-Path $env:PUBLISH_DIR 'PoEToolbox.exe') -DestinationPath $archive -Force
           "archive=$archive" >> $env:GITHUB_OUTPUT
         id: archive
@@ -91,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: PoEToolbox-win-x64
-          path: ${{ env.PUBLISH_DIR }}/PoEToolbox.exe
+          path: ${{ env.PUBLISH_DIR }}
           if-no-files-found: error
 
       - name: Upload release archive
