@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
-using static PoEToolbox.Plugins.BagCleaner.Input.NativeMethods;
+using static PoEToolbox.Core.Input.NativeMethods;
 
-namespace PoEToolbox.Plugins.BagCleaner.Input;
+namespace PoEToolbox.Core.Input;
 
 /// <summary>
 /// SendInput 优先 + mouse_event/keybd_event 降级。

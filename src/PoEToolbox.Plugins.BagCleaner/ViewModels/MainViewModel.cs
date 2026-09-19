@@ -1,3 +1,4 @@
+using PoEToolbox.Core.ScreenGrid;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows;

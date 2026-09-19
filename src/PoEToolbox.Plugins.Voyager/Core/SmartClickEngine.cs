@@ -1,5 +1,5 @@
 using System.Windows;
-using PoEToolbox.Plugins.BagCleaner.Input;
+using PoEToolbox.Core.Input;
 using PoEToolbox.Plugins.Voyager.Models;
 using PoEToolbox.Shared;
 

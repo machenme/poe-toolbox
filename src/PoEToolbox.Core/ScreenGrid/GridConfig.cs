@@ -1,4 +1,4 @@
-namespace PoEToolbox.Plugins.BagCleaner.Models;
+namespace PoEToolbox.Core.ScreenGrid;
 
 /// <summary>
 /// 背包网格坐标配置 (POE ClientArea 相对坐标方案 — 参考 §7.2 V2)。

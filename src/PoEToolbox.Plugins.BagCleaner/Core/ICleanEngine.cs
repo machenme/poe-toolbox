@@ -1,3 +1,4 @@
+using PoEToolbox.Core.ScreenGrid;
 using System.Drawing;
 using PoEToolbox.Plugins.BagCleaner.Models;
 

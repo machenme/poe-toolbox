@@ -1,7 +1,8 @@
+using PoEToolbox.Core.ScreenGrid;
 using PoEToolbox.Plugins.BagCleaner.Models;
 using PoEToolbox.Shared;
 using PoEToolbox.Plugins.BagCleaner.Services;
-using static PoEToolbox.Plugins.BagCleaner.Input.NativeMethods;
+using static PoEToolbox.Core.Input.NativeMethods;
 
 namespace PoEToolbox.Plugins.BagCleaner.Core;
 

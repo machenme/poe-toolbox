@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace PoEToolbox.Plugins.BagCleaner.Input;
+namespace PoEToolbox.Core.Input;
 
 /// <summary>
 /// 输入模拟器接口：所有 Win32 输入收口在此。

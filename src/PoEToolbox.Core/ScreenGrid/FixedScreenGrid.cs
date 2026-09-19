@@ -1,8 +1,8 @@
 using System.Drawing;
 using System.Runtime.InteropServices;
-using static PoEToolbox.Plugins.BagCleaner.Input.NativeMethods;
+using static PoEToolbox.Core.Input.NativeMethods;
 
-namespace PoEToolbox.Plugins.BagCleaner.Core;
+namespace PoEToolbox.Core.ScreenGrid;
 
 /// <summary>
 /// 固定屏幕网格的通用坐标工具。

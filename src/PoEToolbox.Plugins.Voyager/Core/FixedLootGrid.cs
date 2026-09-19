@@ -1,5 +1,5 @@
 using System.Drawing;
-using PoEToolbox.Plugins.BagCleaner.Core;
+using PoEToolbox.Core.ScreenGrid;
 
 namespace PoEToolbox.Plugins.Voyager.Core;
 

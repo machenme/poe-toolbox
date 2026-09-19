@@ -1,9 +1,8 @@
 using System.Drawing;
-using PoEToolbox.Plugins.BagCleaner.Input;
-using PoEToolbox.Plugins.BagCleaner.Models;
-using static PoEToolbox.Plugins.BagCleaner.Input.NativeMethods;
+using PoEToolbox.Core.Input;
+using static PoEToolbox.Core.Input.NativeMethods;
 
-namespace PoEToolbox.Plugins.BagCleaner.Core;
+namespace PoEToolbox.Core.ScreenGrid;
 
 /// <summary>
 /// 网格坐标转换：相对比例 (GridConfig) ↔ 屏幕绝对坐标 (List&lt;Point&gt;)。

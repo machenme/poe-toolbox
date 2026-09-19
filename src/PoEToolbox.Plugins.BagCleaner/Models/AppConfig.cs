@@ -1,3 +1,5 @@
+using PoEToolbox.Core.ScreenGrid;
+
 namespace PoEToolbox.Plugins.BagCleaner.Models;
 
 /// <summary>

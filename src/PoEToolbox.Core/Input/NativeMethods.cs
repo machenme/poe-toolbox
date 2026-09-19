@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace PoEToolbox.Plugins.BagCleaner.Input;
+namespace PoEToolbox.Core.Input;
 
 /// <summary>
 /// Win32 P/Invoke 声明集中地。

@@ -1,3 +1,4 @@
+using PoEToolbox.Core.ScreenGrid;
 using System.Text.Json;
 using PoEToolbox.Plugins.BagCleaner.Models;
 using PoEToolbox.Shared;

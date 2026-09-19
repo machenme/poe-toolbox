@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Core\PoEToolbox.Core.csproj" />
     <ProjectReference Include="..\PoEToolbox.Ui\PoEToolbox.Ui.csproj" />
     <ProjectReference Include="..\PoEToolbox.Plugins.BagCleaner\PoEToolbox.Plugins.BagCleaner.csproj" />
   </ItemGroup>

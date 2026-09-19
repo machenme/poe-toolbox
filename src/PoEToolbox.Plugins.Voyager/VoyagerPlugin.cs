@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
-using PoEToolbox.Plugins.BagCleaner.Input;
+using PoEToolbox.Core.Input;
 using PoEToolbox.Plugins.BagCleaner.Services;
 using PoEToolbox.Plugins.Voyager.Core;
 using PoEToolbox.Plugins.Voyager.Models;
@@ -131,7 +131,7 @@ public class VoyagerPlugin : IUiPlugin
         var hwnd = PoeDetector.Default.GetPoeForegroundWindow();
         if (hwnd == IntPtr.Zero) { _view?.AppendLog("POE 不在前台"); return; }
 
-        var rel = PoEToolbox.Plugins.BagCleaner.Core.GridCalculator.CaptureRelativePoint(hwnd);
+        var rel = PoEToolbox.Core.ScreenGrid.GridCalculator.CaptureRelativePoint(hwnd);
         if (rel == null) return;
         var (rx, ry) = rel.Value;
 

@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
-using PoEToolbox.Plugins.BagCleaner.Input;
-using static PoEToolbox.Plugins.BagCleaner.Input.NativeMethods;
+using PoEToolbox.Core.Input;
+using static PoEToolbox.Core.Input.NativeMethods;
 
 namespace PoEToolbox.Plugins.BagCleaner.Services;
 

@@ -2,9 +2,8 @@ using System.Drawing;
 using System.IO;
 using System.Text;
 using System.Windows;
-using PoEToolbox.Plugins.BagCleaner.Core;
-using PoEToolbox.Plugins.BagCleaner.Input;
-using PoEToolbox.Plugins.BagCleaner.Models;
+using PoEToolbox.Core.Input;
+using PoEToolbox.Core.ScreenGrid;
 using PoEToolbox.Plugins.Voyager.Models;
 using PoEToolbox.Shared;
 

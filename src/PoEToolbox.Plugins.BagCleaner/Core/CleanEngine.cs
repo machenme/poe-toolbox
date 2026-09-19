@@ -1,6 +1,7 @@
+using PoEToolbox.Core.ScreenGrid;
 using System.Drawing;
 using PoEToolbox.Plugins.BagCleaner.Models;
-using PoEToolbox.Plugins.BagCleaner.Input;
+using PoEToolbox.Core.Input;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.BagCleaner.Core;
