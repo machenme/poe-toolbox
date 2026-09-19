@@ -2,6 +2,9 @@
 
 > 性质：机制说明 + 由此推出的硬约束
 > 适用：改 fx-patch 引擎、写补丁的人。看懂它，就知道为什么有些事"做不到"而不是"没做"。
+> 定位方式：一律用类型名 / 方法名，不写行号——引擎拆分那一次重构（`fc8a84441`）就把本文的行号全部作废了。
+>
+> 程序集归属：`Index` / `FileRecord` / `BundleRecord` / `DriveBundleFactory` 在基础库 `LibBundle3`；补丁引擎在 `PoEToolbox.Shared`，按职责分成 `Shared/Fx/` 若干模块（见 `ARCHITECTURE.md` §3B）——本文提到的 `FxPatchCommands`（命令与事务）、`FxPatchOperations`（op 执行）、`FxPatchState`（状态判定）都在那里。
 
 ---
 
@@ -23,7 +26,7 @@
 └─────────────────────────────────────────────────────┘
 ```
 
-`FileRecord` 只有四个字段（`Records/FileRecord.cs:154-163`）：
+`FileRecord` 只有四个字段（`FileRecord.Serialize`）：
 
 ```csharp
 stream.Write(PathHash);
@@ -43,12 +46,12 @@ stream.Write(Size);
 | **`FileRecord.Offset`** | 相对它**所属的那个 bundle** 解压后的内容流 | 极敏感：往这个 bundle 里插东西，后面所有成员的 offset 都要重排 |
 | **记录自己在 `_.index.bin` 里的位置** | 相对索引文件 | **不敏感**：索引每次都是全量重建（见 §4） |
 
-`FileRecord.Read()` 就是证明（`Records/FileRecord.cs:51-63`）：它先 `BundleRecord.TryGetBundle()` 打开那个 bundle，再 `bundle.Read(Offset, Size)` —— **offset 从来不是相对 `_.index.bin` 的**。
+`FileRecord.Read()` 就是证明：它先 `BundleRecord.TryGetBundle()` 打开那个 bundle，再 `bundle.Read(Offset, Size)` —— **offset 从来不是相对 `_.index.bin` 的**。
 
 所以"给游戏加内容会不会挤动原来记录的位置"要分两问：
 
 - **会不会挤动索引里的记录？** 不会。见 §4。
-- **会不会挤动某个 bundle 里的成员？** 会！所以绝不能往已有 bundle 里塞东西。见 §3。
+- **会不会挤动某个 bundle 里的成员？** 会！所以绝不能往**原生** bundle 里塞东西。自定义 bundle（`PATCHED/…`、`LibGGPK3/…`）是安全的：写之前整份读回内存、只往末尾追加，见 §3。
 
 ---
 
@@ -70,7 +73,7 @@ stream.Write(Size);
 
 > 新内容写进**另一个 bundle**，然后把那一条 FileRecord 挂过去。
 
-这就是 `FileRecord.Redirect`（`Records/FileRecord.cs:139-149`）—— 把 `BundleRecord` / `Offset` / `Size` 三个字段改指到新位置。它是 `public virtual`，**支持指回任意 bundle**（这一点在讨论"还原能否拨回去"时很关键）。
+这就是 `FileRecord.Redirect` —— 把 `BundleRecord` / `Offset` / `Size` 三个字段改指到新位置。它是 `public virtual`，**支持指回任意 bundle**（这一点在讨论"还原能否拨回去"时很关键）。
 
 **推论：我们从不写原生 bundle 一个字节。** 原版内容永远完好地躺在原来的 bundle 里，只是指向它的那条记录离开了。
 
@@ -80,23 +83,23 @@ stream.Write(Size);
 
 ### 写入时的做法
 
-`Index.EnsureWriteBundle`（`Index.cs:1011-1025`）在第一次打开待写 bundle 时，会**先把该 bundle 已有的全部内容读进内存流，再往后面追加**：
+`Index.EnsureWriteBundle` 在第一次打开待写 bundle 时，会**先把该 bundle 已有的全部内容读进内存流，再往后面追加**：
 
 ```csharp
 ms.Write(b.ReadWithoutCache(0, originalSize)); // 读回原有内容
 // 之后 FileRecord.Write 的 ms.Write(newContent) 都是追加在末尾
 ```
 
-`FileRecord.Write`（`Records/FileRecord.cs:97-107`）拿到的是 `(int)ms.Length` 作为新成员的 Offset —— 也就是**当前流的末尾**。已有成员的 offset 一个都没变。
+`FileRecord.Write` 拿到的是 `(int)ms.Length` 作为新成员的 Offset —— 也就是**当前流的末尾**。已有成员的 offset 一个都没变。
 
 ### 往哪个 bundle 写
 
-`Index.GetBundleToWrite`（`Index.cs:925-983`）只会有两个结果：
+`Index.GetBundleToWrite` 只会有两个结果：
 
 | 情况 | 落点 |
 |---|---|
 | 钉扎了写入目标（补丁引擎会设 `PinnedWriteBundlePath`） | `PATCHED/<bundleName>_v<version>.bundle.bin` |
-| 没钉扎（通用写入） | 新建 `LibGGPK3/N.bundle.bin` |
+| 没钉扎（通用写入） | 第一个还没涨过 `MaxBundleSize` 的自定义 bundle；都没有就新建一个 `LibGGPK3/N.bundle.bin` |
 
 **两者都不是原生 bundle。** 配合上面的"追加到末尾"，三条约束同时成立：
 
@@ -108,7 +111,7 @@ ms.Write(b.ReadWithoutCache(0, originalSize)); // 读回原有内容
 
 ## 4. `_.index.bin` 本身：全量重建，不做增量插入
 
-`Index.Save()`（`Index.cs:564-581`）每次都是**整体重写**：
+`Index.Save()` 每次都是**整体重写**：
 
 ```csharp
 ms.Write(_Bundles.Length);
@@ -125,7 +128,7 @@ baseBundle.Save(ms, compressor, compressionLevel); // 压缩后写回索引文�
 
 ### Save 顺带做的一件事
 
-`Index.cs:549-584`：**Save 开头会把所有「成员数为 0 的自定义 bundle」摘掉**，索引写完之后调 `bundleFactory.DeleteBundle` 删掉它们的物理文件（`DriveBundleFactory.cs:35-41` 就是 `File.Delete`）。
+`Index.Save` 开头会把所有「成员数为 0 的自定义 bundle」摘掉，索引写完之后调 `bundleFactory.DeleteBundle` 删掉它们的物理文件（`DriveBundleFactory.DeleteBundle` 就是 `File.Delete`）。
 
 ⇒ 只要某个 `PATCHED/…` bundle 里的成员全部被移走，它会在下一次 Save 时**自动消失**。不需要单独的"清理"动作。
 
@@ -133,9 +136,9 @@ baseBundle.Save(ms, compressor, compressionLevel); // 压缩后写回索引文�
 
 ## 5. 补丁事务为什么要踩住 MaxBundleSize
 
-`FlushWriteBundle`（`Index.cs:1031-1039`）会在内容超过 `MaxBundleSize` 时把 bundle 写盘、清空内存流。
+`Index.FlushWriteBundle` 会在内容超过 `MaxBundleSize` 时把 bundle 写盘、清空内存流。
 
-补丁引擎在写入期间把它设成 `int.MaxValue`（`FxPatchEngine.cs:753`）：
+补丁引擎在写入期间把它设成 `int.MaxValue`（`Shared/Fx/FxPatchCommands.cs`，事务结束时还原）：
 
 ```csharp
 // 补丁事务不能在中途触发 Bundle flush；所有 FileRecord/AddFile 操作
@@ -157,13 +160,14 @@ gd.Index.MaxBundleSize = int.MaxValue;
 同一个路径在补丁叠加后可以依次住在 `原生 bundle → PATCHED/A → PATCHED/B`。
 ⇒ **任何判据都必须落在逻辑内容上，不能落在 bundle/offset 上。**
 
-引擎现在正是这么做的（`FxPatchEngine.ComputeState` 全部基于内容）：
+引擎现在正是这么做的（`FxPatchState.ComputeState` 全部基于内容，一个 switch 四种 op）：
 
-| op | 判据 | 位置 |
-|---|---|---|
-| edittext | 解码后的文本里有没有 old / new | `FxPatchEngine.cs:935-950` |
-| patchptr-byid | 读表内容，看 Id 那行指针当前指向哪个串 | `:924-933` |
-| addfile-* | SHA-256 比对 | `:877-922` |
+| op | 判据 |
+|---|---|
+| edittext | 解码后的文本里有没有 old / new |
+| patchptr-byid | 读表内容，看 Id 那行指针当前指向哪个串 |
+| addfile-derived | 源与目标各比一次 SHA-256 |
+| addfile-asset | 目标内容 SHA-256 与补丁 asset / `OriginalAsset` 比对 |
 
 这带来一个红利：**revert 天然支持栈式叠加**。`X→Y` 与 `Y→Z` 两个补丁叠加后，按 `Z→Y→X` 逆序还原逐步成立——每一步都用"当前内容里有没有我要的那段"自证，不关心是谁改的、改到了哪个 bundle。
 

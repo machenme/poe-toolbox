@@ -159,12 +159,15 @@ PoEToolbox.Cli fx-patch apply <补丁zip> <game-data>   # v2：通用应用入�
 
 ## 8. 实施清单
 
-- [ ] `PoEToolbox.Cli/Program.cs` 新增 `fx-oilmod` 命令骨架（status/apply/revert）
-- [ ] miscanimated 定位器（Id → row → AOFile 字段偏移），复用探针 datrow/datgrep 逻辑
-- [ ] 三态判定 + 冲突中止
-- [ ] AddFile 动态生成副本内容（curve 替换）
-- [ ] PinnedWriteBundlePath 集成（`LibGGPK3/oilmod`）
-- [ ] edittext 两个文件（oilground.ot / oil_burst.ao，@file 式多行替换内化）
-- [ ] IndexBackupService 集成
-- [ ] 闭环测试（§7）+ 游戏内目验
-- [ ] GUIDE 手册更新：给普通用户的使用说明章节
+> 本清单是 2026-09 设计当时的待办，早已全部落地；勾掉是为了不让人误以为引擎缺这些能力。
+> 代码现在的样子见 `ARCHITECTURE.md` §3B（引擎已按职责拆进 `Shared/Fx/`）。
+
+- [x] `PoEToolbox.Cli/Program.cs` 新增 `fx-oilmod` 命令骨架（status/apply/revert）
+- [x] miscanimated 定位器（Id → row → AOFile 字段偏移），复用探针 datrow/datgrep 逻辑 → 现为 `FxPatchState` / `FxDatc64Pointers` 的 `patchptr-byid` 判据
+- [x] 三态判定 + 冲突中止 → `FxPatchState`（含 9 条性质测试）
+- [x] AddFile 动态生成副本内容（curve 替换）→ `addfile-derived`
+- [x] PinnedWriteBundlePath 集成
+- [x] edittext 两个文件（oilground.ot / oil_burst.ao，@file 式多行替换内化）
+- [x] IndexBackupService 集成
+- [ ] 闭环测试（§7）+ 游戏内目验 —— §7 那套要动真实游戏索引，只能由使用者本人执行
+- [x] GUIDE 手册更新：给普通用户的使用说明章节 → README「特效补丁系统」+ `GUIDE-patch-authoring.md`

@@ -1,7 +1,12 @@
 # PoE2 特效隔离修改指南（实战复盘：油弹地面火淡出）
 
 > 日期：2026-09-12　|　状态：已验证生效　|　客户端：Windows 版 PoE2（Bundles2 索引形态），Build 322001
-> 用途：下次修改任何技能/特效时，直接参考本文档的结论、流程与工具。
+> 用途：下次修改任何技能/特效时，直接参考本文档的结论与流程。
+>
+> ⚠️ **结论可用，命令不可用**：文中的 `$exe` 是当时临时写的一次性探针（`.scratch/` 下，从未入库），
+> §5/§6 那张命令表（`datgrep` / `datrow` / `patchptr` / `fixfield` …）今天跑不起来，请当**思路**读。
+> 日常创作补丁走 [补丁创作方法论](GUIDE-patch-authoring.md) 与 README 的「特效补丁系统」；
+> 需要按 Id 查表就用 App 的「数据浏览」导出 JSON（数组下标 = 行号）。
 
 ---
 
@@ -243,7 +248,7 @@ blob 追加字符串后，`datrow` 可能报某个**未修改的行**（典型�
 7. [ ] 把新增修改点追加到本文档 §3 的清单里
 
 ---
-*相关文件：PRD `docs/PRD-oil-burst-fx-isolation.md`；过程日志 `.workbuddy/memory/2026-09-11.md`、`2026-09-12.md`；探针源码 `.scratch/RealDataAddFile/Program.cs`。*
+*相关材料：过程日志 `.workbuddy/memory/2026-09-11.md`、`2026-09-12.md`（本地工作记录，不入库）。上文的 PRD 与探针源码都不在仓库里——`.scratch/` 被 `.gitignore` 挡住，`docs/PRD-oil-burst-fx-isolation.md` 从未提交，本地也已不存在。*
 
 *本文是**具体案例复盘**。抽出来的通用决策方法见
 [`GUIDE-patch-authoring.md`](./GUIDE-patch-authoring.md)（什么情况该隔离、什么情况只能就地改）。*
