@@ -121,6 +121,7 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | schema | 同上 `schema/schema.min.json` | 只有文件不存在时才联网拉；主站失败回落备份站 |
 | dat 列定义 | **LibDat2 程序集内嵌资源** | 曾经是外置 json，已内嵌。CI 在出包后断言 publish 目录里没有任何 loose `.json`——跑一次就要读的数据留在外面，功能在用户机器上直接失效 |
 | Oodle 原生库 | 内嵌于 `App`，启动时释放到 `%LocalAppData%\PoEToolbox\native\oo2core.dll` | 源文件是仓库根的 `oo2core.dll`，以 `EmbeddedResource` 进 exe；`App.ExtractEmbeddedDll` 按大小比对决定是否重写（升级换库时会重写），再由 `DllImportResolver` 加载 |
+| 源码树里的 `*.dll` | `.gitignore` 全忽略，只有仓库根的 `oo2core.dll` 有 `!` 例外 | 后果：往 `src/` 任何目录扔一个 dll 都不会出现在 `git status` 里（曾长期躺着一个 2026-07-27 的 `src/PoEToolbox.Core/LibDat2.dll` 构建残留，无任何工程引用，已清走）。需要入库的二进制必须显式加 `!` 例外，别指望 `git add -f` 之后别人看得见 |
 
 ## 6. 已知结构债（不在本文里解决）
 
@@ -130,6 +131,5 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | UI 组织 | 59 处 `MessageBox.Show` 散落各 View，无 `IDialogService`；插件 View 多为 code-behind 而非 ViewModel | 报告 P1-1 / P2-6 |
 | 超大文件 | 单文件 1k 行以上还有 5 个：`LibBundle3/Index.cs`、`AffixWorkbenchView`、`DataBrowserView`、`CsdDocument`、`FxPatchView`（基线时分别约 1450/1380/1350/1030/1020 行，不逐次更新，别当准数用） | 报告 P0/P1 |
 | 日志器单例不吃测试缝 | `FileLogger.App` 在第一次被触碰时就按当时的根目录建好了文件句柄，之后改注入缝不影响它。断言日志内容请订阅 `FileLogger.EntryLogged`，不要去读日志文件 | — |
-| 死掉的联网分支 | `DatContainer.DownloadSchemaMin()`（`SchemaMin` 全仓无人置真）、`PatchClient.UpdateNodeAsync`（无调用方）。要么删要么接，挂着最糟 | SPEC §4.3 |
+| 未被使用的上游 API | `LibDat2.DatContainer.DownloadSchemaMin()`（`SchemaMin` 全仓无人置真）与 `LibGGPK3.PatchClient.UpdateNodeAsync`（无调用方）**不是本项目的死代码**：两者都随 `src/Lib*` 一起从上游 vendored 进来、初版提交（`02ef81c47`）就存在，是库对外的公共 API。删它们只是增加与上游的分歧（本项目已在 `LibBundle3/Index.cs` 带着注释改过上游 bug，分歧要省着用），留着也不占运行时时。**唯一的实际风险是下一个人照它们做设计**，所以在此标注而不是删除 | SPEC §4.3 |
 | CLI 仍需桌面框架 | `Core` 的 DDS 渲染用 GDI+，且 `Cli` 的 TFM 本身是 `net10.0-windows`；WPF 已经拿掉了，桌面框架还没拿掉 | SPEC §11 |
-| 工程根目录躺着一个 `src/PoEToolbox.Core/LibDat2.dll` | 2026-07-27 的构建残留，应在 `bin/` 而不是工程根。`.gitignore` 第 7 行的 `*.dll` 让它不出现在 `git status` 里，所以谁都可能踩到；删除前先确认没人依赖 | — |
