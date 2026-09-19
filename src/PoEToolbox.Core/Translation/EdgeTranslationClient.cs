@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using PoEToolbox.Shared;
 
 namespace PoEToolbox.Core.Translation;
 
@@ -13,7 +14,7 @@ public sealed class EdgeTranslationClient
     private const int MaxBatchSize = 50;
     private static readonly HttpClient Http = new()
     {
-        Timeout = TimeSpan.FromSeconds(30),
+        Timeout = NetworkDefaults.RequestTimeout,
         DefaultRequestHeaders = { { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36" } },
     };
     private static readonly SemaphoreSlim RequestScheduleLock = new(1, 1);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Net;
 using System.Net.Http;
+using PoEToolbox.Shared;
 
 namespace PoEToolbox.Core.Pipeline;
 
@@ -35,7 +36,7 @@ public static class PoeNinjaFetcher
 
     private static readonly HttpClient _http = new()
     {
-        Timeout = TimeSpan.FromSeconds(30),
+        Timeout = NetworkDefaults.RequestTimeout,
         DefaultRequestHeaders = { { "User-Agent", "PoEToolbox/0.1.2 (contact: local-tool)" } }
     };
 
@@ -201,9 +202,18 @@ public static class PoeNinjaFetcher
         HttpMessageHandler? handler)
     {
         Directory.CreateDirectory(outputDir);
-        using var http = handler is null ? null : new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        using var http = handler is null ? null : new HttpClient(handler) { Timeout = NetworkDefaults.RequestTimeout };
         var client = http ?? _http;
         var items = new List<CategoryFetchResult>(types.Length);
+
+        void RecordFailure(string type, Exception ex)
+        {
+            var reason = NetworkDefaults.DescribeFailure(ex, ct);
+            progress?.Report($"  失败：{reason}");
+            var outPath = Path.Combine(outputDir, $"{type}.json");
+            items.Add(new CategoryFetchResult(type, FetchStatus.Failed, null, reason,
+                File.Exists(outPath), DateTimeOffset.UtcNow));
+        }
 
         for (var i = 0; i < types.Length; i++)
         {
@@ -244,13 +254,17 @@ public static class PoeNinjaFetcher
                 progress?.Report($"  -> {outPath} ({lineCount} entries)");
                 items.Add(new CategoryFetchResult(type, FetchStatus.Succeeded, outPath, null, false, DateTimeOffset.UtcNow));
             }
+            // HttpClient 的超时表现为 TaskCanceledException（OperationCanceledException 的子类），
+            // 不区分就会让一个分类超时中断整轮抓取，剩下十几个分类不再尝试。
+            // 只有用户真的按了取消才往外抛。
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                RecordFailure(type, ex);
+            }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                progress?.Report($"  Failed: {ex.Message}");
-                var outPath = Path.Combine(outputDir, $"{type}.json");
-                items.Add(new CategoryFetchResult(type, FetchStatus.Failed, null, ex.Message,
-                    File.Exists(outPath), DateTimeOffset.UtcNow));
+                RecordFailure(type, ex);
             }
 
             // 3-5 second delay between categories (respect the API)
