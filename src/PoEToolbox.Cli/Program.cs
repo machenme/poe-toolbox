@@ -8,6 +8,18 @@ using PoEToolbox.Shared;
 
 Console.OutputEncoding = Encoding.UTF8;
 
+// 兜底：非 UI 线程上的漏网异常要落日志并返回非 0，否则调用方（脚本）看不出失败。
+TaskScheduler.UnobservedTaskException += (_, args) =>
+{
+    FileLogger.WriteCritical("Unobserved task exception.", args.Exception);
+    args.SetObserved();
+};
+
+AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+{
+    FileLogger.WriteCritical("Unhandled exception.", args.ExceptionObject as Exception);
+};
+
 if (args.Length == 0) { PrintUsage(); return 0; }
 
 var command = args[0].ToLowerInvariant();

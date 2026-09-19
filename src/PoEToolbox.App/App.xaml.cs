@@ -20,6 +20,20 @@ public partial class App : Application
             args.Handled = true;
         };
 
+        // 界面上有 31 处 async void：没有这两道兜底，fire-and-forget 任务里的异常会静默消失，
+        // 用户只看到"点了没反应"，日志里也什么都查不到。
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            FileLogger.WriteCritical("Unobserved task exception.", args.Exception);
+            args.SetObserved();
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            FileLogger.WriteCritical("Unhandled exception on a non-UI thread.",
+                args.ExceptionObject as Exception);
+        };
+
         ConfigureOodleNativeLibrary();
 
         try
