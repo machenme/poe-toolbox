@@ -248,7 +248,7 @@ MapNumberView.xaml.cs          507
 |---|---:|---:|---|
 | `Shared/FxPatchEngine.cs` | 5 | 4 | **确认漏 1 处**：`:1141` 的 Pass 1 只读预检 `using (var gd = ...)` 块无对应回收（回收点分布在 `:1029 / :1094 / :1123 / :1284`） |
 | `Shared/FxDiff.cs` | 2 | 1 | **无漏**：`:104` 一处回收覆盖 `:75-76` 两个流。原报告判定错误 |
-| `Plugins.AffixWorkbench/AffixDataService.cs` | 1 | 0 | **待确认**：`:205` `ConnectGameData` 打开后长期持有（工作台连接态），需判断是有意保留还是漏回收 |
+| `Plugins.AffixWorkbench/AffixDataService.cs` | 1 | 0 | **已确认为有意**（`07fdfa49c` 加注）：`ConnectGameData` 打开的索引常驻到下次 Connect 或 `Dispose`，因为列表要持续按行读 csd/uisettings，每次访问重开索引不现实；重连前与 `Dispose` 时都会释放。不是漏回收 |
 | `Shared/GameDataLoader.cs` | 4 | 2 | **误报**：4 个命中里含 2 处 XML 文档注释与 `switch` 分支，属计数噪声 |
 | 其余 6 个文件 | 各 1~2 | 配平 | 正常 |
 
