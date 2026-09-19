@@ -871,9 +871,6 @@ public partial class PriceTaggerView : UserControl
                     LogInfo(new string('─', 40));
                     if (succeeded)
                         LogSuccess($"Finished — {totalUpdated} updated, {totalSkipped} skipped in {dur}");
-                    // The index that was opened for this run is closed now — hand the few hundred MB
-                    // back without blocking the UI thread on the collection itself.
-                    MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
                 });
             }
         });

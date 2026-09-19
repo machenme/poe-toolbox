@@ -167,7 +167,6 @@ public partial class MapNumberView : UserControl
         _operationCts?.Cancel();
         _operationCts = null;
         SetBusy(false, "已释放游戏数据文件占用", false);
-        MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
     }
 
     private async void LoadButton_Click(object sender, RoutedEventArgs e)

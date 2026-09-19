@@ -3,7 +3,18 @@ using Xunit;
 
 namespace PoEToolbox.Tests;
 
+/// <summary>
+/// 把动到 <see cref="AffixColorScheme.StorageDirectoryOverride"/> 的测试串起来。
+/// 那是个进程级静态：两个测试类并行时各自的临时目录会互相覆盖，
+/// 于是 ListSchemeNames() 会看到对方写进去的方案（表现为偶发的「多出一条 官方原版」）。
+/// </summary>
+internal static class AffixSchemeTestCollection
+{
+    internal const string Name = "poetoolbox-affix-schemes";
+}
+
 /// <summary>上色方案的持久化与校验。通过 StorageDirectoryOverride 隔离到临时目录。</summary>
+[Collection(AffixSchemeTestCollection.Name)]
 public sealed class AffixColorSchemeTests : IDisposable
 {
     private readonly string _dir;

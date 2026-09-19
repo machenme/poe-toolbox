@@ -95,7 +95,6 @@ public partial class DataBrowserView : UserControl
         ClearPreview();
         SetBusy(false, "已释放游戏数据文件占用", false);
         UpdateFileLockButton();
-        MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
     }
 
     private bool ConfirmPendingChangesBeforeClose()

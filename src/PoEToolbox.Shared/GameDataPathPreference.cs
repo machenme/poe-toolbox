@@ -50,9 +50,5 @@ public static class GameDataPathPreference
         {
             return false;
         }
-        finally
-        {
-            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
-        }
     }
 }

@@ -17,8 +17,11 @@ public sealed class GameDataAccess : IDisposable
 {
     private static int _openInstanceCount;
     private static long _openSequence;
+    private static long _totalDisposes;
+    private static long _reclaimsScheduled;
     private bool _isDirectIndex;
     private bool _registeredOpen;
+    private bool _reclaimOnDispose = true;
     private int _disposed;
     private bool _pinWrites;
     private BundledGGPK? _ggpk;
@@ -33,6 +36,34 @@ public sealed class GameDataAccess : IDisposable
     public static event Action<bool>? LocksChanged;
 
     public static bool HasOpenLocks => Volatile.Read(ref _openInstanceCount) > 0;
+
+    /// <summary>Data sources currently handed out. Diagnostics and tests only.</summary>
+    public static int OpenInstanceCount => Volatile.Read(ref _openInstanceCount);
+
+    /// <summary>How many data sources have been opened since the process started.</summary>
+    public static long TotalOpens => Interlocked.Read(ref _openSequence);
+
+    /// <summary>How many instances have been disposed. Diagnostics and tests only.</summary>
+    public static long TotalDisposes => Interlocked.Read(ref _totalDisposes);
+
+    /// <summary>How many reclaims disposal has scheduled. Diagnostics and tests only.</summary>
+    public static long ReclaimsScheduled => Interlocked.Read(ref _reclaimsScheduled);
+
+    /// <summary>
+    /// Whether disposal schedules a memory reclaim. On by default, so letting go of game data
+    /// always hands the memory back without the caller having to ask.
+    /// </summary>
+    /// <remarks>
+    /// Turning it off is for a caller that manages the reclaim itself, and for tests that need to
+    /// control when the collection runs. A connection that is held open on purpose (the affix
+    /// workbench keeps one while it is connected) is unaffected either way: it only matters once
+    /// the instance is disposed.
+    /// </remarks>
+    public bool ReclaimOnDispose
+    {
+        get => _reclaimOnDispose;
+        set => _reclaimOnDispose = value;
+    }
 
     /// <summary>
     /// Builds the guard to hand to <see cref="MemoryReclaimer.Reclaim(Func{bool})"/> after releasing
@@ -530,10 +561,24 @@ public sealed class GameDataAccess : IDisposable
         _index = null;
         _mappedIndex = null;
 
+        Interlocked.Increment(ref _totalDisposes);
+
         if (_registeredOpen && Interlocked.Decrement(ref _openInstanceCount) == 0)
         {
             LocksChanged?.Invoke(false);
             FileLogger.App.Info("Game data locks released (no open instances).");
+        }
+
+        // Releasing game data has to hand the memory back. Doing it here rather than at every call
+        // site is what makes it impossible to forget: opening data and disposing it is the whole
+        // contract, and an early return out of the using block still reclaims.
+        //
+        // Must come after the count is decremented: CreateAbortCheck() reads HasOpenLocks, and
+        // calling it earlier would let this instance abort its own reclaim.
+        if (_reclaimOnDispose)
+        {
+            Interlocked.Increment(ref _reclaimsScheduled);
+            MemoryReclaimer.Reclaim(CreateAbortCheck());
         }
     }
 }

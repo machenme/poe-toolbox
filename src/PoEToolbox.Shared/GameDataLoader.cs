@@ -34,10 +34,10 @@ public enum GameDataMode
 /// background thread — opening, the callback's own parsing/writing, and disposal — rather than only
 /// wrapping the open call.
 /// <para>
-/// Every overload also schedules a <see cref="MemoryReclaimer.Reclaim(Func{bool})"/> once the data is
-/// closed, so the ~1 GB an index costs does not sit on the heap until the next chance collection.
-/// That is safe to do per call because <c>MemoryReclaimer</c> coalesces: repeated uses merge into one
-/// chain, and the chain stops as soon as another module has game data open.
+/// 释放游戏数据时 <see cref="GameDataAccess.Dispose"/> 自己会排一次
+/// <see cref="MemoryReclaimer.Reclaim(Func{bool})"/>，所以这里的每个重载都不必再手工请求：
+/// ~1 GB 的索引不会在堆上等到下一次自然回收。新的直接 <c>Open*</c> 调用点同样自动覆盖，
+/// 不需要补任何东西。
 /// </para>
 /// </remarks>
 public static class GameDataLoader
@@ -90,7 +90,6 @@ public static class GameDataLoader
             finally
             {
                 gd.Dispose();
-                RequestReclaim();
             }
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -115,7 +114,6 @@ public static class GameDataLoader
             finally
             {
                 gd.Dispose();
-                RequestReclaim();
             }
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -135,7 +133,6 @@ public static class GameDataLoader
         finally
         {
             gd.Dispose();
-            RequestReclaim();
         }
     }
 
@@ -154,16 +151,8 @@ public static class GameDataLoader
         finally
         {
             gd.Dispose();
-            RequestReclaim();
         }
     }
-
-    /// <summary>
-    /// Asks for the memory back now that the data is closed. Only fires when the open actually
-    /// happened, and the guard keeps another module's open index out of the collection.
-    /// </summary>
-    private static void RequestReclaim()
-        => MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
 
     /// <summary>
     /// Opens data the caller keeps and disposes itself (the data browser, which releases on a

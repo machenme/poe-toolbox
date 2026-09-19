@@ -113,11 +113,6 @@ public static class IndexBackupService
             FileLogger.App.Error($"打开索引核对补丁引用失败，基线保持不变：{ex.Message}");
             return false;
         }
-        finally
-        {
-            // Opened outside GameDataLoader, so the reclaim has to be requested here as well.
-            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
-        }
     }
 
     /// <summary>
@@ -244,20 +239,13 @@ public static class IndexBackupService
         if (!openContainerIfNeeded)
             return null;
 
-        try
+        using (var gameData = GameDataAccess.OpenReadOnlyMapped(resolvedGameData))
         {
-            using var gameData = GameDataAccess.OpenReadOnlyMapped(resolvedGameData);
             Directory.CreateDirectory(Path.GetDirectoryName(baselinePath)!);
             var created = EnsureBaseline(baselinePath, gameData);
             FileLogger.App.Info(
                 $"Original index backup {(created ? "created" : "already existed")}: {baselinePath}");
             return baselinePath;
-        }
-        finally
-        {
-            // Opened outside GameDataLoader (the patch plugin asks for the baseline on startup),
-            // so the reclaim has to be requested here too.
-            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
         }
     }
 

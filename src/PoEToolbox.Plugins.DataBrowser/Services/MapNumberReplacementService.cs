@@ -50,10 +50,8 @@ public static class MapNumberReplacementService
         }
 
         var foreign = new List<string>();
-        try
+        using (var baseline = GameDataAccess.OpenReadOnlyMapped(baselinePath, Path.GetDirectoryName(resolved)))
         {
-            // 基线里的 bundle 路径相对 Bundles2，bundle 文件在游戏目录，必须显式指过去。
-            using var baseline = GameDataAccess.OpenReadOnlyMapped(baselinePath, Path.GetDirectoryName(resolved));
             foreach (var path in paths)
             {
                 if (!gameData.TryGetFile(path, out var record) || record is null)
@@ -65,11 +63,6 @@ public static class MapNumberReplacementService
                 if (!record.Read().Span.SequenceEqual(original.Read().Span))
                     foreign.Add(path);
             }
-        }
-        finally
-        {
-            // 基线索引常驻映射 ~100MB+，用完立刻回收（新增直接 Open* 必须补 Reclaim）。
-            MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
         }
 
         return new MapNumberForeignContent(true, foreign);

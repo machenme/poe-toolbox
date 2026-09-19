@@ -55,6 +55,9 @@ public static class MemoryReclaimer
     /// <summary>Number of chains started so far. Diagnostics and tests only.</summary>
     internal static int ChainStarts;
 
+    /// <summary>How many times Reclaim has been asked for, including requests merged into a running chain. Diagnostics and tests only.</summary>
+    internal static int Requests;
+
     /// <summary>Number of collection passes run so far. Diagnostics and tests only.</summary>
     internal static int Passes;
 
@@ -78,6 +81,8 @@ public static class MemoryReclaimer
     {
         lock (Gate)
         {
+            Interlocked.Increment(ref Requests);
+
             if (shouldAbort is not null)
                 AbortChecks.Add(shouldAbort);
 

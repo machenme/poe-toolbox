@@ -124,9 +124,8 @@ public static class PatchBundleRepair
             }
             finally
             {
+                // 基线索引 ~1.1GB 常驻映射。dispose 会自动排回收，这里不必再手工请求。
                 baseline.Dispose();
-                // 基线索引 ~1.1GB 常驻映射，用完立刻回收（新增直接 Open* 必须补 Reclaim）。
-                MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
             }
         });
     }

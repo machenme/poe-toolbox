@@ -68,6 +68,5 @@ public class PriceTaggerPlugin : IPlugin
         _view = null;                  // drop the plugin's reference first ...
         view.Dispose();
         view.ReleaseMemory();          // ... then let the view drop its own data
-        MemoryReclaimer.Reclaim(GameDataAccess.CreateAbortCheck());
     }
 }
