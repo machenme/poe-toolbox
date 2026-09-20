@@ -68,7 +68,6 @@
     <!-- ═══ Slider (property-level; default template kept) ═ -->
     <Style TargetType="Slider">
         <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
-        <Setter Property="Margin" Value="0,4"/>
     </Style>
 
 </ResourceDictionary>

@@ -44,12 +44,6 @@
     <CornerRadius x:Key="CornerLg">10</CornerRadius>
     <CornerRadius x:Key="CornerPill">16</CornerRadius>
 
-    <sys:Double x:Key="SpaceXs">4</sys:Double>
-    <sys:Double x:Key="SpaceSm">8</sys:Double>
-    <sys:Double x:Key="SpaceMd">12</sys:Double>
-    <sys:Double x:Key="SpaceLg">16</sys:Double>
-    <sys:Double x:Key="SpaceXl">24</sys:Double>
-
     <sys:Double x:Key="ControlHSm">28</sys:Double>
     <sys:Double x:Key="ControlHMd">32</sys:Double>
     <sys:Double x:Key="ControlHLg">36</sys:Double>

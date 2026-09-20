@@ -58,9 +58,6 @@
     <Style TargetType="ProgressBar">
         <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Height" Value="6"/>
     </Style>
 
     <!-- ═══ ToolTip ════════════════════════════════════════ -->
@@ -77,7 +74,7 @@
         <Setter Property="Background" Value="{DynamicResource CardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-        <Setter Property="Padding" Value="{DynamicResource SpaceMd}"/>
+        <Setter Property="Padding" Value="12"/>
         <Setter Property="Margin" Value="0,0,0,12"/>
     </Style>
 
