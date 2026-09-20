@@ -5,6 +5,7 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
+/// 不变式 13（docs/ARCHITECTURE.md §4）：整包替换型的备份与基线复用，是「revert 不承诺字节还原」那条实测的落点。
 /// 整包替换型补丁：zip（或目录）里直接带 <c>_.index.bin</c> 与其他 bundle 文件，作者没有给 patch.json。
 /// 约定：以 <c>_.index.bin</c> 所在那层为根（作者打包时常带一层 bundles2/），其余文件按相对路径
 /// 落进游戏索引目录；应用前先把同名原文件备份到 <c>backup/&lt;补丁名&gt;/</c>，

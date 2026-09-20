@@ -115,6 +115,29 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 | 13 | **`revert` 只把语义还原成「未打」，不承诺字节回到原版**；逐字节还原只有 `restore`。实测：文本替换型 revert 后索引与基线 SHA 不同（bundle 885→990 B），整包替换型 revert 后文件副本仍在（bundle 涨到 2,786,283 B），`purge`/`cleanup` 也各自只回收无人引用的部分。UI 文案已按「启用 / 还原 / 卸载 / 彻底还原游戏客户端」四档分开措辞，别合并也别写成「撤销」。另一条实测：打一个补丁会让 115 MB 的索引撑大 4.9%~6.4%，且打过补丁的索引与 Steam 的校验记录不一致——Steam 再校验一次就把索引换回原版而账本还在，所以不变式 4 的三态判定必须读实际索引内容 | 本机写路径实测，`docs/SPEC-engineering-hardening.md` §9.1 |
 | 14 | **游戏数据文件没有「自动检测」这条路径**：`Content.ggpk` / `_.index.bin` 只来自用户亲手选过一次，之后存在 `config.json` 的 `CurrentGameDataPath` 里沿用。空配置读出来必须是 `null`，各视图自己拦下并提示「请先选择游戏数据」；`GameDataLoader.ResolvePath` 拿到空路径直接抛 `InvalidOperationException`，**不再回退去扫注册表或默认安装目录**。理由不是洁癖：静默猜一份客户端意味着补丁可能打进用户没打算动的游戏里，而且一旦猜错，补丁账本与 `Bundles2\backup\` 基线都记在那份客户端上。`PoeDetector` 因此只剩进程/窗口检测 | `Shared/GameDataPathPreference.cs`、`Shared/GameDataLoader.cs`、`tests/.../GameDataPathPreferenceTests.cs` |
 
+### 4.1 谁来守它
+
+编号是双向才查得动的：文档指向代码靠上表的「依据」列，代码指回文档靠实现点上的 `不变式 N（docs/ARCHITECTURE.md §4）` 锚点注释。两头都在位时，`grep -rn "不变式 4" src tests` 一次就能同时拿到实现与验证两端。
+
+| # | 守它的测试 | 说明 |
+|---|---|---|
+| 1 | 无 | 落 `Ui/FxEngineRunner`，测试工程按 §2 有意不引用 `Ui`，结构性测不到 |
+| 2 | 无 | 同上（`Ui` + `App`） |
+| 3 | `GameDataDisposalTests`、`MemoryReclaimerTests` | 反向有效性由 PRD A3 把关（注释掉一处回收必须变红） |
+| 4 | `FxPatchPropertyTests`（9 条性质） | |
+| 5 | `PatchBundleRepairTests` | |
+| 6 | 无 | 落 `App/PluginManager`，同上 |
+| 7 | 无 | 落 `Ui/IUiPlugin`；但 `Abstractions` 一旦引用 WPF 就当场编译失败（§1 第三条） |
+| 8 | 编译保证 | `InternalsVisibleTo` 写错，测试读不到 internal 直接编译不过 |
+| 9 | `AssemblyInfo.cs` 自身 | 该文件即这条的落点 |
+| 10 | `ConfigServiceTests` | |
+| 11 | `CapturedDebugFail` 的各调用方 | 只有 CI 的 Debug 腿跑得到 |
+| 12 | `PluginReferenceGuardTests` | 读 9 个插件 csproj 的引用列表；实测 14ms 绿，人为加一行跨插件引用即红 |
+| 13 | `FxPatchPropertyTests`、`FxRawPackPatchTests` | **只守语义**。撑大 4.9%~6.4% 那组字节数字是 `SPEC` §9.1 的一次性本机实测，没有可重跑的基线 |
+| 14 | `GameDataPathPreferenceTests`、`GameDataLoaderTests` | |
+
+14 条里 9 条有自动化、1 条（8）由编译保证、4 条（1、2、6、7）落在测试工程有意不引用的 `App`/`Ui` 层。那 4 条只能靠人工回归（PRD §11 D6 那份目视清单），**别把它们当成「已被测试守住」**。
+
 ## 5. 落盘位置与内嵌资源
 
 | 内容 | 位置 | 说明 |

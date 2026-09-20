@@ -10,6 +10,7 @@ namespace PoEToolbox.Tests;
 /// 一旦哪天又允许「找不到就读注册表/默认安装目录」，用户会在毫不知情的情况下把补丁打进另一份客户端。
 /// 所以这里守的不是解析算法，而是「空配置读出来必须是 null」这件事。
 /// </summary>
+// 不变式 14（docs/ARCHITECTURE.md §4）：守「空配置读出 null、不回退自动探测」。
 [Collection(ConfigPathTestCollection.Name)]
 public sealed class GameDataPathPreferenceTests : IDisposable
 {

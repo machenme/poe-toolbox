@@ -5,6 +5,7 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
+/// 不变式 5（docs/ARCHITECTURE.md §4）：修复链是「写路径必过备份」这条规则的另一半。
 /// 悬空 PATCHED bundle 修复的引擎级集成测试：SeedIndex 造最小 Bundles2 索引 → 引擎应用词缀补丁
 /// （文件重定向进 PATCHED bundle、基线自动创建）→ 删除 PATCHED 目录模拟「恢复默认游戏数据」，
 /// 验证干净基线可自动修复、被污染的基线不再"假修复"（2026-09-16 词缀上色悬空 v12 bundle 的根因）。

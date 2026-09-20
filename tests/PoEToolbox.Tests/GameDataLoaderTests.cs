@@ -22,6 +22,7 @@ namespace PoEToolbox.Tests;
 /// singleton, so the assertions on <see cref="GameDataAccess.HasOpenLocks"/> and on the reclaim
 /// counters are only safe while these two classes run one at a time.
 /// </remarks>
+// 不变式 14（docs/ARCHITECTURE.md §4）：ResolvePath 拿到空路径直接抛，不回扫注册表。
 [Collection(GameDataTestCollection.Name)]
 public sealed class GameDataLoaderTests : IDisposable
 {

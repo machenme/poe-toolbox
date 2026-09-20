@@ -1,0 +1,114 @@
+name: "报错 / Bug"
+description: "工具跑出错、结果不对、或怀疑游戏文件被动过。填写前先按 README「出错怎么办」自救一节试一遍。"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **报之前先做一件事：留现场。**
+        如果你打算去跑启动器的「验证 / 修复游戏文件」，或工具里的「恢复默认游戏数据」，**先把
+        `Bundles2\_.index.bin` 复制一份存起来**。这两个动作都会把索引换回原版，而索引正是判断
+        「规则跑的是哪套」的唯一证据——覆盖之后这个案子基本就查不下去了（本项目有过一次真实教训：
+        一个冲突判定没能复现，现场就這麼没了，至今仍是开放项，见 `docs/SPEC-engineering-hardening.md` §9.1）。
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 出问题的功能
+      options:
+        - 词缀上色（Affix Workbench）
+        - 特效补丁（Fx Patch）
+        - 数据浏览 / DAT 编辑
+        - PoE2 字体
+        - 中文补丁（PoeCnPatch）
+        - 价格标签（Price Tagger）
+        - 地图数字（Term Translator / 其他）
+        - 打包 / 安装 / 启动
+        - 其他（在下面说明）
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本与客户端
+      description: 工具版本（主窗「关于」里那个）+ 哪个游戏 + 客户端来源
+      placeholder: "例：0.2.3 / PoE2 / Steam"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 操作序列
+      description: 从打开工具开始，一步一步点到出错那一步。少一步就可能复现不出来
+      placeholder: |
+        1. 打开「词缀上色」，点「连接游戏数据」
+        2. 选方案「官方原版」，点「应用」
+        3. 关闭工具，重开，再点「应用」
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象与提示原文
+      description: 弹窗或列表里的中文提示**原样粘**，不要转述；同时写清你期望看到什么
+      placeholder: |
+        实际：报「Could not find a part of the path …PATCHED\affix-workbench_v12.bundle.bin」
+        期望：应用成功，状态列显示「已应用」
+    validations:
+      required: true
+
+  - type: input
+    id: index-sha
+    attributes:
+      label: "`_.index.bin` 的 SHA-256 前 8 位"
+      description: 出问题的当时那份索引的哈希。取法：`certutil -hashfile "游戏目录\Bundles2\_.index.bin" SHA256`
+      placeholder: "例：680a7dc1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: integrity-check
+    attributes:
+      label: 出问题之前，有没有跑过客户端完整性校验或「恢复默认游戏数据」？
+      description: 这两个动作会删掉已打补丁的文件并把索引换回原版，而工具的补丁账本可能还在——现象完全不同，必须先分清
+      options:
+        - 没跑过
+        - 跑过启动器的「验证 / 修复游戏文件」
+        - 跑过工具里的「还原 / 卸载 / 彻底还原游戏客户端」
+        - 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: dirs
+    attributes:
+      label: 游戏目录现状
+      description: 只看这两个位置，把里面有什么写出来（有几个目录、大概多大就够，不用递归）
+      placeholder: |
+        Bundles2\backup\ ：有 affix-workbench_v12\，里面有 _.index.bin
+        PATCHED\ ：目录不存在
+        （位置：<游戏目录>\Bundles2\）
+    validations:
+      required: false
+
+  - type: textarea
+    id: log
+    attributes:
+      label: 日志相关行
+      description: "`%LocalAppData%\\PoEToolbox\\logs\\poe-toolbox-当天日期.log` 里，出错时刻前后十行左右"
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: evidence
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已经复制了一份 `_.index.bin` 存着，暂时没去跑客户端校验
+          required: true
+        - label: 我读过 README 的「出错怎么办」一节，按里面的还原入口试过
+          required: false

@@ -17,6 +17,7 @@ internal static class GameDataTestCollection
 /// <summary>
 /// Covers the scheduling contract <see cref="GameDataLoader"/> depends on: a reclaim is a singleton
 /// chain, so asking for one after every short-lived use cannot pile up overlapping chains of forced
+/// 不变式 3（docs/ARCHITECTURE.md §4）。
 /// gen2 collections.
 /// </summary>
 [Collection(GameDataTestCollection.Name)]

@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\official-uisettings-fonts.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PoEToolbox.Abstractions\PoEToolbox.Abstractions.csproj" />
     <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
     <ProjectReference Include="..\PoEToolbox.Ui\PoEToolbox.Ui.csproj" />

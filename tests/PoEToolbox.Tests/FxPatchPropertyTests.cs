@@ -11,6 +11,7 @@ namespace PoEToolbox.Tests;
 /// 可回滚、重复执行安全、多个补丁互不干扰。
 /// 它们是拆分 <see cref="FxPatchEngine"/> 的准入条件：先有网再拆。
 /// </summary>
+// 不变式 4、13（docs/ARCHITECTURE.md §4）：这三类性质是补丁引擎的准入条件，改三态判定或 revert 语义先看这里。
 [Collection(GameDataTestCollection.Name)]
 public sealed class FxPatchPropertyTests : IDisposable
 {

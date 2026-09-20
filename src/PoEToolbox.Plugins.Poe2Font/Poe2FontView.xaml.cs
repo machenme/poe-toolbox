@@ -1,8 +1,11 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Media;
 using PoEToolbox.Shared;
 using PoEToolbox.Ui;
@@ -12,7 +15,10 @@ namespace PoEToolbox.Plugins.Poe2Font;
 
 public partial class Poe2FontView : UserControl
 {
-    private bool _updatingSize;
+    private const string SampleNote = "示例文字按写入后的字号渲染。";
+
+    private readonly ObservableCollection<Poe2FontPreviewRow> _rows = [];
+    private ListCollectionView? _rowsView;
     private bool _initialized;
     private readonly IEventBus _eventBus;
     private string? _gameDataPath;
@@ -20,11 +26,14 @@ public partial class Poe2FontView : UserControl
 
     private sealed record FontOption(string DisplayName, string RenderName, FontFamily FontFamily);
 
+    private sealed record ScaleOption(string Label, double Width);
+
     public Poe2FontView(IEventBus? eventBus = null)
     {
         _eventBus = eventBus ?? new EventBus();
         InitializeComponent();
         _eventBus.Subscribe<GameContextChanged>(OnGameContextChanged);
+
         var fonts = Fonts.SystemFontFamilies
             .Select(font => new FontOption(GetLocalizedFontName(font), font.Source, font))
             .Where(font => !string.IsNullOrWhiteSpace(font.DisplayName))
@@ -43,6 +52,28 @@ public partial class Poe2FontView : UserControl
 
         TypefaceBox.AddHandler(TextBoxBase.TextChangedEvent,
             new TextChangedEventHandler(TypefaceBox_TextChanged));
+
+        ResolutionBox.ItemsSource = new ScaleOption[]
+        {
+            new("2560 宽（官方基准）", 2560),
+            new("1920 宽（1080p）", 1920),
+            new("1600 宽", 1600),
+            new("1280 宽", 1280),
+            new("3840 宽（4K）", 3840),
+        };
+        ResolutionBox.SelectedIndex = 0;
+
+        foreach (var entry in Poe2FontTemplate.Default.Entries)
+            _rows.Add(new Poe2FontPreviewRow(entry, OnRowEdited));
+
+        _rowsView = new ListCollectionView(_rows)
+        {
+            Filter = o => o is Poe2FontPreviewRow row
+                && (ChangedOnlyBox?.IsChecked != true || row.IsChanged)
+                && row.Matches(SearchBox?.Text ?? string.Empty),
+        };
+        EntryList.ItemsSource = _rowsView;
+
         _initialized = true;
         UpdatePreview();
     }
@@ -87,67 +118,142 @@ public partial class Poe2FontView : UserControl
 
     private void FontSettingChanged(object sender, RoutedEventArgs e)
     {
-        if (!_initialized || _updatingSize)
-            return;
-
-        if (ReferenceEquals(sender, SizeScaleBox)
-            && TryReadScale(out var scale)
-            && scale >= SizeScaleSlider.Minimum
-            && scale <= SizeScaleSlider.Maximum)
-        {
-            _updatingSize = true;
-            SizeScaleSlider.Value = scale;
-            _updatingSize = false;
-        }
-
-        UpdatePreview();
+        if (_initialized)
+            UpdatePreview();
     }
 
     private void TypefaceBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_initialized && !_updatingSize)
+        if (_initialized)
             UpdatePreview();
     }
 
-    private void SizeScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void IncreaseOffset_Click(object sender, RoutedEventArgs e) => ApplyOffsetFromBox(1);
+
+    private void DecreaseOffset_Click(object sender, RoutedEventArgs e) => ApplyOffsetFromBox(-1);
+
+    private void ApplyOffsetFromBox(int direction)
     {
-        if (!_initialized || SizeScaleBox is null || _updatingSize)
+        if (!TryReadInt(OffsetBox?.Text, out var magnitude))
             return;
 
-        _updatingSize = true;
-        SizeScaleBox.Text = e.NewValue.ToString("0", CultureInfo.InvariantCulture);
-        _updatingSize = false;
+        CommitBatch(Poe2FontBatch.Shift(_rows, direction * magnitude), "整体偏移");
+    }
+
+    private void ApplyPercent_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryReadInt(PercentBox?.Text, out var percent) || percent is < 10 or > 500)
+        {
+            PreviewStatus.Text = "等比值需在 10 到 500 之间";
+            return;
+        }
+
+        CommitBatch(Poe2FontBatch.ScalePercent(_rows, percent), "等比缩放");
+    }
+
+    private void ResetSizes_Click(object sender, RoutedEventArgs e)
+        => CommitBatch(Poe2FontBatch.ResetToOfficial(_rows), "已还原官方字号");
+
+    private void CommitBatch(int affected, string label)
+    {
+        _rowsView?.Refresh();
+        UpdatePreview();
+        StatusText.Text = $"{label}：影响 {affected} 项。";
+    }
+
+    private void OnRowEdited(Poe2FontPreviewRow row)
+    {
+        row.UpdatePreviewSize(SelectedWidth(), DeviceScale, Poe2FontTemplate.Default.BaseResolution);
         UpdatePreview();
     }
 
-    private void ValidatePath()
+    private void OffsetBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        var path = _gameDataPath ?? GameDataPathPreference.Get() ?? string.Empty;
-        var valid = _gameKind == PoeGameKind.Poe2
-            && File.Exists(path)
-            && (path.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith("_.index.bin", StringComparison.OrdinalIgnoreCase));
-        PathStatus.Text = valid
-            ? "已选择数据文件。应用时会检查 POE2 标识和两个字体 XML。"
-            : "请先在主窗口选择 POE2 游戏数据。";
-        PathStatus.Foreground = FindResource(valid ? "SuccessBrush" : "WarningBrush") as System.Windows.Media.Brush;
-        ApplyButton.IsEnabled = valid && TryReadOptions(out _);
-        RestoreButton.IsEnabled = valid && Poe2FontService.HasBaseline(path);
+        if (_initialized)
+            UpdateOffsetHint();
     }
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => _rowsView?.Refresh();
+
+    private void ChangedOnly_Changed(object sender, RoutedEventArgs e) => _rowsView?.Refresh();
+
+    private void ResolutionBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdatePreview();
+
+    private double SelectedWidth()
+        => ResolutionBox.SelectedItem is ScaleOption option ? option.Width : Poe2FontTemplate.Default.BaseResolution;
+
+    private double DeviceScale
+        => PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+
+    private IReadOnlyDictionary<string, int> CurrentSizes() => Poe2FontBatch.ToSizeMap(_rows);
 
     private void UpdatePreview()
     {
+        if (!_initialized)
+            return;
+
         var typeface = GetSelectedTypeface();
-        var validScale = TryReadScale(out var value) && value is >= 25 and <= 300;
-        var scale = validScale ? value : 100;
+        var fontFamily = ResolveFontFamily(typeface);
+        EntryList.FontFamily = fontFamily ?? SystemFonts.MessageFontFamily;
+        foreach (var row in _rows)
+            row.UpdatePreviewSize(SelectedWidth(), DeviceScale, Poe2FontTemplate.Default.BaseResolution);
+
+        var changed = CurrentSizes();
         PreviewText.Text = string.IsNullOrWhiteSpace(typeface)
             ? "请输入字体类型"
-            : $"{typeface} · {scale:0.##}%";
-        PreviewText.Foreground = FindResource(string.IsNullOrWhiteSpace(typeface)
-            ? "ErrorBrush"
-            : "TextPrimaryBrush") as System.Windows.Media.Brush;
-        ApplyPreviewFont(typeface, scale, validScale);
+            : $"{typeface} · 相对官方改动 {changed.Count} 项";
+        var brush = FindResource(string.IsNullOrWhiteSpace(typeface) || fontFamily is null
+            ? "WarningBrush"
+            : "TextPrimaryBrush") as Brush;
+        PreviewText.Foreground = brush;
+        PreviewStatus.Text = fontFamily is null
+            ? $"本机未安装「{typeface}」，下方仍用系统字体显示"
+            : $"{_rows.Count} 条 · {SampleNote}";
+        PreviewStatus.Foreground = brush;
+        UpdateOffsetHint();
         ValidatePath();
+    }
+
+    private void UpdateOffsetHint()
+    {
+        if (OffsetHint is null)
+            return;
+
+        var changed = CurrentSizes();
+        OffsetHint.Text = changed.Count == 0
+            ? "当前全部保持官方字号。"
+            : $"已改 {changed.Count} 项，例如 {Summarize(changed)}。";
+    }
+
+    private string Summarize(IReadOnlyDictionary<string, int> changed)
+    {
+        var first = _rows.FirstOrDefault(row => row.IsChanged);
+        return first is null ? "—" : $"{first.Id} {first.OfficialSize}→{first.TargetSize}";
+    }
+
+    private FontFamily? ResolveFontFamily(string typeface)
+    {
+        if (string.IsNullOrWhiteSpace(typeface))
+            return null;
+
+        if (TypefaceBox.SelectedItem is FontOption option
+            && string.Equals(typeface, option.RenderName, StringComparison.OrdinalIgnoreCase))
+            return option.FontFamily;
+
+        try
+        {
+            var family = new FontFamily(typeface);
+            return family.FamilyNames.Count > 0
+                || Fonts.SystemFontFamilies.Any(available =>
+                    string.Equals(available.Source, typeface, StringComparison.OrdinalIgnoreCase))
+                ? family
+                : null;
+        }
+        catch (ArgumentException)
+        {
+            // 字体名可能来自用户手输，非法时用系统字体回显并标黄，用户看得见，不必记日志。
+            return null;
+        }
     }
 
     private string GetSelectedTypeface()
@@ -161,69 +267,40 @@ public partial class Poe2FontView : UserControl
         return TypefaceBox?.Text.Trim() ?? string.Empty;
     }
 
-    private void ApplyPreviewFont(string typeface, double scale, bool validScale)
-    {
-        var fontOption = TypefaceBox.SelectedItem as FontOption;
-        FontFamily? fontFamily = fontOption is not null
-            && string.Equals(typeface, fontOption.RenderName, StringComparison.OrdinalIgnoreCase)
-            ? fontOption.FontFamily
-            : null;
-        if (fontFamily is null && !string.IsNullOrWhiteSpace(typeface))
-        {
-            try
-            {
-                fontFamily = new FontFamily(typeface);
-            }
-            catch (ArgumentException)
-            {
-                // 字体名来自配置文件，非法时用 WarningBrush + 系统字体回显，用户看得见，不必记日志。
-            }
-        }
-
-        var previewBrush = FindResource(fontFamily is null ? "WarningBrush" : "TextPrimaryBrush") as Brush;
-        var fallbackFont = SystemFonts.MessageFontFamily;
-        foreach (var preview in new[] { PreviewLarge, PreviewNormal, PreviewSmall, PreviewTiny })
-        {
-            preview.FontFamily = fontFamily ?? fallbackFont;
-            preview.Foreground = previewBrush;
-        }
-
-        PreviewLarge.FontSize = ScalePreviewSize(38, scale, validScale);
-        PreviewNormal.FontSize = ScalePreviewSize(28, scale, validScale);
-        PreviewSmall.FontSize = ScalePreviewSize(22, scale, validScale);
-        PreviewTiny.FontSize = ScalePreviewSize(17, scale, validScale);
-        PreviewStatus.Text = fontFamily is null
-            ? "字体不可用"
-            : validScale ? "正在使用系统字体预览" : "字号倍率无效";
-        PreviewStatus.Foreground = previewBrush;
-    }
-
-    private static double ScalePreviewSize(double baseSize, double scale, bool validScale)
-        => baseSize * (validScale ? scale : 100) / 100.0;
+    private bool TryReadInt(string? text, out int value)
+        => int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value)
+            || int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.CurrentCulture, out value);
 
     private bool TryReadOptions(out Poe2FontOptions options)
     {
-        options = new Poe2FontOptions(GetSelectedTypeface(), 100);
-        if (string.IsNullOrWhiteSpace(options.Typeface) || !TryReadScale(out var scale))
-            return false;
-
-        options = options with { SizeScalePercent = scale };
-        return scale is >= 25 and <= 300;
+        var typeface = GetSelectedTypeface();
+        options = new Poe2FontOptions(typeface, CurrentSizes());
+        return !string.IsNullOrWhiteSpace(typeface);
     }
 
-    private bool TryReadScale(out double scale)
+    private void ValidatePath()
     {
-        var text = SizeScaleBox?.Text.Trim() ?? string.Empty;
-        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out scale)
-            || double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out scale);
+        if (ApplyButton is null)
+            return;
+
+        var path = _gameDataPath ?? GameDataPathPreference.Get() ?? string.Empty;
+        var valid = _gameKind == PoeGameKind.Poe2
+            && File.Exists(path)
+            && (path.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith("_.index.bin", StringComparison.OrdinalIgnoreCase));
+        PathStatus.Text = valid
+            ? "已选择数据文件。应用时会检查 POE2 标识和两个字体 XML。"
+            : "请先在主窗口选择 POE2 游戏数据。";
+        PathStatus.Foreground = FindResource(valid ? "SuccessBrush" : "WarningBrush") as Brush;
+        ApplyButton.IsEnabled = valid && TryReadOptions(out _);
+        RestoreButton.IsEnabled = valid && Poe2FontService.HasBaseline(path);
     }
 
     private async void Apply_Click(object sender, RoutedEventArgs e)
     {
         if (!TryReadOptions(out var options))
         {
-            MessageBox.Show("请输入有效字体类型，并将字号倍率设置为 25 到 300。", "配置无效",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("请输入有效字体类型。", "配置无效", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -233,9 +310,15 @@ public partial class Poe2FontView : UserControl
             UiStatus.Set(PathStatus, "请先在主窗口选择有效的游戏数据文件。", UiStatus.Kind.Warning);
             return;
         }
+
+        var changed = options.Sizes;
+        var preview = string.Join('\n', _rows.Where(row => row.IsChanged).Take(10)
+            .Select(row => $"  {row.ScopeDisplay}/{row.Id}：{row.OfficialSize} → {row.TargetSize}"));
         var confirm = MessageBox.Show(
-            $"将为当前客户端应用以下字体配置：\n\n字体：{options.Typeface}\n字号倍率：{options.SizeScalePercent:0.##}%\n\n"
-            + "首次应用会保存两个目标文件的原始内容，并写入新的 Bundle/索引。是否继续？",
+            $"将为当前客户端应用以下字体配置：\n\n字体：{options.Typeface}\n"
+            + $"相对官方字号改动：{changed.Count} 项\n"
+            + (preview.Length > 0 ? $"\n{preview}{(_rows.Count(row => row.IsChanged) > 10 ? "\n  ……" : "")}\n" : "\n")
+            + "\n首次应用会保存两个目标文件的原始内容，并写入新的 Bundle/索引。是否继续？",
             "应用 POE2 字体配置", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.OK)
             return;
@@ -244,10 +327,14 @@ public partial class Poe2FontView : UserControl
         try
         {
             var result = await Task.Run(() => Poe2FontService.Apply(path, options));
-            ResultText.Text = $"✅ 已应用：{result.Typeface}，字号倍率 {result.SizeScalePercent:0.##}%。\n"
+            ResultText.Text = $"✅ 已应用：{result.Typeface}，相对官方改动 {result.Changes.Count} 项。"
+                + (result.UnknownEntryCount > 0
+                    ? $"另有 {result.UnknownEntryCount} 项不在内置模板内，已保持原样。\n"
+                    : "\n")
                 + $"原始字体备份：{result.BaselinePath}";
             UiStatus.Set(PathStatus, "字体配置已写入。启动游戏前请释放其他工具对游戏数据文件的占用。", UiStatus.Kind.Success);
-            FileLogger.App.Info($"Poe2Font applied: typeface={result.Typeface}, scale={result.SizeScalePercent:0.##}%.");
+            FileLogger.App.Info(
+                $"Poe2Font applied: typeface={result.Typeface}, changes={result.Changes.Count}, unknown={result.UnknownEntryCount}.");
             RestoreButton.IsEnabled = true;
         }
         catch (Exception ex)
@@ -255,8 +342,7 @@ public partial class Poe2FontView : UserControl
             UiStatus.Set(PathStatus, "❌ 字体配置失败，详见错误提示。", UiStatus.Kind.Error);
             FileLogger.App.Error("Poe2Font apply failed.", ex);
             ResultText.Text = ex.Message;
-            MessageBox.Show($"字体配置失败：\n{ex.Message}", "操作失败",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"字体配置失败：\n{ex.Message}", "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -291,8 +377,7 @@ public partial class Poe2FontView : UserControl
             UiStatus.Set(PathStatus, "❌ 恢复失败，详见错误提示。", UiStatus.Kind.Error);
             FileLogger.App.Error("Poe2Font restore failed.", ex);
             ResultText.Text = ex.Message;
-            MessageBox.Show($"恢复失败：\n{ex.Message}", "操作失败",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"恢复失败：\n{ex.Message}", "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -304,9 +389,11 @@ public partial class Poe2FontView : UserControl
     {
         StatusText.Text = status;
         TypefaceBox.IsEnabled = !busy;
-        SizeScaleBox.IsEnabled = !busy;
-        SizeScaleSlider.IsEnabled = !busy;
+        OffsetBox.IsEnabled = !busy;
+        PercentBox.IsEnabled = !busy;
+        ResetButton.IsEnabled = !busy;
         ApplyButton.IsEnabled = !busy;
+        EntryList.IsEnabled = !busy;
         var path = _gameDataPath ?? GameDataPathPreference.Get();
         RestoreButton.IsEnabled = !busy && path is not null && Poe2FontService.HasBaseline(path);
     }

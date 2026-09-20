@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 先看 README 的「出错怎么办」
+    url: https://github.com/machenme/poe-toolbox#%E5%87%BA%E9%94%99%E6%80%8E%E4%B9%88%E5%8A%9E
+    about: 大部分报错（尤其补丁文件被客户端校验冲掉）有自救路径，那一节比开 issue 快

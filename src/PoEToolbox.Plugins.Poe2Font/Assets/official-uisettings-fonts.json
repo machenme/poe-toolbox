@@ -1,0 +1,1438 @@
+{
+    "source":  "metadata/ui/uisettings.xml (official, unmodified)",
+    "baseResolution":  2560,
+    "generatedAt":  "2026-09-20",
+    "fonts":  [
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "BestiaryTabCapturedMonsterName",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "BestiaryTabCreaturePageFlavour",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "BestiaryTabCreaturePageTitle",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  47,
+                      "declaredSize":  "47",
+                      "inherits":  "LargeSC",
+                      "style":  "bold italic"
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "BetrayalChoiceDetails",
+                      "typeface":  "Fontin",
+                      "size":  40,
+                      "declaredSize":  "40",
+                      "inherits":  "Large",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "BossBarDisplayLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "NormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "CompletionNotificationDescription",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  64,
+                      "declaredSize":  "64",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "CompletionNotificationTitle",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  50,
+                      "declaredSize":  "50",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ExpeditionMapPinModLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "SmallSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ExpeditionMapPinNameLabel",
+                      "typeface":  "Fontin",
+                      "size":  34,
+                      "declaredSize":  "34",
+                      "inherits":  "",
+                      "style":  "bold"
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ExpeditionMapPinSubNameLabel",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "",
+                      "style":  "italic"
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ExpeditionWindowSection",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ExpeditionWindowSectionHeader",
+                      "typeface":  "Fontin",
+                      "size":  40,
+                      "declaredSize":  "40",
+                      "inherits":  "",
+                      "style":  "bold"
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "HarvestCraftingOptionCost",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  35,
+                      "declaredSize":  "35",
+                      "inherits":  "SharpNormal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "HarvestCraftingOptionDescription",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "HarvestCraftingOptionLevel",
+                      "typeface":  "Fontin",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "HarvestCraftingOptionDescription",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "HarvestCraftingOptionQuantity",
+                      "typeface":  "Fontin",
+                      "size":  35,
+                      "declaredSize":  "35",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "HarvestMonsterLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "NormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "HeistRoguePanelStats",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "SmallSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "HeistRoguePanelStatsHeader",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  30,
+                      "declaredSize":  "30",
+                      "inherits":  "SharpNormal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ItemPopupTitle",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  39,
+                      "declaredSize":  "",
+                      "inherits":  "LargeNormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ItemStackCountLabel",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ItemStackCountLabelQuad",
+                      "typeface":  "Fontin",
+                      "size":  22,
+                      "declaredSize":  "22",
+                      "inherits":  "ItemStackCountLabel",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ItemStackCountLabelSmall",
+                      "typeface":  "Fontin",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "ItemStackCountLabel",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ItemStackLevelLabel",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ItemStackLevelLabelQuad",
+                      "typeface":  "Fontin",
+                      "size":  21,
+                      "declaredSize":  "21",
+                      "inherits":  "ItemStackLevelLabel",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "KiracMissionDescription",
+                      "typeface":  "Fontin",
+                      "size":  29,
+                      "declaredSize":  "29",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "KiracMissionNPCHeader",
+                      "typeface":  "Fontin",
+                      "size":  40,
+                      "declaredSize":  "40",
+                      "inherits":  "",
+                      "style":  "bold"
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LabyrinthEnchantingDescription",
+                      "typeface":  "Fontin",
+                      "size":  30,
+                      "declaredSize":  "30",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LabyrinthEnchantingLevel",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LabyrinthEnchantingRemaining",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LabyrinthSelectCost",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "NormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LabyrinthSelectLevel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "NormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LabyrinthSelectName",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LabyrinthSelectNameSmall",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "Large",
+                      "typeface":  "Fontin",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LargeNormal",
+                      "typeface":  "Fontin",
+                      "size":  39,
+                      "declaredSize":  "39",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LargeNormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  39,
+                      "declaredSize":  "39",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "LargeSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "Normal",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "NormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ProphecyTabNameLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "SmallSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "ProphecyTabSealButton",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "SharpNormal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuestDisplayInfoGamepad",
+                      "typeface":  "Fontin",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuestDisplayInfoMKB",
+                      "typeface":  "Fontin",
+                      "size":  29,
+                      "declaredSize":  "29",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuestDisplayTitleGamepad",
+                      "typeface":  "Fontin",
+                      "size":  35,
+                      "declaredSize":  "35",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuestDisplayTitleMKB",
+                      "typeface":  "Fontin",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuikhandLarge",
+                      "typeface":  "Quikhand",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuikhandLargeNormal",
+                      "typeface":  "Quikhand",
+                      "size":  39,
+                      "declaredSize":  "39",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuikhandNormal",
+                      "typeface":  "Quikhand",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuikhandSmall",
+                      "typeface":  "Quikhand",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "QuikhandSmallNormal",
+                      "typeface":  "Quikhand",
+                      "size":  29,
+                      "declaredSize":  "29",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "SharpNormal",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "SharpSmall",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "Small",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "SmallNormal",
+                      "typeface":  "Fontin",
+                      "size":  29,
+                      "declaredSize":  "29",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "SmallNormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  29,
+                      "declaredSize":  "29",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "SmallSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumChooseASide",
+                      "typeface":  "Fontin",
+                      "size":  79,
+                      "declaredSize":  "79",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumLabel",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumPopupLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  39,
+                      "declaredSize":  "39",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumProgressBarLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumReturnToRingLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  49,
+                      "declaredSize":  "49",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumRewardCount",
+                      "typeface":  "Fontin",
+                      "size":  30,
+                      "declaredSize":  "30",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumTimerLabel",
+                      "typeface":  "Fontin",
+                      "size":  30,
+                      "declaredSize":  "30",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumTitle",
+                      "typeface":  "Fontin",
+                      "size":  40,
+                      "declaredSize":  "40",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UltimatumVoteCountLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UnifiedCraftingOptionCost",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UnifiedCraftingOptionError",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UnifiedCraftingOptionLevel",
+                      "typeface":  "Fontin",
+                      "size":  26,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "UnifiedCraftingOptionName",
+                      "typeface":  "Fontin",
+                      "size":  30,
+                      "declaredSize":  "30",
+                      "inherits":  "Normal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile",
+                      "id":  "WorldItemDescriptionLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "NormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/AchievementCompleteDisplay",
+                      "id":  "Normal",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/AreaTitleBanner",
+                      "id":  "LabelFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  47,
+                      "declaredSize":  "47",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/AscendancySelectorWindow",
+                      "id":  "Title",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  60,
+                      "declaredSize":  "60",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassRewardReceivedModal",
+                      "id":  "Title",
+                      "typeface":  "Quikhand",
+                      "size":  60,
+                      "declaredSize":  "60",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "Marketing",
+                      "typeface":  "Quikhand",
+                      "size":  39,
+                      "declaredSize":  "39",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "PriceLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "ProgressBarTitle",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "PurchaseButtonLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "Reminder",
+                      "typeface":  "Quikhand",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "RewardClaimedLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  24,
+                      "declaredSize":  "24",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "Title",
+                      "typeface":  "Quikhand",
+                      "size":  64,
+                      "declaredSize":  "64",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "TrackNameTitle",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/BattlePassWindow",
+                      "id":  "WarpToVaultButtonLabel",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/Button",
+                      "id":  "Normal",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/Button",
+                      "id":  "Small",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/CharacterCreation",
+                      "id":  "Title",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/CharacterPanel",
+                      "id":  "LabelNormal",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/CharacterPanel",
+                      "id":  "LabelThin",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopLoanerLabel",
+                      "id":  "Normal",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  73,
+                      "declaredSize":  "73",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "ExtraLargeOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  73,
+                      "declaredSize":  "73",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "ExtraNormalOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  64,
+                      "declaredSize":  "64",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "ExtraSmallOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  55,
+                      "declaredSize":  "55",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "ExtraSmallSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  55,
+                      "declaredSize":  "55",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeMediumOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  41,
+                      "declaredSize":  "41",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeMediumSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  41,
+                      "declaredSize":  "41",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeNormal",
+                      "typeface":  "Fontin",
+                      "size":  36,
+                      "declaredSize":  "36",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeNormalItalic",
+                      "typeface":  "Fontin",
+                      "size":  36,
+                      "declaredSize":  "36",
+                      "inherits":  "",
+                      "style":  "italic"
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeNormalOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  37,
+                      "declaredSize":  "37",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeNormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  36,
+                      "declaredSize":  "36",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  46,
+                      "declaredSize":  "46",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "LargeSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "Normal",
+                      "typeface":  "Fontin",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "NormalOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "NormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "Small",
+                      "typeface":  "Fontin",
+                      "size":  27,
+                      "declaredSize":  "27",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "SmallNormal",
+                      "typeface":  "Fontin",
+                      "size":  31,
+                      "declaredSize":  "31",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "SmallNormalOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  30,
+                      "declaredSize":  "30",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "SmallNormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  27,
+                      "declaredSize":  "27",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "SmallSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  25,
+                      "declaredSize":  "25",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "TinyNormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  23,
+                      "declaredSize":  "23",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "TinySmall",
+                      "typeface":  "Fontin",
+                      "size":  23,
+                      "declaredSize":  "23",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/EShopPanel",
+                      "id":  "TinySmallSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  18,
+                      "declaredSize":  "18",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "IgnoreListPageAccountNameFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  32,
+                      "declaredSize":  "",
+                      "inherits":  "SmallNormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "IgnoreListPagePaginationFont",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "",
+                      "inherits":  "SmallNormal",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "LargeMediumSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  46,
+                      "declaredSize":  "46",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "LargeMediumSCOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  46,
+                      "declaredSize":  "46",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "LargeNormal",
+                      "typeface":  "Fontin",
+                      "size":  41,
+                      "declaredSize":  "41",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "LargeNormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  41,
+                      "declaredSize":  "41",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "LargeNormalSCOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  41,
+                      "declaredSize":  "41",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "LargeSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  51,
+                      "declaredSize":  "51",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "LargeSCOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  51,
+                      "declaredSize":  "51",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "Normal",
+                      "typeface":  "Fontin",
+                      "size":  35,
+                      "declaredSize":  "35",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "NormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  35,
+                      "declaredSize":  "35",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "NormalSCOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  35,
+                      "declaredSize":  "35",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchBarFont",
+                      "typeface":  "Fontin",
+                      "size":  31,
+                      "declaredSize":  "",
+                      "inherits":  "Small",
+                      "style":  "italic"
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchBottomButtonFont",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  31,
+                      "declaredSize":  "",
+                      "inherits":  "SmallNormalSCOP",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchPageAddStatGroupComboBoxFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  25,
+                      "declaredSize":  "",
+                      "inherits":  "TinySmallSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchPageFilterAndStatEmptyMessageFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  23,
+                      "declaredSize":  "",
+                      "inherits":  "TinySC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchPageFilterAndStatGeneralFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  23,
+                      "declaredSize":  "",
+                      "inherits":  "TinySC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchPageGroupTitleFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  32,
+                      "declaredSize":  "",
+                      "inherits":  "SmallNormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchPageOnlineStatusFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  28,
+                      "declaredSize":  "",
+                      "inherits":  "SmallSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchResultItemExtendedInfoLabelFont",
+                      "typeface":  "Fontin",
+                      "size":  23,
+                      "declaredSize":  "",
+                      "inherits":  "Tiny",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchResultItemListingInfoLabelFont",
+                      "typeface":  "Fontin",
+                      "size":  23,
+                      "declaredSize":  "",
+                      "inherits":  "Tiny",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchResultItemListingPriceInfoLabelFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  25,
+                      "declaredSize":  "",
+                      "inherits":  "TinySmallSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchResultPageCountLabelFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  23,
+                      "declaredSize":  "",
+                      "inherits":  "TinySC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchResultPageLoadingFont",
+                      "typeface":  "Fontin",
+                      "size":  23,
+                      "declaredSize":  "",
+                      "inherits":  "Tiny",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SearchResultPageTitleFont",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  35,
+                      "declaredSize":  "",
+                      "inherits":  "NormalSCOP",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "Small",
+                      "typeface":  "Fontin",
+                      "size":  31,
+                      "declaredSize":  "31",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SmallNormal",
+                      "typeface":  "Fontin",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SmallNormalSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SmallNormalSCOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  31,
+                      "declaredSize":  "31",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SmallSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "SmallSCOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  28,
+                      "declaredSize":  "28",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "TabButtonLabelFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  32,
+                      "declaredSize":  "",
+                      "inherits":  "SmallNormalSC",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "Tiny",
+                      "typeface":  "Fontin",
+                      "size":  23,
+                      "declaredSize":  "23",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "TinySC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  23,
+                      "declaredSize":  "23",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "TinySmall",
+                      "typeface":  "Fontin",
+                      "size":  25,
+                      "declaredSize":  "25",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "TinySmallSC",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  25,
+                      "declaredSize":  "25",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ETradeMarketPanel",
+                      "id":  "TinySmallSCOP",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  25,
+                      "declaredSize":  "25",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/HUDButton",
+                      "id":  "Normal",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  32,
+                      "declaredSize":  "32",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/HUDButton",
+                      "id":  "Small",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  26,
+                      "declaredSize":  "26",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ImportantMessage",
+                      "id":  "Normal",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/ImportantMessage",
+                      "id":  "UltimatumFail",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  45,
+                      "declaredSize":  "45",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/Panel",
+                      "id":  "Title",
+                      "typeface":  "OptimusPrincepsSemiBold",
+                      "size":  39,
+                      "declaredSize":  "39",
+                      "inherits":  "",
+                      "style":  ""
+                  },
+                  {
+                      "scope":  "PathOfExile/WorldQuestObjectiveDescription",
+                      "id":  "DescriptionFont",
+                      "typeface":  "Fontin Smallcaps",
+                      "size":  33,
+                      "declaredSize":  "33",
+                      "inherits":  "",
+                      "style":  ""
+                  }
+              ],
+    "fallbackFonts":  [
+                          {
+                              "id":  "CJK",
+                              "ranges":  "CJK",
+                              "fonts":  "Noto Sans CJK TC,Spoqa Han Sans Neo,Simsun,PMinglu,Gulim,MS UI Gothic,Microsoft JhengHei"
+                          },
+                          {
+                              "id":  "Cyrillic",
+                              "ranges":  "Cyrillic",
+                              "fonts":  "FrizQuadrataITC,Arial,Microsoft Sans Serif"
+                          },
+                          {
+                              "id":  "Thai",
+                              "ranges":  "Thai",
+                              "fonts":  "Kanit, Microsoft JhengHei, Microsoft YaHei"
+                          },
+                          {
+                              "id":  "Telugu",
+                              "ranges":  "Telugu",
+                              "fonts":  "Nirmala UI,Gautami"
+                          },
+                          {
+                              "id":  "Any",
+                              "ranges":  "Any",
+                              "fonts":  "Noto Sans CJK TC,Microsoft Sans Serif,Arial,MS UI Gothic,Nirmala UI,Gautami,Microsoft Himalaya,Lao UI,Mangal,Shruti,Euphemia,Gadugi,Marlett,Webdings,Wingdings"
+                          }
+                      ]
+}

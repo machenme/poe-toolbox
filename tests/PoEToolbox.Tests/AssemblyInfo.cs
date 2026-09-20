@@ -1,6 +1,7 @@
 using Xunit;
 
 /// <summary>
+/// 不变式 9（docs/ARCHITECTURE.md §4）：本文件就是那条规则的落点。
 /// 整个测试程序集关并行。理由不是「并行慢」——实测并行 26~36s、串行 37s，这套测试是 I/O 受限的，
 /// 并行几乎没换来时间——而是进程级静态太多，跨 collection 的并发会互相毁产物：
 /// `ConfigService.DataDirectoryOverride` 只被挂了 collection 的四个类串行住，

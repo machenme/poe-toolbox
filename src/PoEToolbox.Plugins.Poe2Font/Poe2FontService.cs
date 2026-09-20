@@ -7,15 +7,22 @@ using PoEToolbox.Shared;
 
 namespace PoEToolbox.Plugins.Poe2Font;
 
-public sealed record Poe2FontOptions(string Typeface, double SizeScalePercent);
+/// <summary>
+/// 字号写入计划。<see cref="Sizes"/> 只登记「相对官方模板要改」的条目，键为作用域路径 + id；
+/// 未登记的条目由 <see cref="Poe2FontTemplate"/> 决定——自带 size 的写回官方值，纯继承的不碰。
+/// </summary>
+public sealed record Poe2FontOptions(string Typeface, IReadOnlyDictionary<string, int> Sizes);
+
+public sealed record Poe2FontChange(string Key, int OfficialSize, int TargetSize);
 
 public sealed record Poe2FontResult(
     string GameDataPath,
     string Typeface,
-    double SizeScalePercent,
     int BaseFileSize,
     int TraditionalFileSize,
-    string BaselinePath);
+    string BaselinePath,
+    IReadOnlyList<Poe2FontChange> Changes,
+    int UnknownEntryCount);
 
 public sealed record Poe2FontRestoreResult(
     string GameDataPath,
@@ -45,6 +52,10 @@ public static class Poe2FontService
         "Spoqa Han Sans Neo",
     ];
 
+    /// <summary>可写入的绝对字号区间（基准分辨率 2560 下的像素）。官方最大值是 79。</summary>
+    public const int MinFontSize = 1;
+    public const int MaxFontSize = 256;
+
     public static Poe2FontResult Apply(
         string gameDataPath,
         Poe2FontOptions options,
@@ -60,7 +71,8 @@ public static class Poe2FontService
             var targets = GetTargets(gameData);
             var backup = EnsureBaseline(gameData.GameDataPath, targets.Base.Read().ToArray(), targets.Traditional.Read().ToArray());
             var baseBytes = File.ReadAllBytes(backup.BasePath);
-            var generatedBase = GenerateBaseXml(baseBytes, options);
+            var generated = GenerateBaseXml(baseBytes, options);
+            var generatedBase = generated.Bytes;
             var generatedTraditional = GenerateTraditionalXml();
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -71,7 +83,10 @@ public static class Poe2FontService
             IndexBackupService.Complete(gameData, indexBackup, "poe2-font", new Dictionary<string, string>
             {
                 ["typeface"] = options.Typeface,
-                ["sizeScalePercent"] = options.SizeScalePercent.ToString("0.##", CultureInfo.InvariantCulture),
+                ["changedEntries"] = generated.Changes.Count.ToString(CultureInfo.InvariantCulture),
+                ["unknownEntries"] = generated.UnknownEntryCount.ToString(CultureInfo.InvariantCulture),
+                ["sizes"] = string.Join(',', generated.Changes.Select(change =>
+                    $"{change.Key}:{change.OfficialSize}->{change.TargetSize}")),
                 ["baseVirtualPath"] = BaseVirtualPath,
                 ["traditionalVirtualPath"] = TraditionalVirtualPath,
             });
@@ -79,10 +94,11 @@ public static class Poe2FontService
             return new Poe2FontResult(
                 gameData.GameDataPath,
                 options.Typeface,
-                options.SizeScalePercent,
                 generatedBase.Length,
                 generatedTraditional.Length,
-                backup.DirectoryPath);
+                backup.DirectoryPath,
+                generated.Changes,
+                generated.UnknownEntryCount);
         });
     }
 
@@ -126,7 +142,12 @@ public static class Poe2FontService
         return File.Exists(paths.BasePath) && File.Exists(paths.TraditionalPath);
     }
 
-    internal static byte[] GenerateBaseXml(byte[] sourceBytes, Poe2FontOptions options)
+    internal sealed record GeneratedBaseXml(
+        byte[] Bytes,
+        IReadOnlyList<Poe2FontChange> Changes,
+        int UnknownEntryCount);
+
+    internal static GeneratedBaseXml GenerateBaseXml(byte[] sourceBytes, Poe2FontOptions options)
     {
         ValidateOptions(options);
         var (source, encoding) = DecodeXml(sourceBytes);
@@ -139,26 +160,57 @@ public static class Poe2FontService
             comment.Remove();
         }
 
-        var scale = options.SizeScalePercent / 100.0;
+        var template = Poe2FontTemplate.Default;
+        var changes = new List<Poe2FontChange>();
+        var unknownEntryCount = 0;
         foreach (var font in root.Descendants("Font"))
         {
+            var id = font.Attribute("id")?.Value;
+            if (string.IsNullOrEmpty(id))
+                continue;
+
             var typeface = font.Attribute("typeface");
             if (typeface is not null)
                 typeface.Value = options.Typeface;
 
-            var size = font.Attribute("size");
-            if (size is not null && double.TryParse(size.Value, NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out var parsedSize))
+            if (!template.ByKey.TryGetValue(Poe2FontTemplate.MakeKey(ScopeOf(font), id), out var entry))
             {
-                size.Value = Math.Max(1, (int)Math.Round(parsedSize * scale, MidpointRounding.AwayFromZero))
-                    .ToString(CultureInfo.InvariantCulture);
+                // 模板没收录（客户端版本不同）：宁可保持原样，也不要按猜出来的基准改写一个官方值。
+                if (font.Attribute("size") is not null)
+                    unknownEntryCount++;
+                continue;
             }
+
+            var target = options.Sizes.TryGetValue(entry.Key, out var overrideSize)
+                ? overrideSize
+                : entry.HasDeclaredSize ? ParsedDeclaredSize(entry) : (int?)null;
+            if (target is not int targetSize)
+                continue;
+
+            var sizeAttribute = font.Attribute("size");
+            if (sizeAttribute is not null)
+            {
+                // 即便是官方值也写回去：基线备份可能是玩家在第三方改版上首次应用时存的，
+                // 只有按模板落一遍绝对字号才能保证「同一份配置在任何客户端上看起来一样」。
+                sizeAttribute.Value = targetSize.ToString(CultureInfo.InvariantCulture);
+            }
+            else if (targetSize != entry.Size)
+            {
+                font.SetAttributeValue("size", targetSize);
+            }
+            else
+            {
+                continue;
+            }
+
+            if (targetSize != entry.Size)
+                changes.Add(new Poe2FontChange(entry.Key, entry.Size, targetSize));
         }
 
         foreach (var fallback in root.Descendants("FallbackFont"))
         {
-            var id = fallback.Attribute("id")?.Value;
-            if (id is not ("CJK" or "Any"))
+            var fallbackId = fallback.Attribute("id")?.Value;
+            if (fallbackId is not ("CJK" or "Any"))
                 continue;
 
             var fonts = (fallback.Attribute("fonts")?.Value ?? string.Empty)
@@ -168,10 +220,34 @@ public static class Poe2FontService
             fallback.SetAttributeValue("fonts", string.Join(',', fonts));
         }
 
-        root.AddFirst(new XComment(
-            $"{GeneratedCommentPrefix}：字体类型 = {SafeCommentValue(options.Typeface)}，字号倍率 = {options.SizeScalePercent.ToString("0.##", CultureInfo.InvariantCulture)}%。"));
-        return EncodeXml(document, encoding);
+        root.AddFirst(new XComment(BuildComment(options, changes, unknownEntryCount)));
+        return new GeneratedBaseXml(EncodeXml(document, encoding), changes, unknownEntryCount);
     }
+
+    /// <summary>条目所在的嵌套作用域，形如 <c>PathOfExile/ETradeMarketPanel</c>；同名 id 靠它区分。</summary>
+    internal static string ScopeOf(XElement element) => string.Join('/', element
+        .Ancestors("Props")
+        .Reverse()
+        .Select(props => props.Attribute("id")?.Value)
+        .Where(id => !string.IsNullOrEmpty(id)));
+
+    private static string BuildComment(Poe2FontOptions options, IReadOnlyList<Poe2FontChange> changes, int unknownEntryCount)
+    {
+        var text = new StringBuilder($"{GeneratedCommentPrefix}：字体类型 = {SafeCommentValue(options.Typeface)}。");
+        text.Append(changes.Count == 0
+            ? "全部字号保持官方值"
+            : $"共 {changes.Count} 项字号相对官方值调整：{string.Join("，", changes.Take(6).Select(change =>
+                $"{SafeCommentValue(change.Key[(change.Key.LastIndexOf('/') + 1)..])} {change.OfficialSize}→{change.TargetSize}"))}"
+                + (changes.Count > 6 ? $" 等共 {changes.Count} 项" : ""));
+        if (unknownEntryCount > 0)
+            text.Append($"；另有 {unknownEntryCount} 项不在内置模板内，保持原样。");
+        return text.Append('。').ToString();
+    }
+
+    private static int ParsedDeclaredSize(Poe2FontTemplateEntry entry)
+        => int.TryParse(entry.DeclaredSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out var size)
+            ? size
+            : entry.Size;
 
     internal static byte[] GenerateTraditionalXml()
     {
@@ -213,11 +289,11 @@ public static class Poe2FontService
             || options.Typeface.Contains('<')
             || options.Typeface.Contains('>'))
             throw new ArgumentException("字体类型包含 XML 不支持的字符。", nameof(options));
-        if (double.IsNaN(options.SizeScalePercent)
-            || double.IsInfinity(options.SizeScalePercent)
-            || options.SizeScalePercent < 25
-            || options.SizeScalePercent > 300)
-            throw new ArgumentOutOfRangeException(nameof(options), "字号倍率必须在 25% 到 300% 之间。 ");
+        foreach (var (key, size) in options.Sizes)
+        {
+            if (size is < MinFontSize or > MaxFontSize)
+                throw new ArgumentOutOfRangeException(nameof(options), $"条目 {key} 的字号必须在 {MinFontSize} 到 {MaxFontSize} 之间。 ");
+        }
     }
 
     private static (FileRecord Base, FileRecord Traditional) GetTargets(GameDataAccess gameData)

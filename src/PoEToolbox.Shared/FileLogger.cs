@@ -7,6 +7,7 @@ namespace PoEToolbox.Shared;
 public enum LogLevel { Debug, Info, Warn, Error }
 
 /// <summary>
+/// 不变式 10（docs/ARCHITECTURE.md §4）：<see cref="EntryLogged"/> 会被任意线程回调，订阅者不要直接枚举自己攒的列表；测试断言前先加锁取快照。
 /// Simple file logger: daily rolling, 7-day retention.
 /// 本文件里所有空的 <c>catch</c> 都是故意的：日志器不能靠自己去记「日志器写不进去」，
 /// 否则第一次失败会引发第二次失败。这些位置静默降级为「不记」，<see cref="EntryLogged"/>

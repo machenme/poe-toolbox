@@ -4,6 +4,7 @@ using LibBundle3.Records;
 namespace PoEToolbox.Shared;
 
 /// <summary>
+/// 不变式 5（docs/ARCHITECTURE.md §4）：本文件负责校验和修复那条「必过备份」写路径留下的悬空状态。
 /// 修复「索引仍引用 PATCHED/ 下的 bundle，但 bundle 物理文件已丢失」的悬空状态。
 ///
 /// 补丁应用是把受影响文件重定向进 PATCHED bundle；bundle 文件丢失后（外部清理、客户端修复等），

@@ -63,7 +63,7 @@
 | PoEToolbox.App | 5 | 1 139 | WPF 宿主 |
 | Plugins.Voyager | 8 | 1 064 | 暂未注册（隐藏） |
 | Plugins.PriceTagger | 2 | 1 044 | 物价打标 |
-| Plugins.Poe2Font | 3 | 614 | 字体 |
+| Plugins.Poe2Font | 8 | 1 419 | 字体 |
 | Plugins.PoeCnPatch | 4 | 558 | 汉化补丁 |
 | Plugins.TermTranslator | 3 | 289 | 术语翻译 |
 | LibBundledGGPK3 | 3 | 158 | 统一入口 |
@@ -172,7 +172,8 @@ Shared 7332 行里同时躺着：
 | `LibGGPK3` | 2 578 | 无直接测试（经 LibBundledGGPK3 间接执行部分路径） |
 | `App` | 1 139 | 无测试 |
 | `Cli` | 1 186 | 无测试，**fx-patch 命令解析与退出码完全未被覆盖** |
-| 插件 Poe2Font / PriceTagger / TermTranslator / Voyager | 3 011 | 无测试（测试项目引用了 PoeCnPatch 与 BagCleaner，但这两个项目下无测试代码） |
+| 插件 PriceTagger / TermTranslator / Voyager | 2 397 | 无测试 |
+| 插件 Poe2Font | 1 419 | 有测试（`Poe2FontTests`：内置官方模板、写盘折算、批量调整），View 层未覆盖 |
 
 ### 4.3 建议补的三条性质测试
 
