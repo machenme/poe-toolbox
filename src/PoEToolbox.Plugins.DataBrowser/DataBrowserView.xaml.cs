@@ -137,8 +137,13 @@ public partial class DataBrowserView : UserControl
             // 期间再次点关闭会因 _gd 已释放而走"取消关闭"分支，不会重入。
             IsEnabled = false;
             var saveTask = Task.Run(() => ReplaceService.ReplaceTexts(gameDataPath, edits));
-            while (!saveTask.Wait(50))
-                Dispatcher.PushFrame(new DispatcherFrame());
+            // 嵌套消息帧必须在保存结束时把 Continue 置 false，否则 DispatcherFrame 永不终止、
+            // OnClosing 永远不返回 —— 表现为「窗口关掉了但进程退不掉」。
+            var frame = new DispatcherFrame();
+            saveTask.ContinueWith(_ => frame.Continue = false,
+                TaskScheduler.FromCurrentSynchronizationContext());
+            if (!saveTask.Wait(50))
+                Dispatcher.PushFrame(frame);
             saveTask.GetAwaiter().GetResult();
             _pendingEdits.Clear();
             UpdatePendingChangesUi();
