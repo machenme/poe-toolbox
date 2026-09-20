@@ -359,9 +359,14 @@ public partial class AffixWorkbenchView : UserControl
 
     private bool RequirePoe2()
     {
+        if (string.IsNullOrWhiteSpace(_gameDataPath ?? GameDataPathPreference.Get()))
+        {
+            Output.SetStatus("还没有选择游戏数据：请先在主窗口点「选择游戏数据」，选中 POE2 的 Content.ggpk 或 _.index.bin。选过一次之后，下次启动会沿用这一份。", UiStatus.Kind.Warning);
+            return false;
+        }
         if (_gameKind != PoeGameKind.Poe2)
         {
-            Output.SetStatus("词缀上色仅支持 POE2 客户端，请先在「价格标签」等页面完成游戏数据选择。", UiStatus.Kind.Warning);
+            Output.SetStatus("词缀上色仅支持 POE2 客户端，请在主窗口「选择游戏数据」里改选 POE2 的数据文件。", UiStatus.Kind.Warning);
             return false;
         }
         return true;

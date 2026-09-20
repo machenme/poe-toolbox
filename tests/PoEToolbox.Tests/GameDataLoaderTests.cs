@@ -199,15 +199,19 @@ public sealed class GameDataLoaderTests : IDisposable
             GameDataLoader.ResolvePath(indexPath));
     }
 
-    [Fact]
-    public void LoaderResolvePath_Blank_FallsBackToDetection()
+    /// <summary>
+    /// 没有路径时**不许**回退到「扫注册表 / 默认安装目录猜一份客户端」：那会让用户在没点过任何文件的情况下
+    /// 把补丁打进另一份客户端里。这条守的是「猜」这个动作本身回归不了。
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void LoaderResolvePath_MissingPath_ThrowsInsteadOfDetecting(string? path)
     {
-        // Whether a client is installed is environment-dependent; what must not happen is the blank
-        // leaking down into GameDataAccess.ResolvePath and surfacing as an ArgumentException.
-        var error = Record.Exception(() => GameDataLoader.ResolvePath("   "));
+        var error = Assert.Throws<InvalidOperationException>(() => GameDataLoader.ResolvePath(path));
 
-        if (error is not null)
-            Assert.IsType<FileNotFoundException>(error);
+        Assert.Contains("选择游戏数据", error.Message);
     }
 
     // ── GameDataLoader.Use / UseAsync lifetime ─────────────────

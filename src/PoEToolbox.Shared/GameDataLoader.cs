@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -43,23 +42,21 @@ public enum GameDataMode
 public static class GameDataLoader
 {
     /// <summary>
-    /// Resolves a path the same way <see cref="GameDataAccess.Open"/> does, and falls back to
-    /// auto-detection when none is given.
+    /// Resolves a path the same way <see cref="GameDataAccess.Open"/> does. Never guesses: a caller
+    /// that has no path must ask the user for one, not silently pick an installed client.
     /// </summary>
     /// <param name="path">
-    /// A file (Content.ggpk / _.index.bin), a directory containing one, or null/blank to detect.
+    /// A file (Content.ggpk / _.index.bin) or a directory containing one. Never pass null/blank —
+    /// the remembered choice lives in <see cref="GameDataPathPreference.Get"/>.
     /// </param>
-    /// <exception cref="FileNotFoundException">No path given and nothing could be detected.</exception>
+    /// <exception cref="InvalidOperationException">No path given.</exception>
     public static string ResolvePath(string? path)
     {
-        if (!string.IsNullOrWhiteSpace(path))
-            return GameDataAccess.ResolvePath(path);
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException(
+                "未选择游戏数据文件。请先在主窗口点「选择游戏数据」选中 Content.ggpk 或 _.index.bin；选定后下次启动会沿用这一份。");
 
-        var detected = PoeDetector.Default.DetectGameDataPath()
-            ?? throw new FileNotFoundException(
-                "No game data path was given and none could be detected.");
-
-        return GameDataAccess.ResolvePath(detected);
+        return GameDataAccess.ResolvePath(path);
     }
 
     /// <summary>

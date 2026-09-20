@@ -31,6 +31,8 @@ PoEToolbox.exe
 
 发布 ZIP 和 Actions Artifact 均只包含 `PoEToolbox.exe`。程序运行产生的配置、缓存、日志和 native 运行库会写入用户目录，不会混入发布目录。
 
+程序**不会自动挑选游戏数据**：启动后游戏数据一栏是「未选择游戏数据」，各模块在你选文件之前都会停下来提示。点一次主窗口的「选择游戏数据」，选中 PoE1 的 `Content.ggpk` 或 PoE2 的 `Bundles2\_.index.bin`，之后每次启动都沿用这一份（换客户端再选一次即可）。
+
 ## 物价标注
 
 1. 选择游戏客户端数据文件：PoE1 为 `Content.ggpk`，PoE2 为 `Bundles2\_.index.bin`。

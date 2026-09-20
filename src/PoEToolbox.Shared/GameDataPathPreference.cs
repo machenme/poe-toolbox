@@ -1,6 +1,14 @@
 namespace PoEToolbox.Shared;
 
-/// <summary>Persists the game data path shared by modules that operate on the same client.</summary>
+/// <summary>
+/// Persists the game data path shared by modules that operate on the same client.
+/// <para>
+/// The rule this class exists to enforce: <b>nothing is selected until the user selects it once</b>.
+/// A missing choice reads as <see langword="null"/> and every caller must ask the user instead of
+/// probing the registry or the default install folders — a silently detected client is worse than no
+/// client, because the user then patches a game they never pointed the tool at.
+/// </para>
+/// </summary>
 public static class GameDataPathPreference
 {
     private const string ConfigKey = "CurrentGameDataPath";
@@ -21,34 +29,6 @@ public static class GameDataPathPreference
         }
     }
 
-    public static string? GetOrDetect(PoeGameKind preferredGame = PoeGameKind.Unknown)
-    {
-        var configuredPath = Get();
-        if (configuredPath is not null
-            && (preferredGame == PoeGameKind.Unknown || IsExpectedGame(configuredPath, preferredGame)))
-        {
-            return configuredPath;
-        }
-
-        var detectedPath = PoeDetector.Default.DetectGameDataPath(preferredGame);
-        return detectedPath is null ? null : GameDataAccess.ResolvePath(detectedPath);
-    }
-
     public static void Set(string path)
         => ConfigService.SetValue(ConfigKey, GameDataAccess.ResolvePath(path));
-
-    private static bool IsExpectedGame(string gameDataPath, PoeGameKind expectedGame)
-    {
-        try
-        {
-            using var gameData = GameDataAccess.OpenReadOnlyMapped(gameDataPath);
-            return expectedGame == PoeGameKind.Poe2
-                ? gameData.IsPoe2Client
-                : !gameData.IsPoe2Client;
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }

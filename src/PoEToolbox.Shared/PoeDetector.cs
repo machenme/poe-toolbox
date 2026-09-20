@@ -1,13 +1,14 @@
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
-using Microsoft.Win32;
 
 namespace PoEToolbox.Shared;
 
 /// <summary>
-/// POE detection: GGPK path discovery + foreground window check.
-/// Supports PoE1 (Standalone/Steam/Epic) and PoE2.
+/// POE process/window detection: is the client running, and is its window in the foreground.
+/// <para>
+/// 这里<b>不做</b>游戏数据文件（Content.ggpk / _.index.bin）的位置探测。工具不允许替用户猜一份客户端：
+/// 见 <see cref="GameDataPathPreference"/>。
+/// </para>
 /// </summary>
 public sealed class PoeDetector : IPoeDetector
 {
@@ -23,108 +24,6 @@ public sealed class PoeDetector : IPoeDetector
             "PathOfExile_x64_KG",
             "PathOfExileEGL",
         ];
-
-    /// <summary>
-    /// Detect the game data path. Returns either:
-    ///   - Content.ggpk path (official client or PoE1)
-    ///   - Bundles2/_.index.bin path (Steam/Epic)
-    ///   - null if not found
-    /// </summary>
-    public string? DetectGameDataPath(PoeGameKind preferredGame = PoeGameKind.Unknown)
-    {
-        // Registry: PoE1
-        string[] regPathsPoE1 =
-        [
-            @"SOFTWARE\WOW6432Node\GrindingGearGames\Path of Exile",
-            @"SOFTWARE\GrindingGearGames\Path of Exile",
-        ];
-
-        // Registry: PoE2
-        string[] regPathsPoE2 =
-        [
-            @"SOFTWARE\WOW6432Node\GrindingGearGames\Path of Exile 2",
-            @"SOFTWARE\GrindingGearGames\Path of Exile 2",
-        ];
-
-        var registryPaths = preferredGame switch
-        {
-            PoeGameKind.Poe1 => regPathsPoE1,
-            PoeGameKind.Poe2 => regPathsPoE2,
-            _ => regPathsPoE1.Concat(regPathsPoE2),
-        };
-        foreach (var regPath in registryPaths)
-        {
-            foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
-            {
-                try
-                {
-                    using var key = hive.OpenSubKey(regPath);
-                    var dir = key?.GetValue("InstallLocation") as string;
-                    if (dir is not null)
-                    {
-                        var found = FindGameDataInDir(dir);
-                        if (found is not null) return found;
-                    }
-                }
-                // 未安装的那个数键根本不存在，权限不足时也打不开；这里就是逐个试探，失败是预期结果。
-                catch { }
-            }
-        }
-
-        // Common paths (Steam, standalone)
-        var commonPaths = preferredGame switch
-        {
-            PoeGameKind.Poe1 => new[]
-            {
-                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile",
-                @"C:\Program Files\Grinding Gear Games\Path of Exile",
-                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile",
-            },
-            PoeGameKind.Poe2 => new[]
-            {
-                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile 2",
-                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile 2",
-                @"C:\Program Files\Grinding Gear Games\Path of Exile 2",
-            },
-            _ => new[]
-            {
-                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile",
-                @"C:\Program Files\Grinding Gear Games\Path of Exile",
-                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile",
-                @"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile 2",
-                @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile 2",
-                @"C:\Program Files\Grinding Gear Games\Path of Exile 2",
-            },
-        };
-        foreach (var dir in commonPaths)
-        {
-            var found = FindGameDataInDir(dir);
-            if (found is not null) return found;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Given a game install directory, find the data file:
-    /// 1. Content.ggpk (official client)
-    /// 2. Bundles2/_.index.bin (Steam/Epic — pre-extracted)
-    /// </summary>
-    private static string? FindGameDataInDir(string dir)
-    {
-        if (!Directory.Exists(dir)) return null;
-
-        var ggpk = Path.Combine(dir, "Content.ggpk");
-        if (File.Exists(ggpk)) return ggpk;
-
-        var idx = Path.Combine(dir, "Bundles2", "_.index.bin");
-        if (File.Exists(idx)) return idx;
-
-        return null;
-    }
-
-    /// <summary>[Deprecated] Use DetectGameDataPath() instead.</summary>
-    public string? DetectGgpkPath() => DetectGameDataPath();
 
     public bool IsPoeForeground()
     {
