@@ -55,25 +55,33 @@ public sealed class FileLogger : IDisposable, ILogger
 
     public void Log(LogLevel level, string message, Exception? ex = null)
     {
-        if (_disposed || _writer == null) return;
-        try
+        // 写文件失败（日志目录不可写、句柄没建起来）不能连订阅者一起噤声：
+        // 输出面板和测试都靠 EntryLogged 拿消息，目录写不进去时它们反而更该看到错误。
+        // 只有真正 Dispose 过才整体停用。
+        if (_disposed) return;
+
+        if (_writer != null)
         {
-            lock (Sync)
+            try
             {
-                // First line every process writes is a session marker, so a
-                // daily log can be split into per-run sections when debugging.
-                if (Interlocked.Exchange(ref _sessionBannerWritten, 1) == 0)
+                lock (Sync)
                 {
-                    var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "dev";
-                    _writer.WriteLine();
-                    _writer.WriteLine($"========== Session started {DateTime.Now:yyyy-MM-dd HH:mm:ss} | v{version} | {Environment.OSVersion.VersionString} ==========");
+                    // First line every process writes is a session marker, so a
+                    // daily log can be split into per-run sections when debugging.
+                    if (Interlocked.Exchange(ref _sessionBannerWritten, 1) == 0)
+                    {
+                        var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "dev";
+                        _writer.WriteLine();
+                        _writer.WriteLine($"========== Session started {DateTime.Now:yyyy-MM-dd HH:mm:ss} | v{version} | {Environment.OSVersion.VersionString} ==========");
+                    }
+                    var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}";
+                    if (ex != null) line += Environment.NewLine + ex;
+                    _writer.WriteLine(line);
                 }
-                var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}";
-                if (ex != null) line += Environment.NewLine + ex;
-                _writer.WriteLine(line);
             }
+            catch { }
         }
-        catch { }
+
         try { EntryLogged?.Invoke(level, message, ex); }
         catch { }
     }
