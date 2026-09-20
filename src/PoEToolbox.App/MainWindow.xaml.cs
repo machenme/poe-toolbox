@@ -349,7 +349,6 @@ public partial class MainWindow : Window
     {
         var hasPath = !string.IsNullOrWhiteSpace(path);
         GameDataPathDisplay.Text = hasPath ? path : UILabels.Get("NoGameDataSelected");
-        GameDataPathDisplay.ScrollToEnd();
         GameDataPathDisplay.ToolTip = GameDataPathDisplay.Text;
         UpdateGameDataSelectionHighlight(!hasPath);
     }
