@@ -1,8 +1,8 @@
 # PoE Toolbox 架构总览
 
 - 日期：2026-09-20
-- 代码基线：`060fb453b`（main，PRD D3/D5 与 P1-5 全部落地那一提交），版本 `version.json` = 0.2.3
-- 实测：全量测试 **195 通过 / 0 失败**，Release 34s、Debug 34s，CI 两条腿各跑一次（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
+- 代码基线：`77f830b81`（main，PRD D6 与「不再自动探测游戏数据」「界面布局放大」两项变更落地那一提交），版本 `version.json` = 0.2.3
+- 实测：全量测试 **200 通过 / 0 失败**，Release 34s、Debug 34s，CI 两条腿各跑一次（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
 - 范围：结构、依赖方向与运行期不变式。**不写行号**——本项目行号在一次提交内就漂移过，一律以类型名 / 唯一字符串定位
 
 > 本文回答「东西在哪、谁能引用谁、哪几条规矩破了自己会死」。
@@ -58,7 +58,7 @@ PoEToolbox.Tests
 | 入口 | `Cli` | `net10.0-windows` | — | 命令行，仅 `Core` + `LibDat2`；`fx-oilmod` / `fx-patch` 等 |
 | 插件 | `PriceTagger` `DataBrowser` `BagCleaner` `Voyager` `TermTranslator` `PoeCnPatch` `Poe2Font` `FxPatch` `AffixWorkbench` | `net10.0-windows` | ✅ | 每个一个 `IUiPlugin` + 若干 `UserControl` |
 | 基础 | `LibGGPK3` `LibBundle3` `LibDat2` `LibBundledGGPK3` | `net10.0` | — | GGPK / Bundles2 / DAT 的格式读写；不依赖上层 |
-| 测试 | `PoEToolbox.Tests` | `net10.0-windows` | — | 195 条；引用 `Core` + 4 个插件 + `Shared`，**不引用 `App` / `Ui` / `Cli`** |
+| 测试 | `PoEToolbox.Tests` | `net10.0-windows` | — | 200 条；引用 `Core` + 4 个插件 + `Shared`，**不引用 `App` / `Ui` / `Cli`** |
 
 ## 3. 运行期数据流
 

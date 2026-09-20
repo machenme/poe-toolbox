@@ -1,10 +1,10 @@
 # PRD：工程加固（Engineering Hardening）
 
-> 本文是**需求与拍板记录**（D1~D5 那张表是它的核心）：记「要做什么、谁定的」。怎么做看 `docs/SPEC-engineering-hardening.md`（技术方案，历史计划），做完之后系统长什么样看 `docs/ARCHITECTURE.md`（现状）。
+> 本文是**需求与拍板记录**（D1~D6 那张表是它的核心）：记「要做什么、谁定的」。怎么做看 `docs/SPEC-engineering-hardening.md`（技术方案，历史计划），做完之后系统长什么样看 `docs/ARCHITECTURE.md`（现状）。
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v2（2026-09-20 收尾：§11 的 D1~D5 全部拍板完毕并落地，唯一仍未关的是需要人开一次程序的目视确认） |
+| 文档版本 | v3（2026-09-20 追加 D6：主题相关验收移出范围。§11 的 D1~D6 全部拍板完毕，仍未关的只剩「需要人开一次程序」那一项目视确认） |
 | 日期 | 2026-09-19 立项 / 2026-09-20 收尾 |
 | 代码基线 | `cb7bc4791`（main），`version.json` = 0.2.3 |
 | 关联文档 | `docs/REVIEW-software-engineering.md`（体检报告 v2）、`docs/SPEC-engineering-hardening.md`（技术方案，历史计划）、`docs/ARCHITECTURE.md`（现状）、`docs/REVIEW-engineering-hardening-before-after.md`（前后对照） |
@@ -185,3 +185,4 @@ PoE Toolbox 在 20 个提交内长到 33 928 行 C# / 181 个源文件，功能�
 | ~~D3~~ | ~~`PRD`/`SPEC` 是否需要入库~~ | ~~(a) 保持草稿 (b) 定稿后移入 `docs/`~~ | ✅ **已关闭，按 (b)**：两份定稿已移入 `docs/`（文件名不变），`.gitignore` 的通配 `PRD-*.md`/`SPEC-*.md` 换成两条锚在根目录的具体文件（词缀上色那对旧稿不入库）。入库前逐行确认过：文档里没有客户端绝对路径、账号、机器名。三份文档的指向写清了——ARCHITECTURE 现状 / SPEC 历史计划 / PRD 拍板记录 |
 | ~~D4~~ | ~~Debug 下 `DisposeWithoutSave_*` 用例必挂（`Index.Dispose` 的 `Debug.Fail`）~~ | ~~(a) 修 `Index` 使 Debug 下不 `Fail` (b) 给用例加 Debug 跳过条件~~ | ✅ **已关闭（`587f6a96a`），两个选项都没采纳**：(b) 会让 Debug 永远测不到这条路径，而且 (a)(b) 都漏了第三条路——`Debug.Fail` 走 `Trace.Listeners` 派发，测试可以在自己这段窗口里接管它，于是既不用跳过、也没为测试改产品防线，还第一次给守卫本身上了回归保护（删掉 `Debug.Fail` → 用例红，已做破坏自检）。原判断「`Debug.Fail` 是有意的防线，不该为测试让步」保留——确实没让步 |
 | ~~**D5（新增）**~~ | ~~CI 只跑 Release，`#if DEBUG` 里的断言在 CI 上等于不执行——要不要给 CI 加一条 Debug 测试腿~~ | ~~(a) 不加，Debug 只在本地跑 (b) 加一步 `dotnet test -c Debug`~~ | ✅ **已关闭，按 (b)**（`7e07f81c5`）。复测数字：Debug **36s** / Release 34s，一次 CI 多花 36s。落地成一个 `Test (Debug)` 步骤而非 matrix——matrix 会把 checkout/setup/restore/publish/打包整条 job 复制一遍，restore 与配置无关，复用同一次就够 |
+| **D6（新增）** | 主题这条线还继不继续投入：三态（light/dark/跟随系统）的目视确认，以及那个处于隐藏态的主题切换按钮 | (a) 做一次目视确认并把切换放开 (b) 暂不投入，保持默认深色 + 按钮隐藏 | ✅ **主人拍板「(b) 不做」**（2026-09-20）：**性价比不高、优先级不高**。W7a 的搬家成果保留（`ThemeManager` 在 `App`、两份主题字典在 `Themes/`，逻辑完整、默认深色），但不为它专门开一次程序，三态不在验收里。因此「开一次程序」的目视确认只剩三件：**W7b 输出面板/状态栏**、**W8 导航栏 10 项**、**C31 的界面调整**（游戏数据条独占整行 + 放大后的默认窗口） |

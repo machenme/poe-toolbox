@@ -27,7 +27,7 @@
 | W5 异常兜底 | ✅ 完成 | App + Cli |
 | W6 build.bat | ✅ 完成 | `-m:1` |
 | W2 引擎拆分 | ✅ 完成 | S1~S8 全部落地：`FxPatchEngine.cs` **1754 → 211 行**（只剩入口门面 + 日志出口），逻辑分散到 `Shared/Fx/` 九个模块。见 §2.1.1 |
-| W7a ThemeManager 搬家 | ✅ 完成 | 见 §7.2；剩一次人工视觉确认（light/dark/跟随系统） |
+| W7a ThemeManager 搬家 | ✅ 完成 | 见 §7.2；~~剩一次人工视觉确认（light/dark/跟随系统）~~ → 该视觉确认**已按 PRD D6 移出验收范围**（主人判定性价比低），搬家本身已完成 |
 | W7b `PoEToolbox.Ui` | ✅ 完成 | 见 §7.2；`OutputPanel`/`UiStatus`/`FxEngineRunner` 已移出 Shared，Shared 不再引用 WPF |
 | W8 Sdk 定位 | ✅ 完成（PRD D2 选 b2） | `Sdk` → `Abstractions`；`IPlugin` 去掉 `CreateView()`，界面插件改实现 `PoEToolbox.Ui.IUiPlugin`，Abstractions 不再引用 WPF。见 §8 |
 
@@ -650,7 +650,7 @@ SPEC 的**编码项已全部做完**（P2-2 架构文档、P2-5 可诊断性、C
 
 ---
 
-## 10.5 提交切分方案 — ✅ 已执行（代码提交 `cb7bc4791` → `060fb453b`，共 28 个 C1~C28；C29 是本轮的文档回填，不含代码）
+## 10.5 提交切分方案 — ✅ 已执行（`cb7bc4791` → `77f830b81`：方案内代码提交 C1~C28，收尾后追加 C29~C32——文档回填、一项行为变更、一次界面布局调整）
 
 工作区里堆着两轮的全部改动，未提交。回切成 6 个提交以恢复二分定位能力：
 
@@ -708,7 +708,10 @@ C8~C24 是后续几轮追加的，同样不在原方案里；C8~C12、C14、C16 
 | C26 | `5e73be5f2` | P1-5 第二步：热键契约提到 Abstractions + 工厂倒置，删掉 `Voyager → BagCleaner` 工程引用 | **报告 P1-5 关闭**；ARCHITECTURE 立不变式 12（插件间不得互引）；插件之间已无直接依赖 |
 | C27 | `7e07f81c5` | CI 加一条 Debug 测试腿 | **PRD D5 关闭**；Debug 腿专门跑 `#if DEBUG` 断言；ARCHITECTURE 不变式 11 的「CI 收不到」口径随之更正 |
 | C28 | `060fb453b` | PRD/SPEC 定稿移入 `docs/` 并入库 + 三份文档互相指向写清 + `.gitignore` 通配换成两条锚定文件 | **PRD D3 关闭**；入库前逐行扫过机器相关信息（无绝对路径/账号/机器名） |
-| C29 | 本提交 | 写路径实测结果回填（§9.1 + ARCHITECTURE 不变式 13）+ 用户要的「改动前后对比」文档 `docs/REVIEW-engineering-hardening-before-after.md` | 纯文档，无代码；两份基线头部随之下修到 `060fb453b`，实测在 C28 复测（Release 34s / Debug 34s，均 195 绿，publish 无 loose json） |
+| C29 | `cd14c0c41` | 写路径实测结果回填（§9.1 + ARCHITECTURE 不变式 13）+ 用户要的「改动前后对比」文档 `docs/REVIEW-engineering-hardening-before-after.md` | 纯文档，无代码；两份基线头部随之下修到 `060fb453b`，实测在 C28 复测（Release 34s / Debug 34s，均 195 绿，publish 无 loose json） |
+| C30 | `1f32e6e1d` | **行为变更（超出本 SPEC 范围，由主人直接要求）**：删掉游戏数据文件的自动探测，路径只来自用户亲手选过一次 | `PoeDetector` 少 105 行（注册表试探 + 硬编码安装目录全去）、`GameDataLoader.ResolvePath` 空路径改抛 `InvalidOperationException`、`GameDataPathPreference` 去掉 `GetOrDetect`；新增 3 条 `GameDataPathPreferenceTests`（**200 绿**，Release/Debug 各一次）；ARCHITECTURE 立不变式 14。理由见不变式 14 那行——静默猜中另一份客户端会把补丁和账本写错地方 |
+| C31 | `77f830b81` | **界面布局（同样超出 SPEC 范围）**：游戏数据路径独占标题栏下方一整行、自动换行；主窗口默认 1220×800 → 1560×1000、最小 1280×800；导航栏 180 → 220 | 起因是「索引路径近 90 字符，在标题栏里被无声切掉」；只读文本框原来的 `ScrollToEnd()` 会滚到末尾只留半条路径，随换行一并删掉。纯 XAML + 一行 code-behind，**200 绿不变**；实际观感需主人开一次程序目视 |
+| C32 | 本提交 | 文档口径刷新：PRD 追加 **D6（主题相关验收降级为不做）**、ARCHITECTURE 的 195 → 200、前后对照的不变式 13 → 14 条、本表补 C30~C32 | 纯文档；§9 与 §10.5 里既有的 195 是**当时**的实测快照，有意不改 |
 
 ---
 
@@ -736,7 +739,7 @@ C8~C24 是后续几轮追加的，同样不在原方案里；C8~C12、C14、C16 
 | ~~**P1-5 下沉的可行性已摸清（但未做）**~~ | 上一条的下一步 | ✅ 已按摸清的方案做完（`e21cd1059` + `5e73be5f2`）。落地的形态：`NativeMethods`/`InputSimulator`/`IInputSimulator` 进 `Core/Input/`，`GridCalculator`/`FixedScreenGrid`/`GridConfig` 进 `Core/ScreenGrid/`（Core 已声明桌面框架引用，`System.Drawing` 放这里**不新增任何依赖边**，Shared 保持干净）；`HotkeyService` 是 WPF（`HwndSource.AddHook`）留在 BagCleaner，契约 `IHotkeyService`（补 `IsInitialized`、继承 `IDisposable`）与 `HotkeyRegistrationException` 提到 Abstractions，另加 `IHotkeyServiceFactory.Create(baseIdOffset)` 由消费者按偏移取实例。`Voyager → BagCleaner` 工程引用已删，插件之间不再有直接依赖，`docs/ARCHITECTURE.md` §4 据此立了不变式 12。**没走的第三条路**：`Ui → Core`（新增跨层边）、`Shared` 收 `System.Drawing`（把 W7b/W8 的成果退回去） |
 | ~~文档里的失效定位（P2-2 的余波）~~ | 报告 §风险清单 | ✅ 已做（`5adb66ae0`）。ARCHITECTURE 立的「不写行号」规矩其他文档没跟上：`DESIGN-bundles2-storage.md` 引的 `Index.cs` / `FileRecord.cs` 行号在引擎拆分后全部对不上（逐个换成符号名，并回代码确认 `EnsureWriteBundle`/`GetBundleToWrite`/`Redirect`/`Serialize`/`FlushWriteBundle`/`DeleteBundle` 都还在）；`DESIGN-fx-patch-engine.md` §8 九条实施清单做完了还挂着未勾；`GUIDE-fx-isolation-modding.md` 教的 `datrow`/`datgrep` 是当年 `.scratch/` 一次性探针的命令，从未入库、本地已不存在——顶部加了「结论可用、命令不可用」的 ⚠️ 并指回可用路径。顺带改掉两处**内容**不准：`GetBundleToWrite` 不是「没钉扎就新建」（会先复用没涨过 `MaxBundleSize` 的自定义 bundle）、「绝不能往已有 bundle 塞东西」应为「原生 bundle」，否则与 §3 自相矛盾 |
 | ~~W7b + W8（PRD D2 选 b2）~~ | §7.2 / §8 | ✅ 已落地：U3 改名 `574404bd4`、U1 新建 `PoEToolbox.Ui` `c8cabcbd4`、U2 拆契约 `2463179fe`，每步 192 绿。**报告 P1-6 至此关闭** |
-| **一次开程序的目视确认（三项合并）** | §9 B3/B4 | W7a 主题三态、W7b 输出面板/状态栏、W8 导航栏 10 项——三件事都在同一次启动里能看完，自动化测不到。程序能起，但起 GUI 属于交互验证，需本人做一次 |
+| **一次开程序的目视确认** | §9 B3/B4 | 待看的是 **W7b 输出面板/状态栏**、**W8 导航栏 10 项**，再加 C31 的界面调整（游戏数据条独占整行 + 放大后的默认窗口尺寸）。**W7a 主题三态已按 PRD D6 移出验收范围**（主人判定性价比低、优先级低，主题代码保留但默认深色、切换按钮仍是隐藏态）。自动化测不到，起 GUI 属于交互验证，需本人做一次 |
 | ~~W4 §4.3 调用点提示~~ | 实施时自行砍半 | ✅ 已补齐并单独提交：`NetworkDefaults.DescribeFailure` + `PoeNinjaFetcher` 超时/取消区分 + 3 条桩 handler 测试，见 §4.3 |
 | ~~死掉的联网分支~~ | §4.3 核查 | ✅ **判定收回**（`62816cf26`）。这条写成了「要么删要么接，挂着最糟」，但没先问代码是谁的：`DatContainer.DownloadSchemaMin` 与 `PatchClient.UpdateNodeAsync` 都随 `src/Lib*` 从上游 vendored 进来，`git show 02ef81c47` （初版提交）里两个都已经在，是库对外的公共 API，**不是本项目的死代码**。本项目为了修索引空记录 bug 已经在 `LibBundle3/Index.cs` 带着注释动过上游，分歧额度要省着用——为「整洁」删上游 API 是净亏。真正剩下的风险只是下一个人拿它们当可用路径，所以处理方式从「删」改成在 `docs/ARCHITECTURE.md` §6 标注 |
 | ~~报告 P2-7：`BUILT-IN-FX-PATCHES.txt` 与 .md 重复~~ | 报告 §风险清单 | ✅ 已删（`62816cf26`）。**这条是我在 C6 里做坏的**：报告当时写的是「未入库且与 .md 重复 → 删除 .txt」，我把两个文件一起提交了。重删前逐行比对确认 `.txt` 是 `.md` 的严格子集（10 个 op 一条不少），而且 `.md` 之后又更正过两轮（内嵌资源 + 释放到 AppData），`.txt` 停在旧口径——双份必然再次分叉。**顺带查清一个隐性陷阱**并写进 `docs/ARCHITECTURE.md` §5：`.gitignore` 忽略 `*.dll`、只给仓库根的 `oo2core.dll` 留 `!` 例外，所以源码树里多出一个 dll 永远不会出现在 `git status`（`src/PoEToolbox.Core/LibDat2.dll`，2026-07-27 的构建残留，无任何工程引用、`dotnet build` 移除后仍 0 错 0 警，已移到 `.scratch/` 备查而不是直接删——它没入库，删了找不回来） |
