@@ -46,9 +46,6 @@ public partial class App : Application
             FileLogger.WriteCritical("Failed to load embedded DAT definitions.", ex);
         }
 
-        ThemeManager.AppResources = Application.Current.Resources;
-        ThemeManager.Apply(ThemeManager.Theme.Light);
-
         var main = new MainWindow();
         MainWindow = main;
         main.Show();

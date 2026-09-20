@@ -1,0 +1,15 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Design system entry point. Merged by App.xaml.
+         Order matters: tokens first, then components that consume them. -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Tokens.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Typography.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Controls.Button.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Controls.Input.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Controls.Layout.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Controls.Data.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

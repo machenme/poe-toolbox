@@ -60,31 +60,6 @@
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-
-                    <!-- Theme toggle (hidden for now) -->
-                    <Button x:Name="ThemeBtn" Click="ThemeBtn_Click"
-                            Width="36" Height="36" FontSize="16"
-                            Background="Transparent" BorderThickness="0"
-                            Foreground="{DynamicResource TextSecondaryBrush}"
-                            Cursor="Hand" ToolTip="Theme"
-                            FontFamily="Segoe MDL2 Assets"
-                            Content="&#xE706;"
-                            Visibility="Collapsed">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="bd" Background="Transparent" CornerRadius="6">
-                                    <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="bd" Property="Background"
-                                                Value="{DynamicResource ButtonBgBrush}"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
                     <Button x:Name="VersionBtn" Click="VersionBtn_Click"
                             Background="Transparent" BorderThickness="0"
                             Padding="0" Margin="10,0,0,0"

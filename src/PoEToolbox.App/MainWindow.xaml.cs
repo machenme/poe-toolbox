@@ -125,18 +125,6 @@ public partial class MainWindow : Window
         bagCleaner.InitializeHotkeys(new WindowInteropHelper(this).Handle);
     }
 
-    private void ThemeBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var next = ThemeManager.Current switch
-        {
-            ThemeManager.Theme.Light => ThemeManager.Theme.Dark,
-            ThemeManager.Theme.Dark => ThemeManager.Theme.FollowSystem,
-            _ => ThemeManager.Theme.Light,
-        };
-        ThemeManager.Apply(next);
-        UpdateThemeIcon();
-    }
-
     private void LangBtn_Click(object sender, RoutedEventArgs e)
     {
         var next = UILabels.Current switch
@@ -171,16 +159,6 @@ public partial class MainWindow : Window
         {
             FileLogger.WriteCritical("Failed to open the application data directory.", ex);
         }
-    }
-
-    private void UpdateThemeIcon()
-    {
-        ThemeBtn.Content = ThemeManager.Current switch
-        {
-            ThemeManager.Theme.Dark => "",
-            ThemeManager.Theme.Light => "",
-            _ => "",
-        };
     }
 
     private async Task LoadUpdateStateAsync()
@@ -377,7 +355,6 @@ public partial class MainWindow : Window
         };
         LangBtn.Content = lang;
 
-        UpdateThemeIcon();
         ApplyVersionState(UpdateChecker.GetCachedResult());
         OpenReleasesButton.Content = UILabels.Get("OpenReleasePage");
         OpenDataFolderButton.Content = UILabels.Get("OpenAppDataFolder");
