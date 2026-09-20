@@ -45,7 +45,7 @@
                                     Height="30" Margin="6,0,0,0" Click="IncreaseOffset_Click"/>
                         </Grid>
                         <TextBlock x:Name="OffsetHint" Text="按官方值整体加减若干个字号，可重复点击累加。"
-                                   Style="{StaticResource SmallText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                   Style="{StaticResource SmallText}" TextTrimming="CharacterEllipsis" Margin="0,6,0,0"/>
 
                         <TextBlock Text="等比缩放（相对官方值）" Style="{StaticResource SmallText}" Margin="0,12,0,0"/>
                         <Grid Margin="0,5,0,0">

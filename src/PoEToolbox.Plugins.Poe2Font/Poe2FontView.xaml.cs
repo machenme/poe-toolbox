@@ -223,6 +223,8 @@ public partial class Poe2FontView : UserControl
         OffsetHint.Text = changed.Count == 0
             ? "当前全部保持官方字号。"
             : $"已改 {changed.Count} 项，例如 {Summarize(changed)}。";
+        // 提示锁成单行（XAML 已去 Wrap），长条目名超出时截断；全文放悬停提示，避免行数变化把左列顶出滚动条。
+        OffsetHint.ToolTip = changed.Count == 0 ? null : OffsetHint.Text;
     }
 
     private string Summarize(IReadOnlyDictionary<string, int> changed)
