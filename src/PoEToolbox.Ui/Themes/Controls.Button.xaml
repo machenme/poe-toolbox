@@ -3,18 +3,18 @@
 
     <!-- ═══ Button: Primary (Accent) ═══════════════════════ -->
     <Style x:Key="PrimaryButton" TargetType="Button">
-        <Setter Property="Height" Value="36"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Height" Value="{StaticResource ControlHLg}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Padding" Value="16,0"/>
         <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="8"
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource CornerMd}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -36,8 +36,8 @@
 
     <!-- ═══ Button: Secondary (Surface + border) ══════════ -->
     <Style x:Key="SecondaryButton" TargetType="Button">
-        <Setter Property="Height" Value="32"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Height" Value="{StaticResource ControlHMd}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontXs}"/>
         <Setter Property="Padding" Value="12,0"/>
         <Setter Property="Background" Value="{DynamicResource CardBgBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -50,7 +50,7 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="6"
+                            CornerRadius="{StaticResource CornerSm}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -64,13 +64,58 @@
             <Trigger Property="IsPressed" Value="True">
                 <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
             </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+            </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- ═══ Button: Danger (secondary shape, error text) ══ -->
+    <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+    </Style>
+
+    <!-- ═══ Button: Ghost (transparent, hover surface) ════ -->
+    <Style x:Key="GhostButton" TargetType="Button">
+        <Setter Property="Height" Value="{StaticResource ControlHLg}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="Padding" Value="10,0"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}"
+                            CornerRadius="{StaticResource CornerSm}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background"
+                                    Value="{DynamicResource ButtonBgBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══ Button: Icon (square 36, ghost) ════════════════ -->
+    <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+        <Setter Property="Width" Value="{StaticResource ControlHLg}"/>
+        <Setter Property="Padding" Value="0"/>
     </Style>
 
     <!-- ═══ Category Chip (ToggleButton) ══════════════════ -->
     <Style x:Key="CategoryChip" TargetType="ToggleButton">
         <Setter Property="Height" Value="30"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="{StaticResource FontXs}"/>
         <Setter Property="MinWidth" Value="80"/>
         <Setter Property="Padding" Value="12,3"/>
         <Setter Property="Margin" Value="2"/>
@@ -82,7 +127,7 @@
                 <ControlTemplate TargetType="ToggleButton">
                     <Border x:Name="bd" Background="{DynamicResource ButtonBgBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1" CornerRadius="16"
+                            BorderThickness="1" CornerRadius="{StaticResource CornerPill}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"/>
@@ -97,7 +142,7 @@
                                     Value="{DynamicResource AccentBrush}"/>
                             <Setter TargetName="bd" Property="BorderBrush"
                                     Value="{DynamicResource AccentBrush}"/>
-                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

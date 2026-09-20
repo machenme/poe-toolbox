@@ -15,7 +15,7 @@
                    FontSize="22" Margin="0,0,0,16"/>
 
         <!-- ═══ Legacy 6×10 copy mode: temporarily hidden ═══ -->
-        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,16"
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Margin="0,0,0,16"
                 Visibility="Collapsed">
             <StackPanel>
                 <TextBlock Text="Ctrl+C 复制" Style="{StaticResource SectionTitle}"/>
@@ -32,9 +32,9 @@
                                 Height="36" MinWidth="100"
                                 HorizontalContentAlignment="Center"
                                 Background="White"
-                                BorderBrush="{DynamicResource Border}"
+                                BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
-                                Foreground="{DynamicResource TextPrimary}"
+                                Foreground="{DynamicResource TextPrimaryBrush}"
                                 FontSize="14" FontWeight="SemiBold"
                                 Cursor="Hand"
                                 Click="OnTriggerKeyClick"/>
@@ -46,9 +46,9 @@
                                 Height="36" MinWidth="100"
                                 HorizontalContentAlignment="Center"
                                 Background="White"
-                                BorderBrush="{DynamicResource Border}"
+                                BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
-                                Foreground="{DynamicResource TextPrimary}"
+                                Foreground="{DynamicResource TextPrimaryBrush}"
                                 FontSize="14" FontWeight="SemiBold"
                                 Cursor="Hand"
                                 Click="OnCalibrateKeyClick"/>
@@ -72,12 +72,12 @@
                 </StackPanel>
 
                 <TextBlock Text="6列×10行。Ctrl+C 复制每格内容到文件。"
-                           FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,6,0,0"/>
+                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,6,0,0"/>
             </StackPanel>
         </Border>
 
         <!-- ═══ Voyage stash cleanup ═══ -->
-        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,16">
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Margin="0,0,0,16">
             <StackPanel>
                 <TextBlock Text="海图仓库清理" Style="{StaticResource SectionTitle}"/>
 
@@ -93,9 +93,9 @@
                                 Height="36" MinWidth="100"
                                 HorizontalContentAlignment="Center"
                                 Background="White"
-                                BorderBrush="{DynamicResource Border}"
+                                BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
-                                Foreground="{DynamicResource TextPrimary}"
+                                Foreground="{DynamicResource TextPrimaryBrush}"
                                 FontSize="14" FontWeight="SemiBold"
                                 Cursor="Hand"
                                 Click="OnSmartTriggerKeyClick"/>
@@ -103,12 +103,12 @@
 
                     <StackPanel Grid.Column="1" Margin="12,0,0,0">
                         <TextBlock Text="坐标模式" Style="{StaticResource FieldLabel}"/>
-                        <Border Height="36" MinWidth="100" Background="{DynamicResource BgCard}"
-                                BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                        <Border Height="36" MinWidth="100" Background="{DynamicResource CardBgBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                                 Padding="10,0">
                             <TextBlock Text="固定 2K" VerticalAlignment="Center"
                                        HorizontalAlignment="Center"
-                                       Foreground="{DynamicResource TextPrimary}"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
                                        FontSize="14" FontWeight="SemiBold"/>
                         </Border>
                     </StackPanel>
@@ -172,15 +172,15 @@
                 </StackPanel>
 
                 <TextBlock Text="固定 2K (2560×1440) 屏幕外框 (567,212)–(1110,1110)，截屏识别占用格后只点击有物品的格子。"
-                           FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,6,0,0"/>
+                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,6,0,0"/>
             </StackPanel>
         </Border>
 
         <!-- ═══ Log ═══ -->
-        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="12">
+        <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="12">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <TextBlock x:Name="LogText" FontSize="12" FontFamily="Consolas"
-                           Foreground="{DynamicResource TextSecondary}" Margin="0"
+                           Foreground="{DynamicResource TextSecondaryBrush}" Margin="0"
                            TextWrapping="Wrap" Text="就绪\n"/>
             </ScrollViewer>
         </Border>

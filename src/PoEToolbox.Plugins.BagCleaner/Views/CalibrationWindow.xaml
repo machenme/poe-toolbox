@@ -9,15 +9,15 @@
         WindowStyle="ToolWindow"
         ShowInTaskbar="False"
         Topmost="True"
-        Background="{StaticResource BgBase}"
+        Background="{StaticResource WindowBgBrush}"
         FontFamily="Segoe UI Variable, Segoe UI, Microsoft YaHei UI"
         FontSize="13"
-        Foreground="{StaticResource TextPrimary}">
-    <Border Style="{StaticResource Card}" Margin="12">
+        Foreground="{StaticResource TextPrimaryBrush}">
+    <Border Style="{StaticResource CardBorder}" Margin="12">
         <StackPanel VerticalAlignment="Center">
             <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold"
-                       Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Center"/>
-            <Border Background="White" BorderBrush="{StaticResource Border}" BorderThickness="1"
+                       Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                     CornerRadius="20" Padding="14,4" HorizontalAlignment="Center" Margin="0,8,0,16">
                 <TextBlock Text="{Binding Step, StringFormat='步骤 {0}'}"
                            FontSize="12" FontWeight="SemiBold">
@@ -28,7 +28,7 @@
             </Border>
             <TextBlock Text="{Binding Instruction}"
                        FontSize="13"
-                       Foreground="{StaticResource TextSecondary}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        TextAlignment="Center"
                        LineHeight="22"
                        TextWrapping="Wrap"/>

@@ -1,44 +1,66 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
-    <!-- ═══ Palette (semantic) ═══════════════════════════════ -->
-    <SolidColorBrush x:Key="WindowBgBrush" Color="#F5F5F7"/>
+    <!-- ═══ Semantic colors ══════════════════════════════════ -->
+    <!-- Neutral cool gray (zinc) base + PoE gold accent.          -->
+    <!-- Views must only reference these keys, never raw hex.      -->
+    <SolidColorBrush x:Key="WindowBgBrush" Color="#F4F4F5"/>
     <SolidColorBrush x:Key="CardBgBrush" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="CardHoverBrush" Color="#F0F0F0"/>
-    <SolidColorBrush x:Key="SurfaceBrush" Color="#EAEAED"/>
-    <SolidColorBrush x:Key="BorderBrush" Color="#DDDDDD"/>
-    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#202124"/>
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#666666"/>
-    <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
-    <SolidColorBrush x:Key="ButtonHoverBrush" Color="#E6E6E6"/>
-    <SolidColorBrush x:Key="InputBgBrush" Color="#F9F9FB"/>
-    <SolidColorBrush x:Key="TagSelectedBgBrush" Color="#FFF8E1"/>
-    <SolidColorBrush x:Key="PlaceholderBrush" Color="#AAAAAA"/>
+    <SolidColorBrush x:Key="CardHoverBrush" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#FAFAFA"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#E4E4E7"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#18181B"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#52525B"/>
+    <SolidColorBrush x:Key="ButtonBgBrush" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="ButtonHoverBrush" Color="#E4E4E7"/>
+    <SolidColorBrush x:Key="InputBgBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="TagSelectedBgBrush" Color="#FDF3DC"/>
+    <SolidColorBrush x:Key="PlaceholderBrush" Color="#A1A1AA"/>
 
     <!-- Accent (PoE Gold) -->
-    <SolidColorBrush x:Key="AccentBrush" Color="#B8860B"/>
-    <SolidColorBrush x:Key="AccentHoverBrush" Color="#D4A420"/>
-    <SolidColorBrush x:Key="AccentPressedBrush" Color="#8B6508"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="#C89B3C"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#DDBB68"/>
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#A87D2C"/>
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#1A1A1A"/>
 
     <!-- Semantics -->
-    <SolidColorBrush x:Key="SuccessBrush" Color="#2E7D32"/>
-    <SolidColorBrush x:Key="WarningBrush" Color="#E65100"/>
-    <SolidColorBrush x:Key="ErrorBrush" Color="#C62828"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#15803D"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#B45309"/>
+    <SolidColorBrush x:Key="ErrorBrush" Color="#B91C1C"/>
+    <SolidColorBrush x:Key="SuccessBorderBrush" Color="#15803D"/>
 
-    <!-- ═══ Legacy aliases (BagCleaner) ══════════════════════ -->
-    <!-- TODO(ui-rebuild commit 2): delete this block after BagCleanerView migrates to the keys above. -->
-    <SolidColorBrush x:Key="BgBase" Color="#F5F5F7"/>
-    <SolidColorBrush x:Key="BgCard" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="BgHover" Color="#F0F0F0"/>
-    <SolidColorBrush x:Key="BgPressed" Color="#EAEAED"/>
-    <SolidColorBrush x:Key="Border" Color="#DDDDDD"/>
-    <SolidColorBrush x:Key="TextPrimary" Color="#202124"/>
-    <SolidColorBrush x:Key="TextSecondary" Color="#666666"/>
-    <SolidColorBrush x:Key="Accent" Color="#0078D4"/>
-    <SolidColorBrush x:Key="AccentHover" Color="#0063B2"/>
-    <SolidColorBrush x:Key="AccentPressed" Color="#00457C"/>
-    <SolidColorBrush x:Key="Warn" Color="#E65100"/>
-    <SolidColorBrush x:Key="Ok" Color="#2E7D32"/>
-    <SolidColorBrush x:Key="Err" Color="#C62828"/>
+    <!-- States & surfaces -->
+    <SolidColorBrush x:Key="OverlayBrush" Color="#80000000"/>
+    <SolidColorBrush x:Key="DisabledBgBrush" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="DisabledTextBrush" Color="#A1A1AA"/>
+    <SolidColorBrush x:Key="FocusRingBrush" Color="#C89B3C"/>
+    <SolidColorBrush x:Key="RowHoverBgBrush" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="RowSelectedBgBrush" Color="#FDF3DC"/>
+
+    <!-- ═══ Radii / spacing / sizes / motion ═════════════════ -->
+    <CornerRadius x:Key="CornerSm">6</CornerRadius>
+    <CornerRadius x:Key="CornerMd">8</CornerRadius>
+    <CornerRadius x:Key="CornerLg">10</CornerRadius>
+    <CornerRadius x:Key="CornerPill">16</CornerRadius>
+
+    <sys:Double x:Key="SpaceXs">4</sys:Double>
+    <sys:Double x:Key="SpaceSm">8</sys:Double>
+    <sys:Double x:Key="SpaceMd">12</sys:Double>
+    <sys:Double x:Key="SpaceLg">16</sys:Double>
+    <sys:Double x:Key="SpaceXl">24</sys:Double>
+
+    <sys:Double x:Key="ControlHSm">28</sys:Double>
+    <sys:Double x:Key="ControlHMd">32</sys:Double>
+    <sys:Double x:Key="ControlHLg">36</sys:Double>
+
+    <sys:Double x:Key="FontXs">12</sys:Double>
+    <sys:Double x:Key="FontSm">13</sys:Double>
+    <sys:Double x:Key="FontMd">14</sys:Double>
+    <sys:Double x:Key="FontLg">20</sys:Double>
+
+    <Duration x:Key="MotionFast">0:0:0.12</Duration>
+    <Duration x:Key="MotionNormal">0:0:0.16</Duration>
+    <KeySpline x:Key="EaseStandard">0.4,0,0.2,1</KeySpline>
 
 </ResourceDictionary>

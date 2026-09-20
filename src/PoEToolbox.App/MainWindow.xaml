@@ -72,7 +72,7 @@
                                     Width="8" Height="8"
                                     Margin="6,0,0,0"
                                     CornerRadius="4"
-                                    Background="#E53935"
+                                    Background="{DynamicResource ErrorBrush}"
                                     Visibility="Collapsed"/>
                         </StackPanel>
                     </Button>
@@ -259,7 +259,7 @@
         </Border>
 
         <Border x:Name="UpdateDialogOverlay" Grid.RowSpan="4"
-                Background="#80000000"
+                Background="{DynamicResource OverlayBrush}"
                 Visibility="Collapsed" Panel.ZIndex="200">
             <Border Width="480" MaxHeight="600" Padding="24"
                     HorizontalAlignment="Center" VerticalAlignment="Center"

@@ -8,16 +8,16 @@
         WindowStyle="ToolWindow"
         ShowInTaskbar="False"
         Topmost="True"
-        Background="{DynamicResource BgBase}"
+        Background="{DynamicResource WindowBgBrush}"
         FontFamily="Segoe UI, Microsoft YaHei"
         FontSize="13"
-        Foreground="{DynamicResource TextPrimary}">
-    <Border Background="{DynamicResource BgCard}" CornerRadius="8"
-            BorderBrush="{DynamicResource Border}" BorderThickness="1" Margin="12">
+        Foreground="{DynamicResource TextPrimaryBrush}">
+    <Border Background="{DynamicResource CardBgBrush}" CornerRadius="8"
+            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="12">
         <StackPanel VerticalAlignment="Center" Margin="20">
             <TextBlock x:Name="TitleText" Text="地图仓校准" FontSize="20" FontWeight="SemiBold"
-                       Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center"/>
-            <Border Background="{DynamicResource Accent}" CornerRadius="20"
+                       Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+            <Border Background="{DynamicResource AccentBrush}" CornerRadius="20"
                     Padding="14,4" HorizontalAlignment="Center" Margin="0,10,0,16">
                 <TextBlock x:Name="StepText" Text="步骤 1/2"
                            FontSize="12" FontWeight="SemiBold"
@@ -25,7 +25,7 @@
             </Border>
             <TextBlock x:Name="InstructionText"
                        FontSize="13"
-                       Foreground="{DynamicResource TextSecondary}"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
                        TextAlignment="Center"
                        LineHeight="22"
                        TextWrapping="Wrap"

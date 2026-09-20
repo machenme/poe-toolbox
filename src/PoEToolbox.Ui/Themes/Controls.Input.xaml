@@ -3,7 +3,7 @@
 
     <!-- ═══ TextBox ════════════════════════════════════════ -->
     <Style TargetType="TextBox">
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="Background" Value="{DynamicResource InputBgBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -14,11 +14,24 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
-                    <Border Background="{TemplateBinding Background}"
+                    <Border x:Name="bd" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource CornerSm}">
                         <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush"
+                                    Value="{DynamicResource FocusRingBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Background"
+                                    Value="{DynamicResource DisabledBgBrush}"/>
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource DisabledTextBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -26,8 +39,8 @@
 
     <!-- ═══ ComboBox ═══════════════════════════════════════ -->
     <Style TargetType="ComboBox">
-        <Setter Property="Height" Value="32"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Height" Value="{StaticResource ControlHMd}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="Background" Value="{DynamicResource InputBgBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -38,10 +51,24 @@
 
     <!-- ═══ CheckBox ═══════════════════════════════════════ -->
     <Style TargetType="CheckBox">
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Margin" Value="0,2"/>
+    </Style>
+
+    <!-- ═══ RadioButton ════════════════════════════════════ -->
+    <Style TargetType="RadioButton">
+        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,2"/>
+    </Style>
+
+    <!-- ═══ Slider (property-level; default template kept) ═ -->
+    <Style TargetType="Slider">
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+        <Setter Property="Margin" Value="0,4"/>
     </Style>
 
 </ResourceDictionary>
