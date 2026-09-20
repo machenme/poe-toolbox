@@ -3,8 +3,8 @@
 
     <!-- ═══ Button: Primary (Accent) ═══════════════════════ -->
     <Style x:Key="PrimaryButton" TargetType="Button">
-        <Setter Property="Height" Value="{StaticResource ControlHLg}"/>
-        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="Height" Value="{DynamicResource ControlHLg}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSm}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Padding" Value="16,0"/>
         <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
@@ -14,7 +14,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource CornerMd}"
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CornerMd}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -36,8 +36,8 @@
 
     <!-- ═══ Button: Secondary (Surface + border) ══════════ -->
     <Style x:Key="SecondaryButton" TargetType="Button">
-        <Setter Property="Height" Value="{StaticResource ControlHMd}"/>
-        <Setter Property="FontSize" Value="{StaticResource FontXs}"/>
+        <Setter Property="Height" Value="{DynamicResource ControlHMd}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontXs}"/>
         <Setter Property="Padding" Value="12,0"/>
         <Setter Property="Background" Value="{DynamicResource CardBgBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -50,7 +50,7 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource CornerSm}"
+                            CornerRadius="{DynamicResource CornerSm}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -77,8 +77,8 @@
 
     <!-- ═══ Button: Ghost (transparent, hover surface) ════ -->
     <Style x:Key="GhostButton" TargetType="Button">
-        <Setter Property="Height" Value="{StaticResource ControlHLg}"/>
-        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="Height" Value="{DynamicResource ControlHLg}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSm}"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
@@ -88,7 +88,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd" Background="{TemplateBinding Background}"
-                            CornerRadius="{StaticResource CornerSm}"
+                            CornerRadius="{DynamicResource CornerSm}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -108,14 +108,14 @@
 
     <!-- ═══ Button: Icon (square 36, ghost) ════════════════ -->
     <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
-        <Setter Property="Width" Value="{StaticResource ControlHLg}"/>
+        <Setter Property="Width" Value="{DynamicResource ControlHLg}"/>
         <Setter Property="Padding" Value="0"/>
     </Style>
 
     <!-- ═══ Category Chip (ToggleButton) ══════════════════ -->
     <Style x:Key="CategoryChip" TargetType="ToggleButton">
         <Setter Property="Height" Value="30"/>
-        <Setter Property="FontSize" Value="{StaticResource FontXs}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontXs}"/>
         <Setter Property="MinWidth" Value="80"/>
         <Setter Property="Padding" Value="12,3"/>
         <Setter Property="Margin" Value="2"/>
@@ -127,7 +127,7 @@
                 <ControlTemplate TargetType="ToggleButton">
                     <Border x:Name="bd" Background="{DynamicResource ButtonBgBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1" CornerRadius="{StaticResource CornerPill}"
+                            BorderThickness="1" CornerRadius="{DynamicResource CornerPill}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"/>

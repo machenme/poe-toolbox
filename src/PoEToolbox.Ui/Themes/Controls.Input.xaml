@@ -3,7 +3,7 @@
 
     <!-- ═══ TextBox ════════════════════════════════════════ -->
     <Style TargetType="TextBox">
-        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSm}"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="Background" Value="{DynamicResource InputBgBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -17,7 +17,7 @@
                     <Border x:Name="bd" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource CornerSm}">
+                            CornerRadius="{DynamicResource CornerSm}">
                         <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -39,8 +39,8 @@
 
     <!-- ═══ ComboBox ═══════════════════════════════════════ -->
     <Style TargetType="ComboBox">
-        <Setter Property="Height" Value="{StaticResource ControlHMd}"/>
-        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="Height" Value="{DynamicResource ControlHMd}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSm}"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="Background" Value="{DynamicResource InputBgBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -51,7 +51,7 @@
 
     <!-- ═══ CheckBox ═══════════════════════════════════════ -->
     <Style TargetType="CheckBox">
-        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSm}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Margin" Value="0,2"/>
@@ -59,7 +59,7 @@
 
     <!-- ═══ RadioButton ════════════════════════════════════ -->
     <Style TargetType="RadioButton">
-        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSm}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Margin" Value="0,2"/>

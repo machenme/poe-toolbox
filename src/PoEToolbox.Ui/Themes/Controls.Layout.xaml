@@ -12,8 +12,8 @@
         <Setter Property="Background" Value="{DynamicResource CardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CornerLg}"/>
-        <Setter Property="Padding" Value="{StaticResource SpaceLg}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource CornerLg}"/>
+        <Setter Property="Padding" Value="{DynamicResource SpaceLg}"/>
         <Setter Property="Margin" Value="0,0,0,16"/>
     </Style>
 

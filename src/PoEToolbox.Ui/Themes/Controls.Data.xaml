@@ -21,7 +21,7 @@
                     <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
                     <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
                     <Setter Property="Padding" Value="10,6"/>
-                    <Setter Property="FontSize" Value="{StaticResource FontXs}"/>
+                    <Setter Property="FontSize" Value="{DynamicResource FontXs}"/>
                 </Style>
             </Setter.Value>
         </Setter>
@@ -50,7 +50,7 @@
     </Style>
     <Style TargetType="TabItem">
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-        <Setter Property="FontSize" Value="{StaticResource FontSm}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSm}"/>
         <Setter Property="Padding" Value="12,6"/>
     </Style>
 
@@ -68,7 +68,7 @@
         <Setter Property="Background" Value="{DynamicResource CardBgBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-        <Setter Property="FontSize" Value="{StaticResource FontXs}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontXs}"/>
         <Setter Property="Padding" Value="8,5"/>
     </Style>
 
@@ -77,7 +77,7 @@
         <Setter Property="Background" Value="{DynamicResource CardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-        <Setter Property="Padding" Value="{StaticResource SpaceMd}"/>
+        <Setter Property="Padding" Value="{DynamicResource SpaceMd}"/>
         <Setter Property="Margin" Value="0,0,0,12"/>
     </Style>
 
