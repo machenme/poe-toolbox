@@ -104,13 +104,7 @@ public static class ConfigService
 
             var element = JsonSerializer.SerializeToElement(config, JsonOpts);
             cfg[pluginName] = element;
-
-            Directory.CreateDirectory(DataDirectory);
-
-            var serialized = JsonSerializer.Serialize(cfg, JsonOpts);
-            var tmp = ConfigPath + ".tmp";
-            File.WriteAllText(tmp, serialized);
-            File.Move(tmp, ConfigPath, true);
+            WriteFullConfig(cfg);
         }
     }
 
@@ -129,13 +123,28 @@ public static class ConfigService
         {
             var cfg = ReadFullConfig();
             cfg[key] = JsonSerializer.SerializeToElement(value);
-
-            Directory.CreateDirectory(DataDirectory);
-            var serialized = JsonSerializer.Serialize(cfg, JsonOpts);
-            var tmp = ConfigPath + ".tmp";
-            File.WriteAllText(tmp, serialized);
-            File.Move(tmp, ConfigPath, true);
+            WriteFullConfig(cfg);
         }
+    }
+
+    /// <summary>Write a structured JSON value to config. Atomic write.</summary>
+    public static void SetJsonValue(string key, object value)
+    {
+        lock (_lock)
+        {
+            var cfg = ReadFullConfig();
+            cfg[key] = JsonSerializer.SerializeToElement(value, JsonOpts);
+            WriteFullConfig(cfg);
+        }
+    }
+
+    private static void WriteFullConfig(Dictionary<string, JsonElement> config)
+    {
+        Directory.CreateDirectory(DataDirectory);
+        var serialized = JsonSerializer.Serialize(config, JsonOpts);
+        var tmp = ConfigPath + ".tmp";
+        File.WriteAllText(tmp, serialized);
+        File.Move(tmp, ConfigPath, true);
     }
 
     private static void EnsureMigrated()

@@ -8,6 +8,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\NameDictionaries\*.json" />
     <EmbeddedResource Include="Assets\Translation\*.json" />
+    <EmbeddedResource Include="..\..\schema.min.json" LogicalName="PoEToolbox.Core.schema.min.json" />
   </ItemGroup>
 
   <PropertyGroup>

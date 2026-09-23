@@ -89,4 +89,24 @@ public sealed class ConfigServiceTests : IDisposable
         Assert.Contains("\"Count\": 7", json);
         Assert.Contains("标题", json);
     }
+
+    [Fact]
+    public void SetJsonValue_WritesReadableObjectWithoutDoubleSerialization()
+    {
+        ConfigService.SetJsonValue("Update.CachedResult", new
+        {
+            HasUpdate = false,
+            Notes = "界面\n修复",
+        });
+
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(ConfigService.ConfigPath));
+        var cachedResult = document.RootElement.GetProperty("Update.CachedResult");
+
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, cachedResult.ValueKind);
+        Assert.Equal("界面\n修复", cachedResult.GetProperty("Notes").GetString());
+        var json = File.ReadAllText(ConfigService.ConfigPath);
+        Assert.Contains("界面", json);
+        Assert.DoesNotContain("\\u754C", json);
+        Assert.DoesNotContain("\\\"HasUpdate\\\"", json);
+    }
 }

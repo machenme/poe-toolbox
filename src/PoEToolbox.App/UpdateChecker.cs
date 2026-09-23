@@ -33,15 +33,20 @@ public static class UpdateChecker
 
     public static UpdateCheckResult GetCachedResult()
     {
-        var raw = ConfigService.GetValue(CachedResultKey);
-        if (string.IsNullOrWhiteSpace(raw))
+        var config = ConfigService.ReadFullConfig();
+        if (!config.TryGetValue(CachedResultKey, out var element))
             return new UpdateCheckResult(false, GetCurrentVersion(), null, null, null, null);
 
         try
         {
-            var cached = JsonSerializer.Deserialize<CachedUpdateState>(raw, JsonOptions);
+            var cached = element.ValueKind == JsonValueKind.String
+                ? JsonSerializer.Deserialize<CachedUpdateState>(element.GetString() ?? string.Empty, JsonOptions)
+                : element.Deserialize<CachedUpdateState>(JsonOptions);
             if (cached is null)
                 return new UpdateCheckResult(false, GetCurrentVersion(), null, null, null, null);
+
+            if (element.ValueKind == JsonValueKind.String)
+                ConfigService.SetJsonValue(CachedResultKey, cached);
 
             var currentVersion = GetCurrentVersion();
             var latestVersion = ParseVersion(cached.LatestVersion);
@@ -151,7 +156,7 @@ public static class UpdateChecker
 
     public static void ClearCachedResult()
     {
-        ConfigService.SetValue(CachedResultKey, string.Empty);
+        ConfigService.SetJsonValue(CachedResultKey, new { });
     }
 
     public static void SkipVersion(Version version)
@@ -186,7 +191,7 @@ public static class UpdateChecker
             result.ReleaseUrl,
             result.DownloadUrl,
             result.Notes);
-        ConfigService.SetValue(CachedResultKey, JsonSerializer.Serialize(payload, JsonOptions));
+        ConfigService.SetJsonValue(CachedResultKey, payload);
     }
 
     private static Version? GetCurrentVersion() => Assembly.GetExecutingAssembly().GetName().Version;

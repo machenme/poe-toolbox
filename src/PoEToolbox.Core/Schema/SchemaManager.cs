@@ -10,6 +10,7 @@ namespace PoEToolbox.Core.Schema;
 /// </summary>
 public static class SchemaManager
 {
+    private const string EmbeddedSchemaResource = "PoEToolbox.Core.schema.min.json";
     private const string PrimaryUrl =
         "https://gh-proxy.org/https://github.com/poe-tool-dev/dat-schema/releases/download/latest/schema.min.json";
     private const string BackupUrl =
@@ -73,6 +74,13 @@ public static class SchemaManager
         if (localHash != null)
         {
             Console.WriteLine("Download failed, using cached schema.");
+            return;
+        }
+
+        if (TryRestoreEmbeddedSchema(dest))
+        {
+            _cachedTables = null;
+            Console.WriteLine($"Download failed, using bundled schema: {dest}");
             return;
         }
 
@@ -173,6 +181,32 @@ public static class SchemaManager
             throw new InvalidDataException("Schema response does not contain a tables array.");
     }
 
+    private static bool TryRestoreEmbeddedSchema(string destination)
+    {
+        try
+        {
+            using var resource = typeof(SchemaManager).Assembly
+                .GetManifestResourceStream(EmbeddedSchemaResource)
+                ?? throw new FileNotFoundException($"Embedded resource was not found: {EmbeddedSchemaResource}");
+            using var memory = new MemoryStream();
+            resource.CopyTo(memory);
+            File.WriteAllBytes(destination, memory.ToArray());
+            ValidateSchemaFile(destination);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            try { if (File.Exists(destination)) File.Delete(destination); }
+            catch (Exception cleanupEx)
+            {
+                FileLogger.App.Warn($"无法清理内嵌 schema 临时文件：{destination}（{cleanupEx.Message}）");
+            }
+
+            FileLogger.App.Warn($"恢复内嵌 schema 失败：{ex.Message}", ex);
+            return false;
+        }
+    }
+
     private static async Task<bool> DownloadToAsync(string url, string dest)
     {
         try
@@ -184,17 +218,20 @@ public static class SchemaManager
                 throw new InvalidDataException("Schema response exceeds the 16 MiB limit.");
 
             await using var source = await response.Content.ReadAsStreamAsync();
-            await using var fs = File.Create(dest);
-            var buffer = new byte[81920];
-            long total = 0;
-            int read;
-            while ((read = await source.ReadAsync(buffer)) > 0)
+            await using (var fs = File.Create(dest))
             {
-                total += read;
-                if (total > MaxSchemaBytes)
-                    throw new InvalidDataException("Schema response exceeds the 16 MiB limit.");
-                await fs.WriteAsync(buffer.AsMemory(0, read));
+                var buffer = new byte[81920];
+                long total = 0;
+                int read;
+                while ((read = await source.ReadAsync(buffer)) > 0)
+                {
+                    total += read;
+                    if (total > MaxSchemaBytes)
+                        throw new InvalidDataException("Schema response exceeds the 16 MiB limit.");
+                    await fs.WriteAsync(buffer.AsMemory(0, read));
+                }
             }
+
             ValidateSchemaFile(dest);
             return true;
         }
