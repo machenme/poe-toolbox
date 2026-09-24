@@ -9,6 +9,7 @@ using Microsoft.Win32;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Shared;
 using PoEToolbox.Ui;
+using PoEToolbox.Plugins.AffixWorkbench.Services;
 
 namespace PoEToolbox.Plugins.AffixWorkbench;
 
@@ -245,27 +246,16 @@ public partial class AffixWorkbenchView : UserControl
     private void RegenerateTierGradient(int count)
     {
         var anchor = _scheme.FindColor("Tier1");
-        var (r0, g0, b0, a0) = anchor is null ? ((byte)200, (byte)255, (byte)70, (byte)255) : (anchor.R, anchor.G, anchor.B, anchor.A);
-        const byte er = 35, eg = 105, eb = 45, ea = 185; // 最深档：暗绿
+        var gradient = AffixRampService.BuildTierGradient(anchor, count);
 
         // 移除旧的 Tier 档（Tier1~TierN 及遗留的多余档）
         for (var i = _scheme.Colors.Count - 1; i >= 0; i--)
         {
-            if (_scheme.Colors[i].Id.Length > 4
-                && _scheme.Colors[i].Id.StartsWith("Tier", StringComparison.Ordinal)
-                && _scheme.Colors[i].Id[4..].All(char.IsDigit))
+            if (AffixRampService.IsTierId(_scheme.Colors[i].Id))
                 _scheme.Colors.RemoveAt(i);
         }
-        for (var i = 0; i < count; i++)
-        {
-            var t = count == 1 ? 0 : (double)i / (count - 1);
-            _scheme.Colors.Add(new AffixColorDef(
-                $"Tier{i + 1}",
-                (byte)Math.Round(r0 + (er - r0) * t),
-                (byte)Math.Round(g0 + (eg - g0) * t),
-                (byte)Math.Round(b0 + (eb - b0) * t),
-                (byte)Math.Round(a0 + (ea - a0) * t)));
-        }
+        foreach (var def in gradient)
+            _scheme.Colors.Add(def);
         _scheme.Save();
         WorkbenchPalette.Update(_scheme.Colors);
         RefreshRampCombo();
@@ -570,27 +560,6 @@ public partial class AffixWorkbenchView : UserControl
 
     private void EntryList_SelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshInspector();
 
-    /// <summary>默认等级色阶：只建 T1~T4 四档，绿系明度/色调/透明度三重梯度、相邻档差距拉大
-    /// （Tier1 荧光黄绿极醒目，逐档大幅变暗变深）。一键上色时若方案里还没有色阶，就自动建这一套；
-    /// 想换色去「颜色修改」改即可。</summary>
-    private static readonly (string Id, byte R, byte G, byte B, byte A)[] DefaultTierRamp =
-    [
-        ("Tier1", 200, 255, 70, 255),
-        ("Tier2", 110, 235, 60, 240),
-        ("Tier3", 65, 180, 55, 215),
-        ("Tier4", 40, 120, 45, 185),
-    ];
-
-    /// <summary>历史版默认绿的 RGB 集合：用于把早期自动创建的暗绿色阶升级为当前梯度（用户改过色的不动）。</summary>
-    private static readonly (byte R, byte G, byte B)[] LegacyDefaultTierGreens =
-    [
-        (90, 200, 70),
-        (120, 230, 80),
-        (170, 255, 100),
-        (110, 235, 60),
-        (65, 155, 60),
-    ];
-
     /// <summary>取当前选中的色阶；没有就用/新建默认绿色阶。
     /// 方案里已存在按旧默认绿自动创建的 Tier1~Tier5 时，先升级成新梯度并移除 Tier5。</summary>
     private AffixColorRamp? EnsureTierRamp()
@@ -606,11 +575,7 @@ public partial class AffixWorkbenchView : UserControl
             return _scheme.FindRamp("Tier") ?? existing;
         }
 
-        foreach (var (id, r, g, b, a) in DefaultTierRamp)
-        {
-            if (_scheme.FindColor(id) is null)
-                _scheme.Colors.Add(new AffixColorDef(id, r, g, b, a));
-        }
+        AffixRampService.EnsureDefaultTierRamp(_scheme.Colors);
         RebuildEntryList(); // 刷新调色板与色阶下拉
         var ramp = _scheme.FindRamp("Tier");
         if (ramp is not null)
@@ -620,45 +585,14 @@ public partial class AffixWorkbenchView : UserControl
     }
 
     /// <summary>把按历史版默认绿自动创建的 Tier1~Tier5 升级为当前四档梯度（含透明度）并移除 Tier5；
-    /// 用户自己改过颜色的（RGB 不是任何历史默认值）保持不动。</summary>
+    /// 用户自己改过颜色的（RGB 不是任何历史默认值）保持不动。
+    /// 判定与替换是 <see cref="AffixRampService.TryUpgradeLegacy"/> 的纯计算，这里只补界面刷新与提示。</summary>
     private void UpgradeLegacyTierRampColors()
     {
-        var changed = false;
-        for (var i = _scheme.Colors.Count - 1; i >= 0; i--)
-        {
-            var def = _scheme.Colors[i];
-            var tierIndex = def.Id switch
-            {
-                "Tier1" => 0,
-                "Tier2" => 1,
-                "Tier3" => 2,
-                "Tier4" => 3,
-                _ => -1,
-            };
-            // T5 整档取消：默认梯度不再包含它（等阶 5+ 本来就不染色）
-            if (def.Id == "Tier5")
-            {
-                if (LegacyDefaultTierGreens.Contains((def.R, def.G, def.B)))
-                {
-                    _scheme.Colors.RemoveAt(i);
-                    changed = true;
-                }
-                continue;
-            }
-            if (tierIndex < 0)
-                continue;
-            var rgb = (def.R, def.G, def.B);
-            if (!LegacyDefaultTierGreens.Contains(rgb))
-                continue;
-            var (_, r, g, b, a) = DefaultTierRamp[tierIndex];
-            _scheme.Colors[i] = def with { R = r, G = g, B = b, A = a };
-            changed = true;
-        }
-        if (changed)
-        {
-            WorkbenchPalette.Update(_scheme.Colors);
-            Output.AppendLog("已把默认等级色阶升级为 T1~T4 四档（档位差距更大，T5 已取消）；想换色去「颜色修改」改即可。");
-        }
+        if (!AffixRampService.TryUpgradeLegacy(_scheme.Colors))
+            return;
+        WorkbenchPalette.Update(_scheme.Colors);
+        Output.AppendLog("已把默认等级色阶升级为 T1~T4 四档（档位差距更大，T5 已取消）；想换色去「颜色修改」改即可。");
     }
 
     private void RampCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshRampPreview();
@@ -897,20 +831,13 @@ public partial class AffixWorkbenchView : UserControl
 
     // ═══ 方案管理 ═══════════════════════════════════════════════
 
-    /// <summary>把语义别名色映射到默认色阶的某档：改默认色阶时这里自动跟随。</summary>
-    private static AffixColorDef TierMapped(string tierId, string aliasId)
-    {
-        var tier = DefaultTierRamp.First(t => t.Id == tierId);
-        return new AffixColorDef(aliasId, tier.R, tier.G, tier.B);
-    }
-
     private static AffixColorScheme CreateDefaultScheme() => new()
     {
         Name = "我的方案",
         Colors =
         [
-            TierMapped("Tier1", "VeryLucky"),   // 高收益 = T1 荧光黄绿（最醒目）
-            TierMapped("Tier4", "Lucky"),       // 收益 = T4 深绿（低调）
+            AffixRampService.TierMapped("Tier1", "VeryLucky"),   // 高收益 = T1 荧光黄绿（最醒目）
+            AffixRampService.TierMapped("Tier4", "Lucky"),       // 收益 = T4 深绿（低调）
             new AffixColorDef("Dangerous", 255, 140, 0),    // 危险·橙
             new AffixColorDef("VeryDangerous", 255, 30, 30) // 高危·红
         ],
