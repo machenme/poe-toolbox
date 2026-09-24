@@ -1,8 +1,8 @@
 # PoE Toolbox 架构总览
 
-- 日期：2026-09-20
-- 代码基线：`77f830b81`（main，PRD D6 与「不再自动探测游戏数据」「界面布局放大」两项变更落地那一提交），版本 `version.json` = 0.2.3
-- 实测：全量测试 **200 通过 / 0 失败**，Release 34s、Debug 34s，CI 两条腿各跑一次（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
+- 日期：2026-09-20（**2026-09-24 复核：结构与不变式无变化，只更新版本号与测试数**）
+- 代码基线：`6f580ffa7`（main，v0.2.5 发布提交），版本 `version.json` = 0.2.5
+- 实测：全量测试 **221 通过 / 0 失败 / 55s**（Release `-m:1`，2026-09-24 实测）；CI 两条腿（Release + Debug）各跑一次（用例数会随后续提交增长，只作基线参考）；`dotnet publish` 出单个 `PoEToolbox.exe`
 - 范围：结构、依赖方向与运行期不变式。**不写行号**——本项目行号在一次提交内就漂移过，一律以类型名 / 唯一字符串定位
 
 > 本文回答「东西在哪、谁能引用谁、哪几条规矩破了自己会死」。
@@ -58,7 +58,7 @@ PoEToolbox.Tests
 | 入口 | `Cli` | `net10.0-windows` | — | 命令行，仅 `Core` + `LibDat2`；`fx-oilmod` / `fx-patch` 等 |
 | 插件 | `PriceTagger` `DataBrowser` `BagCleaner` `Voyager` `TermTranslator` `PoeCnPatch` `Poe2Font` `FxPatch` `AffixWorkbench` | `net10.0-windows` | ✅ | 每个一个 `IUiPlugin` + 若干 `UserControl` |
 | 基础 | `LibGGPK3` `LibBundle3` `LibDat2` `LibBundledGGPK3` | `net10.0` | — | GGPK / Bundles2 / DAT 的格式读写；不依赖上层 |
-| 测试 | `PoEToolbox.Tests` | `net10.0-windows` | — | 200 条；引用 `Core` + 4 个插件 + `Shared`，**不引用 `App` / `Ui` / `Cli`** |
+| 测试 | `PoEToolbox.Tests` | `net10.0-windows` | — | 221 条（2026-09-24 实测）；引用 `Core` + 4 个插件 + `Shared`，**不引用 `App` / `Ui` / `Cli`** |
 
 ## 3. 运行期数据流
 
@@ -157,8 +157,8 @@ PriceTagger / AffixWorkbench → Core/Pipeline/PoeNinjaFetcher → NetworkDefaul
 
 | 项 | 现状 | 出处 |
 |---|---|---|
-| UI 组织 | 59 处 `MessageBox.Show` 散落各 View，无 `IDialogService`；插件 View 多为 code-behind 而非 ViewModel | 报告 P1-1 / P2-6 |
-| 超大文件 | 单文件 1k 行以上还有 5 个：`LibBundle3/Index.cs`、`AffixWorkbenchView`、`DataBrowserView`、`CsdDocument`、`FxPatchView`（基线时分别约 1450/1380/1350/1030/1020 行，不逐次更新，别当准数用） | 报告 P0/P1 |
+| UI 组织 | 59 处 `MessageBox.Show` 散落各 View，无 `IDialogService`；插件 View 多为 code-behind 而非 ViewModel。2026-09-24 实测：16 个 `*View.xaml.cs` / `*Window.xaml.cs` 合计 **8146 行**，其中 >1000 行的 3 个（`AffixWorkbenchView` 1388 / `DataBrowserView` 1350 / `FxPatchView` 1018）；全仓只有 4 个 `*ViewModel*.cs`，`CommunityToolkit.Mvvm` 仍只被 `BagCleaner` 一个工程引用 | 报告 P1-1 / P2-6 |
+| 超大文件 | 单文件 1k 行以上还有 5 个：`LibBundle3/Index.cs`、`AffixWorkbenchView`、`DataBrowserView`、`CsdDocument`、`FxPatchView`（2026-09-24 实测 1451/1388/1350/1028/1018 行，不逐次更新，别当准数用） | 报告 P0/P1 |
 | 日志器单例不吃测试缝 | `FileLogger.App` 在第一次被触碰时就按当时的根目录建好了文件句柄，之后改注入缝不影响它。断言日志内容请订阅 `FileLogger.EntryLogged`，不要去读日志文件 | — |
 | 未被使用的上游 API | `LibDat2.DatContainer.DownloadSchemaMin()`（`SchemaMin` 全仓无人置真）与 `LibGGPK3.PatchClient.UpdateNodeAsync`（无调用方）**不是本项目的死代码**：两者都随 `src/Lib*` 一起从上游 vendored 进来、初版提交（`02ef81c47`）就存在，是库对外的公共 API。删它们只是增加与上游的分歧（本项目已在 `LibBundle3/Index.cs` 带着注释改过上游 bug，分歧要省着用），留着也不占运行时时。**唯一的实际风险是下一个人照它们做设计**，所以在此标注而不是删除 | SPEC §4.3 |
 | CLI 仍需桌面框架 | GDI+ 有两处：`Core` 的 DDS 渲染，以及 `Cli` 自己的 `DdsTextReplacer`（它的 csproj 还写着一句在 .NET 10 SDK 上空转的 `<UseSystemDrawing>`，能编译其实靠 `Core` 传下来的框架引用）。加上 `Cli` 的 TFM 本身就是 `net10.0-windows`。WPF 已经拿掉了，桌面框架还没拿掉 | SPEC §11 |
