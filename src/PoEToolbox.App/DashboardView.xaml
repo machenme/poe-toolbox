@@ -59,6 +59,10 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <!-- 按钮独占第三列。少这一列时下面 Grid.Column="2" 会越界，
+                             WPF 不报错但把按钮塞回 Auto 列，按钮被内容驱动拉满全宽，
+                             变成一条横贯的蓝条压住整张状态卡。 -->
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- 未选游戏数据时高亮这一块：所有模块在选文件前都会停下 -->
