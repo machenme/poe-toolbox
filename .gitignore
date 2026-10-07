@@ -49,12 +49,14 @@ work/config.json
 Content.ggpk
 *.ggpk
 
-# 起草中的设计稿（定稿后移入 docs/ 入库，见 docs/PRD-engineering-hardening.md 的 D3）
-/PRD-affix-coloring.md
-/SPEC-affix-coloring.md
-/PRD-endgame-map-marks.md
-/SPEC-endgame-map-marks.md
-/STATUS-endgame-map-marks.md
+# 设计稿：统一放 drafts/，整目录不入库（2026-10-08 主人拍板）。
+# 设计稿是过程资产不是交付物——GitHub 上只该有docs/ 里的正式文档。
+# 目录规则优于逐个文件名：以前这里列了 5 个具体名字，新写的稿子漏了就
+# 会自动出现在 git status 里，等于半入库，是长期漂移的来源。
+# ⛔ 移进来之后必须 git rm --cached，否则 ignore 对已跟踪文件无效。
+/drafts/
+
+# 早期散落在根目录的单文件草稿名（已迁入 drafts/，留着防同名复现）
 AUDIT_PRD.md
 AUDIT_SPEC.md
 TODO.md

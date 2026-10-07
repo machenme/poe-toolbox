@@ -840,7 +840,7 @@ static int CmdCmp(string[] a)
 }
 
 // ═══ probe-endgamemaps ═════════════════════════════════════
-// W0 闸门：验证「挖坟词缀」子模块的可行性（见 SPEC-endgame-map-marks.md §7、PRD 的 A-1/A-2/A-5）。
+// W0 闸门：验证「挖坟词缀」子模块的可行性（见 drafts/SPEC-endgame-map-marks.md §7、drafts/PRD-endgame-map-marks.md 的 A-1/A-2/A-5）。
 // 只读：不写索引、不写任何游戏文件。五项检查全过才允许开工 W1。
 static int CmdProbeEndgameMaps(string[] a)
 {

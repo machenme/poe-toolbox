@@ -7,7 +7,7 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
-/// UI 重铸护栏（SPEC-ui-rebuild.md §步骤3）：视图 XAML 不得出现字面色值。
+/// UI 重铸护栏（drafts/SPEC-ui-rebuild.md §步骤3）：视图 XAML 不得出现字面色值。
 /// 颜色的唯一真相在 src/PoEToolbox.Ui/Themes/Tokens.xaml，页面只允许通过
 /// DynamicResource / StaticResource 引用语义令牌与组件 key。字面 hex 一旦
 /// 回流，改一处色板就要重新逐页搜索替换，重铸的收益会被稀释归零。
