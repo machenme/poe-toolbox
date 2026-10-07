@@ -9,7 +9,7 @@ using LibBundledGGPK3;
 namespace PoEToolbox.Shared;
 
 /// <summary>
-/// 不变式 3（docs/ARCHITECTURE.md §4）：内存回收挂在本类的 <c>Dispose</c> 上，调用点不要手工 <c>Reclaim()</c>。
+/// 不变式 3（README「必须保持的不变式」表）：内存回收挂在本类的 <c>Dispose</c> 上，调用点不要手工 <c>Reclaim()</c>。
 /// Unified game data access layer. Automatically detects and handles both formats:
 ///   - GGPK container (official client): Content.ggpk → BundledGGPK
 ///   - Bundles2 directory (Steam/Epic): _.index.bin → LibBundle3.Index

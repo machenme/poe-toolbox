@@ -7,7 +7,7 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
-/// 不变式 12（docs/ARCHITECTURE.md §4）：插件工程之间不许互相引用。
+/// 不变式 12（README「必须保持的不变式」表）：插件工程之间不许互相引用。
 /// 这条是报告 P1-5 一次重构才换来的（`Voyager → BagCleaner` 拆掉，纯 Win32/GDI 类型下沉 `Core`，
 /// 热键契约提到 `Abstractions` 由组合根注入）。但当时没有任何东西把它变成机器可查的约束：
 /// 往插件 csproj 里加回一行 ProjectReference，编译得过、CI 两条腿照样绿。本测试补的就是这道护栏。
@@ -50,7 +50,7 @@ public sealed class PluginReferenceGuardTests
             offenders.Count == 0,
             "插件工程之间出现了直接引用：" + string.Join("；", offenders) + "。要复用别的插件里的东西只有两条路——"
             + "类型本身是纯 Win32/GDI/领域逻辑就下沉到 Core，或者留在原插件、把契约提到 Abstractions 用工厂倒置、"
-            + "由组合根 PluginManager 注入。见 docs/ARCHITECTURE.md §4 不变式 12。");
+            + "由组合根 PluginManager 注入。见 README 的不变式表第 12 条。");
     }
 
     private static IEnumerable<string> ReadProjectReferences(string projectFile) =>

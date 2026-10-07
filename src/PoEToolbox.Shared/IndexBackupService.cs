@@ -11,7 +11,7 @@ public sealed record IndexBackupSession(
     string BeforeHash,
     bool CreatedBaseline);
 
-/// <summary>不变式 5（docs/ARCHITECTURE.md §4）：写路径必过备份——改索引前由本服务留还原点。</summary>
+/// <summary>不变式 5（README「必须保持的不变式」表）：写路径必过备份——改索引前由本服务留还原点。</summary>
 public static class IndexBackupService
 {
     private const string BackupScope = "game-data";

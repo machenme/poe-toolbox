@@ -5,7 +5,7 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
-/// 不变式 3（docs/ARCHITECTURE.md §4）：守「回收挂在 Dispose 上」这条契约本身。
+/// 不变式 3（README「必须保持的不变式」表）：守「回收挂在 Dispose 上」这条契约本身。
 /// 释放游戏数据时必须自己排一次内存回收。
 /// 这条契约以前靠每个调用点手工补 <see cref="MemoryReclaimer.Reclaim"/>：漏一次就是一个常驻
 /// 几百 MB 的索引，而且 <c>using</c> 块里提前 return 的路径天然会跳过块外的手工调用。

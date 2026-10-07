@@ -5,7 +5,7 @@ using Xunit;
 namespace PoEToolbox.Tests;
 
 /// <summary>
-/// 不变式 10（docs/ARCHITECTURE.md §4）：断言日志内容前先加锁取快照，不直接枚举订阅列表。
+/// 不变式 10（README「必须保持的不变式」表）：断言日志内容前先加锁取快照，不直接枚举订阅列表。
 /// config.json 的容错分支。P2-5 给这两条静默回落补了日志，但当时写不出测试——
 /// 路径是 static readonly，要复现就得往真实的 %LocalAppData% 里写坏文件。有了注入缝才谈得上验证。
 /// </summary>

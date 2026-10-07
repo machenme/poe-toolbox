@@ -24,7 +24,7 @@ public enum GameDataMode
 }
 
 /// <summary>
-/// 不变式 14（docs/ARCHITECTURE.md §4）：拿到空路径直接抛 <see cref="InvalidOperationException"/>，不回退去扫注册表或默认安装目录。
+/// 不变式 14（README「必须保持的不变式」表）：拿到空路径直接抛 <see cref="InvalidOperationException"/>，不回退去扫注册表或默认安装目录。
 /// Owns the lifecycle of a short-lived <see cref="GameDataAccess"/>: resolve the path, open it off
 /// the caller's thread, hand it to a callback, then dispose it.
 /// </summary>

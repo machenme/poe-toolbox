@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace PoEToolbox.Shared;
 
 /// <summary>
-/// 不变式 3（docs/ARCHITECTURE.md §4）：回收由 <see cref="GameDataAccess.Dispose"/> 触发，不在调用点手工补。
+/// 不变式 3（README「必须保持的不变式」表）：回收由 <see cref="GameDataAccess.Dispose"/> 触发，不在调用点手工补。
 /// Reclaims the memory a released game data index leaves behind.
 /// </summary>
 /// <remarks>

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace PoEToolbox.Tests;
 
-// 不变式 11（docs/ARCHITECTURE.md §4）：Debug.Fail 走 Trace.Listeners 派发——测试在这段窗口里接管它，既不为测试改产品防线，又第一次给守卫本身上了回归保护。
+// 不变式 11（README「必须保持的不变式」表）：Debug.Fail 走 Trace.Listeners 派发——测试在这段窗口里接管它，既不为测试改产品防线，又第一次给守卫本身上了回归保护。
 
 /// <summary>
 /// 临时接管 <see cref="Debug.Fail"/>：既不让它把用例炸掉，又留下「它到底响没响」的证据。

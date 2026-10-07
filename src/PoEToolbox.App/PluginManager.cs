@@ -4,7 +4,7 @@ using PoEToolbox.Shared;
 namespace PoEToolbox.App;
 
 /// <summary>
-/// 不变式 6（docs/ARCHITECTURE.md §4）：插件是编译期静态注册的，本类的注册方法是唯一真相，没有动态加载。
+/// 不变式 6（README「必须保持的不变式」表）：插件是编译期静态注册的，本类的注册方法是唯一真相，没有动态加载。
 /// Discovers and manages IPlugin instances.
 /// Plugins are compiled-in at build time (no dynamic loading).
 /// </summary>

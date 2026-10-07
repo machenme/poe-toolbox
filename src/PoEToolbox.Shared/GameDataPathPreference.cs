@@ -1,7 +1,7 @@
 namespace PoEToolbox.Shared;
 
 /// <summary>
-/// 不变式 14（docs/ARCHITECTURE.md §4）：游戏数据没有「自动检测」这条路径，只沿用用户亲手选过一次的那一份。
+/// 不变式 14（README「必须保持的不变式」表）：游戏数据没有「自动检测」这条路径，只沿用用户亲手选过一次的那一份。
 /// Persists the game data path shared by modules that operate on the same client.
 /// <para>
 /// The rule this class exists to enforce: <b>nothing is selected until the user selects it once</b>.
