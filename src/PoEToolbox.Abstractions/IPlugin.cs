@@ -10,6 +10,14 @@ public interface IPlugin
 {
     string Name { get; }
     string IconGlyph { get; }
+
+    /// <summary>
+    /// 一句话说明这个模块会动什么（中文，与 <see cref="Name"/> 同语言）。
+    /// Dashboard 首页的卡片靠它告诉用户点进去会发生什么，所以要写「会改什么」而不是「是什么」。
+    /// 无界面插件返回空串即可。
+    /// </summary>
+    string Summary { get; }
+
     int Order { get; }
     void OnActivated();
     void OnDeactivated();

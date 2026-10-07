@@ -1,4 +1,4 @@
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Ui;
 using PoEToolbox.Shared;
@@ -15,6 +15,7 @@ public sealed class FxPatchPlugin : IUiPlugin
 
     public string Name => "特效补丁";
     public string IconGlyph => "\uE945"; // Segoe MDL2 Assets: LightningBolt
+    public string Summary => "勾选即应用特效补丁，重复执行安全，可单独卸载或全部还原。";
     public int Order => 9;
 
     public UserControl CreateView() => _view ??= new FxPatchView(_eventBus);

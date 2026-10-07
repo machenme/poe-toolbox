@@ -1,0 +1,143 @@
+<UserControl x:Class="PoEToolbox.App.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:PoEToolbox.Ui;assembly=PoEToolbox.Ui"
+             Background="Transparent">
+    <!--
+      Dashboard 首页。抄 PowerToys 的两级信息层次：左边是一堆模块平铺，
+      进来就让人在10 个工具里迷路；这里先给一屏卡片，每张写清「点进去会改我什么」，
+      再由用户决定进哪一页。
+
+      卡片是命令式入口：点一下就切到对应模块页（走 MainWindow 的导航选中），
+      本身不做任何业务动作 —— 真正的写操作仍然在模块页里、且各自带预览与还原。
+    -->
+    <UserControl.Resources>
+        <!-- 卡片：整张可点，悬停变底色 -->
+        <Style x:Key="ModuleCard" TargetType="Border" BasedOn="{StaticResource CardBorderHoverable}">
+            <Setter Property="Width" Value="252"/>
+            <Setter Property="Height" Value="116"/>
+            <Setter Property="Margin" Value="0,0,12,12"/>
+            <Setter Property="Padding" Value="16"/>
+        </Style>
+
+        <!-- 客户端不匹配：整卡压暗 + 右上角角标。判定与左导航的禁用态同一个 IsEnabled。 -->
+        <Style x:Key="UnavailableBadge" TargetType="Border">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource CornerXs}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DisabledCard" TargetType="Border" BasedOn="{StaticResource ModuleCard}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                    <Setter Property="Cursor" Value="Arrow"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="{DynamicResource PagePadding}">
+
+            <!-- ═══ 页头 ═══ -->
+            <ui:PageHeader x:Name="Header"
+                           IconGlyph="&#xE80F;"
+                           HeaderText="工具箱"
+                           Description="每个模块都会直接改游戏数据。选中一张卡片进入详情页，看清它会改什么再动手。"/>
+
+            <!-- ═══ 客户端状态 ═══ -->
+            <Border Style="{StaticResource CardBorder}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 未选游戏数据时高亮这一块：所有模块在选文件前都会停下 -->
+                    <Border x:Name="GameBadgePlate" Grid.Column="0"
+                            Width="44" Height="44" CornerRadius="{DynamicResource CornerMd}"
+                            Background="{DynamicResource SurfaceBrush}" VerticalAlignment="Center">
+                        <TextBlock x:Name="GameBadgeIcon" Text="&#xE7F4;"
+                                   FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                   Foreground="{DynamicResource TextTertiaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="GameStateText" Style="{StaticResource SectionText}"/>
+                        <TextBlock x:Name="GameStateHint" Style="{StaticResource CaptionText}" Margin="0,3,0,0"/>
+                    </StackPanel>
+
+                    <Button x:Name="SelectGameDataButton" Grid.Column="2"
+                            Style="{StaticResource PrimaryButton}"
+                            VerticalAlignment="Center" Click="SelectGameDataButton_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- ═══ 模块卡片 ═══ -->
+            <TextBlock Text="全部模块" Style="{StaticResource SectionTitle}" Margin="0,4,0,12"/>
+
+            <ItemsControl x:Name="Cards" Margin="0,0,-12,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource DisabledCard}"
+                                MouseLeftButtonUp="Card_Click"
+                                Tag="{Binding}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="32" Height="32"
+                                            CornerRadius="{DynamicResource CornerSm}"
+                                            Background="{DynamicResource AccentSubtleBrush}">
+                                        <TextBlock Text="{Binding IconGlyph}"
+                                                   FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                                   Foreground="{DynamicResource AccentBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}"
+                                               Style="{StaticResource SectionText}"
+                                               Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="1" Text="{Binding Summary}"
+                                           Style="{StaticResource CaptionText}"
+                                           Margin="0,10,0,0" VerticalAlignment="Top"/>
+
+                                <Border Grid.Row="0" Grid.RowSpan="2"
+                                        Style="{StaticResource UnavailableBadge}">
+                                    <TextBlock Text="{Binding UnavailableHint}"
+                                               Style="{StaticResource CaptionText}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- 搜索无结果时的空态 -->
+            <Border x:Name="EmptyState" Style="{StaticResource SubtleCard}"
+                    Margin="0,12,0,0" Visibility="Collapsed">
+                <TextBlock x:Name="EmptyStateText" Style="{StaticResource NormalText}"
+                           TextWrapping="Wrap"/>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

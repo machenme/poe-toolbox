@@ -1,4 +1,4 @@
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Ui;
 using PoEToolbox.Shared;
@@ -16,6 +16,7 @@ public sealed class FxPatchCreatorPlugin : IUiPlugin
 
     public string Name => "创建补丁";
     public string IconGlyph => "\uE90F"; // Segoe MDL2 Assets: Repair
+    public string Summary => "对比原版与改后两份游戏数据，生成可分发的补丁包。";
     public int Order => 10;
 
     public UserControl CreateView() => _view ??= new FxPatchCreatorView(_eventBus);

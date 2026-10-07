@@ -1,4 +1,4 @@
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Ui;
 using PoEToolbox.Shared;
@@ -18,6 +18,7 @@ public sealed class MapNumberPlugin : IUiPlugin
 
     public string Name => "修改地图标签";
     public string IconGlyph => "\uE70F"; // Segoe MDL2 Assets: Edit（铅笔；原 E125 是旧版 Segoe UI Symbol 码点，MDL2 里不是编辑）
+    public string Summary => "重画地图上的数字标注（字体、字号、偏移），改 DDS 贴图。";
     public int Order => 16;
 
     public UserControl CreateView() => _view ??= new MapNumberView(_eventBus);

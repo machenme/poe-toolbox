@@ -1,4 +1,4 @@
-using PoEToolbox.Abstractions;
+﻿using PoEToolbox.Abstractions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -20,6 +20,9 @@ public partial class MainWindow : Window
     private readonly PluginManager _pluginManager;
     private readonly IAppState _sessionState;
     private IUiPlugin? _activePlugin;
+    private DashboardView _dashboard = null!;
+    private ICollectionView _navView = null!;
+    private bool _syncingThemeCombo;
     private bool _initialGameDataHintShown;
     private int _gameDataDetectionVersion;
     private bool _windowClosed;
@@ -28,6 +31,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // 主题必须在任何控件取到画刷之前落定：晚一步就会先按浅色画一遍再跳色。
+        ThemeService.Initialize();
 
         _pluginManager = new PluginManager(new EventBus());
         _sessionState = _pluginManager.SessionState;
@@ -38,8 +44,19 @@ public partial class MainWindow : Window
         FxEngineRunner.ReleaseExternalLocks = () =>
             _pluginManager.EventBus.Publish(new ReleaseGameDataLocksRequested());
         _pluginManager.RegisterAll();
-        NavList.ItemsSource = CreateNavigationView();
+        _navView = CreateNavigationView();
+        NavList.ItemsSource = _navView;
+
+        _dashboard = new DashboardView(
+            BuildModuleCards,
+            () => _sessionState.Game,
+            () => _sessionState.IsPoeRunning,
+            () => _sessionState.CurrentLeague);
+        _dashboard.ModuleRequested += name => SelectNavEntryByName(name);
+        _dashboard.SelectGameDataRequested += PromptForGameData;
+
         ApplyLocalization();
+        SyncThemeCombo();
         _pluginManager.EventBus.Publish(new GameContextChanged(
             PoeGameKind.Unknown, null, PoeDetector.Default.IsPoeRunning()));
         SourceInitialized += (_, _) => InitializeGlobalPluginHotkeys();
@@ -54,7 +71,7 @@ public partial class MainWindow : Window
             {
                 DisclaimerOverlay.Visibility = Visibility.Collapsed;
                 PromptForInitialGameData();
-                if (NavList.Items.Count > 0) NavList.SelectedIndex = 0;
+                ShowDashboard();
             };
             page.Declined += () => Application.Current.Shutdown();
             DisclaimerOverlay.Child = page;
@@ -62,7 +79,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            if (NavList.Items.Count > 0) NavList.SelectedIndex = 0;
+            ShowDashboard();
         }
 
         ApplyVersionState(UpdateChecker.GetCachedResult());
@@ -80,7 +97,14 @@ public partial class MainWindow : Window
 
     private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (NavList.SelectedItem is not NavigationEntry { Plugin: { } plugin } entry) return;
+        if (NavList.SelectedItem is not NavigationEntry { Plugin: { } plugin } entry)
+        {
+            // Dashboard 项没有插件（Plugin 为 null），这里不接管，内容区保持原样。
+            if (NavList.SelectedItem is NavigationEntry { IsDashboard: true })
+                ShowDashboard();
+            return;
+        }
+
         if (!entry.IsEnabled)
         {
             // Selection can still be changed programmatically while the client type is being
@@ -95,6 +119,7 @@ public partial class MainWindow : Window
 
         _activePlugin?.OnDeactivated();
         _activePlugin = plugin;
+        ShowModuleHeader(plugin);
         try
         {
             FileLogger.App.Info($"Plugin activated: {plugin.Name}");
@@ -112,6 +137,115 @@ public partial class MainWindow : Window
             var msg = $"{plugin.Name}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
             FileLogger.WriteCritical(msg, ex);
             MessageBox.Show(msg, "Plugin Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>Dashboard 导航项（唯一 Plugin 为 null 且要显示的项）。</summary>
+    private void ShowDashboard()
+    {
+        _activePlugin?.OnDeactivated();
+        _activePlugin = null;
+        _dashboard.Refresh();
+        PluginContent.Content = _dashboard;
+
+        // Dashboard 自带页头，这里把外壳页头收起，否则会出现两个标题。
+        ModuleHeader.IconGlyph = string.Empty;
+        ModuleHeader.HeaderText = string.Empty;
+        ModuleHeader.Description = string.Empty;
+    }
+
+    /// <summary>
+    /// 把外壳页头切成当前模块的图标 / 标题 / 一句作用说明。
+    /// 三项都来自 <see cref="IUiPlugin"/>，所以新增插件无需改动任何 XAML。
+    /// </summary>
+    private void ShowModuleHeader(IUiPlugin plugin)
+    {
+        ModuleHeader.IconGlyph = plugin.IconGlyph;
+        ModuleHeader.HeaderText = UILabels.Get(plugin.Name);
+        ModuleHeader.Description = plugin.Summary;
+    }
+
+    /// <summary>Dashboard 卡片点了某个模块：把左导航选中项切过去（切页逻辑只有这一处）。</summary>
+    private void SelectNavEntryByName(string name)
+    {
+        var target = NavList.Items.Cast<object>()
+            .OfType<NavigationEntry>()
+            .FirstOrDefault(item => item.Plugin is not null && item.Name == name);
+        if (target is not null)
+            NavList.SelectedItem = target;
+    }
+
+    // ═══ 左导航搜索 ═══════════════════════════════════════════════
+    private void NavSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        NavSearchClear.Visibility = string.IsNullOrEmpty(NavSearchBox.Text)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        ApplyNavFilter(NavSearchBox.Text);
+    }
+
+    private void NavSearchClear_Click(object sender, RoutedEventArgs e)
+    {
+        NavSearchBox.Clear();
+        NavSearchBox.Focus();
+    }
+
+    /// <summary>
+    /// 过滤走 <see cref="ICollectionView.Filter"/>：不重建集合，因此
+    /// <see cref="NavList.SelectedItem"/> 不会因刷新而丢；被过滤掉的项若正选中，会自动落到 Dashboard。
+    /// </summary>
+    private void ApplyNavFilter(string keyword)
+    {
+        var trimmed = keyword.Trim();
+        _navView.Filter = trimmed.Length == 0
+            ? null
+            : entry => entry is NavigationEntry nav
+                && (nav.Name.Contains(trimmed, StringComparison.CurrentCultureIgnoreCase)
+                    || (nav.Plugin?.Summary.Contains(trimmed, StringComparison.CurrentCultureIgnoreCase) ?? false));
+
+        var current = NavList.SelectedItem as NavigationEntry;
+        if (current is not null && !(_navView.Cast<NavigationEntry>().Contains(current)))
+            NavList.SelectedItem = FindDashboardEntry() ?? NavList.SelectedItem;
+    }
+
+    private NavigationEntry? FindDashboardEntry()
+        => NavList.Items.Cast<object>().OfType<NavigationEntry>().FirstOrDefault(e => e.IsDashboard);
+
+    /// <summary>Dashboard 的卡片列表：与左导航同源，可用态判定完全一致。</summary>
+    private IReadOnlyList<ModuleCard> BuildModuleCards()
+        => _pluginManager.Plugins
+            .OfType<IUiPlugin>()
+            .OrderBy(p => p.Order)
+            .Select(p => new ModuleCard(
+                p.Name,
+                p.IconGlyph,
+                p.Summary,
+                () => IsPluginAvailable(p, _sessionState.Game)))
+            .ToList();
+
+    // ═══ 主题 ═══════════════════════════════════════════════════
+    private void SyncThemeCombo()
+    {
+        _syncingThemeCombo = true;
+        ThemeCombo.SelectedIndex = ThemeService.FollowSystem ? 0 : (ThemeService.IsDark ? 2 : 1);
+        _syncingThemeCombo = false;
+    }
+
+    private void ThemeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingThemeCombo) return;
+
+        switch (ThemeCombo.SelectedIndex)
+        {
+            case 0:
+                ThemeService.UseSystem();
+                break;
+            case 2:
+                ThemeService.SetDark(true);
+                break;
+            default:
+                ThemeService.SetDark(false);
+                break;
         }
     }
 
@@ -343,7 +477,6 @@ public partial class MainWindow : Window
     {
         Title = UILabels.Get("AppTitle");
         LblAppTitle.Text = UILabels.Get("AppTitle");
-        LblSubtitle.Text = UILabels.Get("Subtitle");
         OnGameDataLocksChanged(GameDataAccess.HasOpenLocks);
         UpdateShellStatus();
 
@@ -359,9 +492,15 @@ public partial class MainWindow : Window
         OpenReleasesButton.Content = UILabels.Get("OpenReleasePage");
         OpenDataFolderButton.Content = UILabels.Get("OpenAppDataFolder");
         OpenDataFolderButton.ToolTip = UILabels.Get("OpenAppDataFolder");
+        NavSearchBox.ToolTip = UILabels.Get("DashboardSearchNav");
 
         // Refresh nav list display names
         NavList.Items.Refresh();
+        _dashboard.ApplyLocalization();
+
+        // 页头标题走 UILabels，切语言时要跟着换（Summary 是中文说明，不参与翻译）。
+        if (_activePlugin is not null)
+            ModuleHeader.HeaderText = UILabels.Get(_activePlugin.Name);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -407,6 +546,7 @@ public partial class MainWindow : Window
         UpdateGameDataPathDisplay(context.GameDataPath ?? GameDataPathPreference.Get());
         UpdateShellStatus();
         NavList.Items.Refresh();
+        _dashboard.Refresh();
 
         if (context.Game == PoeGameKind.Unknown && !string.IsNullOrWhiteSpace(context.GameDataPath))
             BeginGameKindDetection(context.GameDataPath);
@@ -451,8 +591,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnLeagueChanged(LeagueChanged _) => UpdateShellStatus();
-
+    private void OnLeagueChanged(LeagueChanged _)
+    {
+        UpdateShellStatus();
+        _dashboard.Refresh();
+    }
     private void OnGameDataLocksChanged(bool hasOpenLocks)
     {
         if (!Dispatcher.CheckAccess())
@@ -490,15 +633,20 @@ public partial class MainWindow : Window
     private ICollectionView CreateNavigationView()
     {
         // 导航只列带界面的插件；无界面的 IPlugin 仍然注册、仍然收到生命周期回调。
-        var entries = _pluginManager.Plugins
+        var entries = new List<NavigationEntry>
+        {
+            // Dashboard 排最前：进程序先看全局，而不是直落第一个模块。
+            new NavigationEntry("HOME", -1, -1, null, () => _sessionState.Game, IsDashboard: true),
+        };
+
+        entries.AddRange(_pluginManager.Plugins
             .OfType<IUiPlugin>()
             .Select(plugin => new NavigationEntry(
                 GetPluginGroup(plugin),
                 GetGroupOrder(plugin),
                 plugin.Order,
                 plugin,
-                () => _sessionState.Game))
-            .ToList();
+                () => _sessionState.Game)));
 
         // Keep the POE2 section visible while its tools are temporarily unavailable.
         entries.Add(new NavigationEntry("POE2", 2, int.MaxValue, null, () => _sessionState.Game));
@@ -517,7 +665,7 @@ public partial class MainWindow : Window
                 || plugin is PoEToolbox.Plugins.FxPatch.FxPatchPlugin
                 || plugin is PoEToolbox.Plugins.FxPatch.FxPatchCreatorPlugin
                 ? "POE2"
-            : "菜单";
+            : "TOOLS";
 
     private static bool IsPluginAvailable(IUiPlugin? plugin, PoeGameKind game)
         => plugin switch
@@ -537,16 +685,24 @@ public partial class MainWindow : Window
             _ => 0,
         };
 
+    /// <summary>
+    /// 左导航的一项。<see cref="Plugin"/> 为 null 有两种含义：<see cref="IsDashboard"/> 为 true
+    /// 是首页入口（要显示、可选中），否则只是「保持分组可见」的占位项（收起）。
+    /// </summary>
     private sealed record NavigationEntry(
         string GroupName,
         int GroupOrder,
         int PluginOrder,
         IUiPlugin? Plugin,
-        Func<PoeGameKind> GameProvider)
+        Func<PoeGameKind> GameProvider,
+        bool IsDashboard = false)
     {
-        public string Name => Plugin?.Name ?? string.Empty;
-        public string IconGlyph => Plugin?.IconGlyph ?? string.Empty;
-        public bool IsEnabled => IsPluginAvailable(Plugin, GameProvider());
+        public string Name => IsDashboard ? UILabels.Get("Dashboard") : (Plugin?.Name ?? string.Empty);
+        /// <summary>Dashboard 用 Home 图标（Segoe MDL2 Assets 的 U+E80F）。</summary>
+        public string IconGlyph => IsDashboard ? "\uE80F" : (Plugin?.IconGlyph ?? string.Empty);
+
+        /// <summary>Dashboard 恒可用；占位项恒不可用（要收起）；插件按客户端判定。</summary>
+        public bool IsEnabled => IsDashboard || IsPluginAvailable(Plugin, GameProvider());
     }
 
     // ═══ 彻底还原游戏客户端（全局兜底入口，与「特效补丁」页的还原共用同一引擎通道） ═══

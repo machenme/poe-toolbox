@@ -1,0 +1,50 @@
+<UserControl x:Class="PoEToolbox.Ui.PageHeader"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             Background="Transparent">
+    <!--
+      模块页统一页头：图标 + 标题 + 一句说明。
+      PowerToys 的每个模块页都是这个开头（图标 + 名称 + 一句话作用），
+      作用是让人在进页面前就知道「这个模块会动我什么」。
+
+      三个属性都是 DependencyProperty，视图里用
+      <ui:PageHeader IconGlyph="…" HeaderText="…" Description="…"/> 声明式赋值，
+      不需要 code-behind 参与。Description 留空时整块自动收起，不留空行。
+    -->
+    <StackPanel x:Name="Panel" Margin="0,0,0,16">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 图标底板：40×40 圆角方块，accent 淡底 -->
+            <Border x:Name="IconPlate" Grid.Column="0"
+                    Width="40" Height="40"
+                    CornerRadius="{DynamicResource CornerMd}"
+                    Background="{DynamicResource AccentSubtleBrush}"
+                    VerticalAlignment="Center">
+                <TextBlock x:Name="IconText"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="18"
+                           Foreground="{DynamicResource AccentBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Text="{Binding IconGlyph, ElementName=Root}"/>
+            </Border>
+
+            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                <TextBlock x:Name="TitleLabel"
+                           Style="{StaticResource TitleText}"
+                           Text="{Binding HeaderText, ElementName=Root}"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="DescriptionLabel"
+                           Style="{StaticResource CaptionText}"
+                           Margin="0,3,0,0"
+                           Text="{Binding Description, ElementName=Root}"/>
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</UserControl>

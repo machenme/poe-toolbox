@@ -1,4 +1,4 @@
-namespace PoEToolbox.Shared;
+﻿namespace PoEToolbox.Shared;
 
 /// <summary>
 /// Multi-language UI strings. Supports EN/SC/TC.
@@ -45,10 +45,24 @@ public static class UILabels
         ["SkipVersion"] = "Skip v{0}",
         ["OpenAppDataFolder"] = "Open data folder",
         ["SelectGameDataTitle"] = "Select game data file",
+        ["SelectGameData"] = "Choose game data",
         ["GameDataFilter"] = "Game data files|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|Index files|_.index.bin|All files|*.*",
         ["NoGameDataSelected"] = "No game data selected",
         ["CollapseLog"] = "▤ Hide log",
         ["ShowLog"] = "▤ Show log",
+
+        // Dashboard
+        ["Dashboard"] = "Dashboard",
+        ["DashboardTitle"] = "Toolbox",
+        ["DashboardIntro"] = "Every module writes straight into the game client. Open a card to read what it changes before you touch anything.",
+        ["DashboardAllModules"] = "All modules",
+        ["DashboardNoMatch"] = "No module matches this search.",
+        ["DashboardClientReady"] = "{0} client selected",
+        ["DashboardClientReadyHint"] = "Running: {0} · League: {1}",
+        ["DashboardClientMissing"] = "No game data selected",
+        ["DashboardClientMissingHint"] = "Every module stays idle until you pick a client file. It applies to all modules afterwards.",
+        ["DashboardSearchNav"] = "Search modules",
+        ["DashboardCardUnavailable"] = "Needs another client",
     };
 
     private static readonly Dictionary<string, string> TC = new()
@@ -82,10 +96,24 @@ public static class UILabels
         ["SkipVersion"] = "跳過 v{0}",
         ["OpenAppDataFolder"] = "開啟資料夾",
         ["SelectGameDataTitle"] = "選擇遊戲資料檔案",
+        ["SelectGameData"] = "選擇遊戲資料",
         ["GameDataFilter"] = "遊戲資料檔案|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|索引檔案|_.index.bin|全部檔案|*.*",
         ["NoGameDataSelected"] = "未選擇遊戲資料",
         ["CollapseLog"] = "▤ 收合日誌",
         ["ShowLog"] = "▤ 輸出日誌",
+
+        // Dashboard
+        ["Dashboard"] = "總覽",
+        ["DashboardTitle"] = "工具箱",
+        ["DashboardIntro"] = "每個模組都會直接改遊戲資料。點開卡片看清楚它會改什麼，再動手。",
+        ["DashboardAllModules"] = "全部模組",
+        ["DashboardNoMatch"] = "沒有符合的模組。",
+        ["DashboardClientReady"] = "已選擇 {0} 客戶端",
+        ["DashboardClientReadyHint"] = "運行狀態：{0} · 聯盟：{1}",
+        ["DashboardClientMissing"] = "未選擇遊戲資料",
+        ["DashboardClientMissingHint"] = "選好客戶端檔案之前，所有模組都會停在原地提示。選一次之後各模組共用這一份。",
+        ["DashboardSearchNav"] = "搜尋模組",
+        ["DashboardCardUnavailable"] = "需另一個客戶端",
     };
 
     private static readonly Dictionary<string, string> SC = new()
@@ -119,10 +147,24 @@ public static class UILabels
         ["SkipVersion"] = "跳过 v{0}",
         ["OpenAppDataFolder"] = "打开数据文件夹",
         ["SelectGameDataTitle"] = "选择游戏数据文件",
+        ["SelectGameData"] = "选择游戏数据",
         ["GameDataFilter"] = "游戏数据文件|Content.ggpk;_.index.bin|Content.ggpk|Content.ggpk|索引文件|_.index.bin|全部文件|*.*",
         ["NoGameDataSelected"] = "未选择游戏数据",
         ["CollapseLog"] = "▤ 收起日志",
         ["ShowLog"] = "▤ 输出日志",
+
+        // Dashboard
+        ["Dashboard"] = "总览",
+        ["DashboardTitle"] = "工具箱",
+        ["DashboardIntro"] = "每个模块都会直接改游戏数据。点开卡片看清楚它会改什么，再动手。",
+        ["DashboardAllModules"] = "全部模块",
+        ["DashboardNoMatch"] = "没有符合条件的模块。",
+        ["DashboardClientReady"] = "已选择 {0} 客户端",
+        ["DashboardClientReadyHint"] = "运行状态：{0} · 联盟：{1}",
+        ["DashboardClientMissing"] = "未选择游戏数据",
+        ["DashboardClientMissingHint"] = "选好客户端文件之前，所有模块都会停在原地提示。选一次之后各模块共用这一份。",
+        ["DashboardSearchNav"] = "搜索模块",
+        ["DashboardCardUnavailable"] = "需另一个客户端",
     };
 
     // ═══ Plugin: Price Tagger keys ═══════════════════════

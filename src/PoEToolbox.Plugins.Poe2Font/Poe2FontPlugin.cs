@@ -1,4 +1,4 @@
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Ui;
 using PoEToolbox.Shared;
@@ -15,6 +15,7 @@ public sealed class Poe2FontPlugin : IUiPlugin
 
     public string Name => "自定义字体";
     public string IconGlyph => "\uE8D2"; // Segoe MDL2 Assets: Font（字体，贴合「自定义字体」；与 GGPK 浏览共用 Folder 太含糊）
+    public string Summary => "逐条调整游戏内 156 处字号，可整体缩放或单条微调。";
     public int Order => 11;
 
     public UserControl CreateView() => _view ??= new Poe2FontView(_eventBus);

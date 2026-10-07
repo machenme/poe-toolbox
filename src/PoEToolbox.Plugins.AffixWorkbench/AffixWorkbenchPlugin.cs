@@ -1,4 +1,4 @@
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using PoEToolbox.Abstractions;
 using PoEToolbox.Ui;
 using PoEToolbox.Shared;
@@ -17,6 +17,7 @@ public class AffixWorkbenchPlugin : IUiPlugin
 
     public string Name => "词缀上色";
     public string IconGlyph => "\uE790"; // Segoe MDL2 Assets: Color（调色盘，贴合「词缀上色」；原 E7EC 实为 DrivingMode）
+    public string Summary => "给全部词缀按稀有度上色，改动写成游戏补丁，随时可一键还原。";
     public int Order => 17;
 
     private AffixWorkbenchView? _view;

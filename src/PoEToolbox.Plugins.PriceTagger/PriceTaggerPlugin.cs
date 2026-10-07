@@ -1,4 +1,4 @@
-using PoEToolbox.Abstractions;
+﻿using PoEToolbox.Abstractions;
 using PoEToolbox.Ui;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -28,6 +28,7 @@ public class PriceTaggerPlugin : IUiPlugin
 
     public string Name => UILabels.Get("PluginPriceTagger");
     public string IconGlyph => "\uE8EC"; // Segoe MDL2 Assets: Tag（标签，贴合「价格标签」）
+    public string Summary => "按 poe.ninja 行情给物品名追加价格标签，可先预览再写入。";
     public int Order => 0;
 
     public UserControl CreateView() => _view ??= new PriceTaggerView(_eventBus);

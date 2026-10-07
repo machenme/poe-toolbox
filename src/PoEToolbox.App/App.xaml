@@ -5,6 +5,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!--
+                  索引 0 固定是「颜色令牌层」，由 ThemeService 整体替换以切浅色/深色。
+                  刻意与 DesignSystem（排版 + 控件样式）分开成两层：视图里有 300+ 处
+                  {StaticResource <Style>}，样式在解析期一次性绑定，换样式字典会让
+                  已加载控件持有失效引用；换颜色字典则所有 DynamicResource 自动跟随。
+                -->
+                <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Tokens.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/DesignSystem.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

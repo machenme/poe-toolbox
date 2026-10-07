@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using PoEToolbox.Core.Input;
 using PoEToolbox.Plugins.Voyager.Core;
@@ -14,6 +14,7 @@ public class VoyagerPlugin : IUiPlugin
 {
     public string Name => "航海助手";
     public string IconGlyph => "\uE7E3"; // Segoe MDL2 Assets: Ferry（船，贴合「航海助手」）
+    public string Summary => "把地图上散落的仓库标记一键收进海图仓库。";
     public int Order => 20;
 
     private VoyagerView? _view;
