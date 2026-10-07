@@ -53,7 +53,31 @@ public partial class App : Application
 
         var main = new MainWindow();
         MainWindow = main;
-        main.Show();
+
+        // Show() 失败必须显式退出，绝不能让进程留下来空转。
+        // 症状回顾（2026-10-07）：窗口创建失败时 Application.Run 会进到
+        // PushFrameImpl → GetMessageW 死等一条永远不会来的消息，CPU 增量为 0、HWND=0、
+        // OnExit 永不执行，ShutdownMode=OnMainWindowClose 也就永远不触发 —— 表现为
+        // 「窗口关掉了但进程退不掉」，而且日志里只剩一行 App starting.，毫无线索。
+        try
+        {
+            main.Show();
+        }
+        catch (Exception ex)
+        {
+            FileLogger.WriteCritical("MainWindow.Show() failed; shutting down instead of idling with no window.", ex);
+            Shutdown(1);
+            return;
+        }
+
+        // Show() 不抛异常也可能没建出原生窗口（例如资源解析失败被上层吞掉）。
+        // 用 IsVisible 兜一次底：这里拿不到可见窗口就说明启动已经废了，立刻退出。
+        if (!main.IsVisible)
+        {
+            FileLogger.WriteCritical(
+                "MainWindow.Show() returned without a visible window; shutting down instead of idling with no window.");
+            Shutdown(1);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

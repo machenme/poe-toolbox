@@ -24,6 +24,11 @@ public class PriceTaggerPlugin : IUiPlugin
         _eventBus = eventBus ?? new EventBus();
         _idleReleaseTimer = new DispatcherTimer { Interval = IdleReleaseDelay };
         _idleReleaseTimer.Tick += (_, _) => ReleaseIfIdle();
+
+        // 物价标注要读写 datc64，datc64 的表结构来自 schema.min.json。
+        // 拉更新必须放到后台：以前 LoadAllTables 会在 UI 线程上同步等网络，
+        // 网络不通时整个窗口就卡在启动阶段（无窗口、CPU 为 0、进程退不掉）。
+        PoEToolbox.Core.Schema.SchemaManager.EnsureSchemaInBackground();
     }
 
     public string Name => UILabels.Get("PluginPriceTagger");

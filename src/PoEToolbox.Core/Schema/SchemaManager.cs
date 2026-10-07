@@ -95,19 +95,16 @@ public static class SchemaManager
     {
         if (_cachedTables != null) return _cachedTables;
 
-        // Sync load for simplicity — call EnsureSchemaAsync() first in startup
+        // 离线优先：本地有缓存就直接用，别为了「可能是新版本」把调用方（往往是 UI 线程）卡在网络请求上。
+        // 这里曾经是 EnsureSchemaAsync().GetAwaiter().GetResult()，在 UI 线程上同步等两个 URL 各 30 秒，
+        // 网络不通时表现为「点了没反应」，最坏情况下整窗假死。更新交给调用方显式调 EnsureSchemaAsync。
         var path = SchemaPath;
         if (!File.Exists(path))
         {
-            // Attempt sync download
-            try
-            {
-                EnsureSchemaAsync().GetAwaiter().GetResult();
-            }
-            catch
-            {
+            if (!TryRestoreEmbeddedSchema(path))
                 throw new FileNotFoundException($"Schema file not found: {path}. Ensure network connectivity.");
-            }
+
+            _cachedTables = null;
         }
 
         var json = File.ReadAllText(path);
@@ -161,6 +158,33 @@ public static class SchemaManager
         }
 
         throw new KeyNotFoundException($"Table '{tableName}' not found in schema (validFor={validFor})");
+    }
+
+    private static int _refreshStarted;
+
+    /// <summary>
+    /// Fire-and-forget schema refresh for startup: never blocks the caller, never throws.
+    /// Safe to call from a UI thread — the download runs on the thread pool and the
+    /// cached tables are dropped only after a newer file has actually landed on disk.
+    /// </summary>
+    public static void EnsureSchemaInBackground()
+    {
+        // 多次触发（每次开新窗口、每次切模块）只发起一次下载。
+        if (Interlocked.Exchange(ref _refreshStarted, 1) == 1)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await EnsureSchemaAsync();
+            }
+            catch (Exception ex)
+            {
+                // 拿不到新 schema 不影响使用：本地缓存或内嵌兜底已经在位。
+                FileLogger.App.Warn($"后台更新 schema 失败，继续使用本地版本：{ex.Message}");
+            }
+        });
     }
 
     // ═══ Helpers ═════════════════════════════════════════════
