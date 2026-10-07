@@ -21,8 +21,11 @@
         </Style>
 
         <!-- 客户端不匹配：右上角角标。判定与左导航的禁用态同一个 IsEnabled。
-             默认 Collapsed（占位不占宽），不可用时才显现。 -->
+             默认必须显式 Collapsed：Border 的默认值是 Visible，不写这一行
+             角标会对「可用」的卡片也常驻，第 0 列被 Auto 角标吃掉宽度，
+             模块名被压成「物化标注…」。触发器再把它打开。 -->
         <Style x:Key="UnavailableBadge" TargetType="Border">
+            <Setter Property="Visibility" Value="Collapsed"/>
             <Setter Property="HorizontalAlignment" Value="Right"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="CornerRadius" Value="{DynamicResource CornerXs}"/>
@@ -108,13 +111,21 @@
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
+                                    <!-- 标题行三列：图标(定宽) / 模块名(自适应) / 角标(按需)。
+                                         以前图标和模块名同占第 0 列、靠 Margin="42,0,8,0"
+                                         硬凑偏移避让，两个毛病：① 图标只给了 Width=32 而没给
+                                         HorizontalAlignment，Stretch 遇到显式 Width 会退化成
+                                         Center，图标被居中到列中部、直接压在模块名上；
+                                         ② 偏移量 42 是写死的，改字号或改图标尺寸就错位。
+                                         分列后两者各占各的格，不靠魔法数字。 -->
+                                    <ColumnDefinition Width="32"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- 标题行：图标 + 模块名。角标独占第 1 列靠右，
-                                     不再和标题抢同一格（之前角标叠在模块名上，文字互相压住）。 -->
+                                <!-- 标题行：图标 + 模块名 -->
                                 <Border Grid.Column="0" Width="32" Height="32"
+                                        HorizontalAlignment="Left"
                                         CornerRadius="{DynamicResource CornerSm}"
                                         Background="{DynamicResource BrandSubtleBrush}"
                                         BorderBrush="{DynamicResource BrandBorderBrush}"
@@ -125,19 +136,19 @@
                                                Foreground="{DynamicResource BrandBrush}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                <TextBlock Grid.Column="1" Text="{Binding Name}"
                                            Style="{StaticResource SectionText}"
-                                           Margin="42,0,8,0" VerticalAlignment="Center"
+                                           Margin="10,0,8,0" VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"/>
 
-                                <!-- 客户端不匹配：右上角角标，占第 1 列 -->
-                                <Border Grid.Column="1" Grid.Row="0"
+                                <!-- 客户端不匹配：右上角角标，默认收起（见 UnavailableBadge） -->
+                                <Border Grid.Column="2" Grid.Row="0"
                                         Style="{StaticResource UnavailableBadge}">
                                     <TextBlock Text="{Binding UnavailableHint}"
                                                Style="{StaticResource CaptionText}"/>
                                 </Border>
 
-                                <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Summary}"
+                                <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding Summary}"
                                            Style="{StaticResource CaptionText}"
                                            Margin="0,10,0,0" VerticalAlignment="Top"/>
                             </Grid>

@@ -184,9 +184,11 @@ public partial class MainWindow : Window
     // ═══ 左导航搜索 ═══════════════════════════════════════════════
     private void NavSearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        NavSearchClear.Visibility = string.IsNullOrEmpty(NavSearchBox.Text)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        var empty = string.IsNullOrEmpty(NavSearchBox.Text);
+        NavSearchClear.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        // 水印与放大镜只在空态出现；TextBox 有内容时水印必须让位，否则会压在字上。
+        NavSearchHint.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        NavSearchIcon.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         ApplyNavFilter(NavSearchBox.Text);
     }
 
@@ -484,6 +486,7 @@ public partial class MainWindow : Window
         OpenDataFolderButton.Content = UILabels.Get("OpenAppDataFolder");
         OpenDataFolderButton.ToolTip = UILabels.Get("OpenAppDataFolder");
         NavSearchBox.ToolTip = UILabels.Get("DashboardSearchNav");
+        NavSearchHint.Text = UILabels.Get("DashboardSearchNav");
 
         // Refresh nav list display names
         NavList.Items.Refresh();

@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="clr-namespace:PoEToolbox.Ui">
 
     <!-- Design system entry point. Merged by App.xaml.
          Order matters: tokens first, then components that consume them.
@@ -7,6 +8,15 @@
          单一浅色主题，不再有运行时切主题，所以颜色令牌直接并回本字典：
          Tokens.xaml 给 PoE 金 + Fluent 蓝的配色与全部尺寸令牌，
          后面几个字典是排版与控件样式，消费上面的令牌。 -->
+
+    <!--
+      转换器不是主题资源（没有「浅色/深色」两套值），但外壳要用 StaticResource
+      引用它，而 MainWindow 只加载本入口，所以在这里注册一次。
+      刻意不塞进 Tokens.xaml：那里全是「可换肤的令牌」，
+      混进行为型资源会让后来者以为改它就能改主题。
+    -->
+    <ui:ContentMaxWidthConverter x:Key="ContentMaxWidthConverter"/>
+
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Tokens.xaml"/>
         <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Typography.xaml"/>

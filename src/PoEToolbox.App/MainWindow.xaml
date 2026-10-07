@@ -119,17 +119,26 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- 搜索框 -->
+                <!-- 搜索框。图标与水印必须声明在 TextBox 之后：同一个 Grid 里
+                     后声明的画在上层，放前面会被 TextBox 的白底整块盖住，
+                     渲染结果是一个什么都没有的空白输入框。 -->
                 <Grid Grid.Row="0" Margin="0,0,12,8">
+                    <TextBox x:Name="NavSearchBox" Height="30" Padding="28,0,26,0"
+                             VerticalContentAlignment="Center"
+                             TextChanged="NavSearchBox_TextChanged"
+                             ToolTip="搜索模块"/>
                     <TextBlock x:Name="NavSearchIcon" Text="&#xE721;"
                                FontFamily="Segoe MDL2 Assets" FontSize="13"
                                Foreground="{DynamicResource TextTertiaryBrush}"
                                HorizontalAlignment="Left" VerticalAlignment="Center"
                                Margin="10,0,0,0" IsHitTestVisible="False"/>
-                    <TextBox x:Name="NavSearchBox" Height="30" Padding="28,0,26,0"
-                             VerticalContentAlignment="Center"
-                             TextChanged="NavSearchBox_TextChanged"
-                             ToolTip="搜索模块"/>
+                    <!-- 空态提示：没有输入内容时占位，输入后由 NavSearchBox_TextChanged 收起 -->
+                    <TextBlock x:Name="NavSearchHint"
+                               Text="搜索模块"
+                               Style="{StaticResource NormalText}"
+                               Foreground="{DynamicResource PlaceholderBrush}"
+                               Margin="29,0,0,0" VerticalAlignment="Center"
+                               IsHitTestVisible="False"/>
                     <Button x:Name="NavSearchClear" Width="22" Height="22"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
                             Margin="0,0,4,0" Content="&#xE711;" FontSize="11"
@@ -239,26 +248,53 @@
                  IPlugin 已提供 IconGlyph / Name / Summary，新增插件自动获得页头，
                  且标题走 UILabels 三语，不会在视图里散落硬编码中文。
 
-                 内容整体水平居中并限制最大宽度：窗口拉宽时不至于让一行文字横跨
-                 两千像素，左侧导航仍保持左列（Fluent 习惯）。
+                 ⛔ 内层 Grid <b>必须显式写 Grid.Row="1"</b>，不能靠默认。
+                 这是 2026-10-07 踩过的最隐蔽一坑：父 Grid 有 Row0=Auto / Row1=*，
+                 内层若不写 Grid.Row 就默认落在第 0 行，于是被 Auto 行压成
+                 内容 DesiredSize 的高度。最小复现（脱离项目树）验证：
+                     内层不写 Grid.Row ⇒ 15px（内容自然高）
+                     内层写 Grid.Row="1" ⇒ 1230px（拿满剩余高度）
+                 实际症状：窗口 2560×1392、内容区可用 2296×1245，
+                 页头与视图只拿到 15px，模块下半部分空出约 960px。
+
+                 横向同理：宽度要 Stretch，不能 HorizontalAlignment="Center"。
+                 Center 让这一层按内容 DesiredSize 收缩，MaxWidth 只是上限、
+                 不拉满。实测写成 Center 时只拿到 6px —— 模块右侧空一大片。
+
+                 MaxWidth 不能写死像素值。写 MaxWidth="1600" 实测：
+                 2560 窗口浪费 696px（30.3%）、3440 浪费 1576px（49.6%），
+                 分辨率越高浪费越多。改用 ContentMaxWidthConverter 分段换算：
+                   available ≤ 1600（舒适区）→ 完全铺满，一点不浪费；
+                   available > 1600→ cap = 1600 + 0.92 × (available - 1600)。
+                 ⛔ 不要无脑乘 0.92（可用宽度的固定比例）：那会让「本来就够宽的
+                 窗口」（如1546，内容区 1282）也开始浪费 103px，主人窗口
+                 反而看着变窄了。1600 是**转折点**不是上限，比例只作用在超出段。
+                 实测浪费：1100~1546 = 0%、1920 = 0.3%、2560 = 2.4%、
+                 3440 = 4.0%、3840 = 4.4%。
+
+                 绑 ContentColumn 自己的 ActualWidth 是对的（它就是内容区那一列，
+                 宽 2296）。⛔ 不能绑外层 Body Grid 的 ActualWidth——那个值
+                 含左导航 264，会把封顶算大 264px 而形同虚设（实测 4K 下失效）。
 
                  这里刻意不写 Width="100%"：Grid.Width 默认按绝对 Length 解析，
                  "100%" 会抛 FormatException「无法将"100%"字符串转换为 Length」，
-                 整个窗口 LoadComponent 失败、启动即崩。居中 + MaxWidth 已经能
-                 撑满可用空间并居中，不需要显式宽度。 -->
-            <Grid Grid.Column="1">
+                 整个窗口 LoadComponent 失败、启动即崩（见 XamlLoadTests）。 -->
+            <Grid Grid.Column="1" x:Name="ContentColumn">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <Grid MaxWidth="1180" HorizontalAlignment="Center">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <ui:PageHeader x:Name="ModuleHeader" Grid.Row="0"/>
-                    <ContentControl x:Name="PluginContent" Grid.Row="1"/>
+                <ui:PageHeader x:Name="ModuleHeader" Grid.Row="0"/>
+
+                <!-- Grid.Row="1" 是本次修复的关键：没有它整层被 Auto 行压扁。
+                     MaxWidth 绑 ContentColumn.ActualWidth（内容区可用宽度），
+                     配合 Stretch 先铺满、再按比例封顶，两侧留白居中。 -->
+                <Grid Grid.Row="1"
+                      HorizontalAlignment="Stretch"
+                      MaxWidth="{Binding ActualWidth, ElementName=ContentColumn,
+                                    Converter={StaticResource ContentMaxWidthConverter}}">
+                    <ContentControl x:Name="PluginContent"/>
                 </Grid>
             </Grid>
         </Grid>
