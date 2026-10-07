@@ -44,9 +44,11 @@ public partial class MainWindow : Window
         FxEngineRunner.ReleaseExternalLocks = () =>
             _pluginManager.EventBus.Publish(new ReleaseGameDataLocksRequested());
         _pluginManager.RegisterAll();
-        _navView = CreateNavigationView();
-        NavList.ItemsSource = _navView;
 
+        // _dashboard 必须早于 NavList.ItemsSource 赋值创建。
+        // 给 ItemsSource 赋值会让 Selector 自动选中第一项（Dashboard），
+        // 立刻触发 SelectionChanged → ShowDashboard()，那里要用 _dashboard。
+        // 顺序颠倒就是启动即崩的 NullReferenceException。
         _dashboard = new DashboardView(
             BuildModuleCards,
             () => _sessionState.Game,
@@ -54,6 +56,10 @@ public partial class MainWindow : Window
             () => _sessionState.CurrentLeague);
         _dashboard.ModuleRequested += name => SelectNavEntryByName(name);
         _dashboard.SelectGameDataRequested += PromptForGameData;
+
+        _navView = CreateNavigationView();
+        NavList.ItemsSource = _navView;
+        NavList.SelectedItem = FindDashboardEntry();
 
         ApplyLocalization();
         SyncThemeCombo();
@@ -143,6 +149,11 @@ public partial class MainWindow : Window
     /// <summary>Dashboard 导航项（唯一 Plugin 为 null 且要显示的项）。</summary>
     private void ShowDashboard()
     {
+        // InitializeComponent 之前 / _dashboard 建好之前都可能被调到（给 ItemsSource 赋值
+        // 会自动选中第一项并触发 SelectionChanged），此时还没有东西可显示，直接跳过。
+        if (_dashboard is null || PluginContent is null || ModuleHeader is null)
+            return;
+
         _activePlugin?.OnDeactivated();
         _activePlugin = null;
         _dashboard.Refresh();
