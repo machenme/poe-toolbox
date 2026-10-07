@@ -47,6 +47,8 @@ try
         "dds-mapnumbers" => DdsTextReplacer.RunMapNumbers(remaining),
         "dds-remove-map-t" => DdsRegionCleaner.Run(remaining),
         "cmp" => CmdCmp(remaining),
+        "probe-endgamemaps" => CmdProbeEndgameMaps(remaining),
+        "try-endgamemaps" => CmdTryEndgameMaps(remaining),
         "copy-file" => CmdCopyFile(remaining),
         "restore" => CmdRestore(remaining),
         "fx-oilmod" => FxPatchEngine.Run(remaining, FxPatchEngine.BuiltInAll),
@@ -837,6 +839,395 @@ static int CmdCmp(string[] a)
     return 0;
 }
 
+// ═══ probe-endgamemaps ═════════════════════════════════════
+// W0 闸门：验证「挖坟词缀」子模块的可行性（见 SPEC-endgame-map-marks.md §7、PRD 的 A-1/A-2/A-5）。
+// 只读：不写索引、不写任何游戏文件。五项检查全过才允许开工 W1。
+static int CmdProbeEndgameMaps(string[] a)
+{
+    if (a.Length < 1)
+    {
+        Console.Error.WriteLine("Usage: probe-endgamemaps <game-data> [语言目录名]");
+        Console.Error.WriteLine("  <game-data>  Content.ggpk 或 Bundles2/_.index.bin");
+        Console.Error.WriteLine("  [语言目录名] 省略时自动探测，如 traditional chinese");
+        return 1;
+    }
+
+    const string tableName = "EndgameMaps";
+    const string columnKey = "Unknown25";   // schema 中未命名列 → SchemaManager 命名为 Unknown{序号}
+    const int columnIndex = 25;
+
+    var results = new List<(string Name, bool Ok, string Detail)>();
+
+    Console.WriteLine(new string('=', 68));
+    Console.WriteLine("W0 probe: 挖坟词缀可行性验证（只读）");
+    Console.WriteLine(new string('=', 68));
+
+    // ── [0] 打开游戏数据 ────────────────────────────────────
+    var resolved = GameDataAccess.ResolvePath(a[0]);
+    Console.WriteLine($"\n[0] 打开：{resolved}");
+    using var gd = GameDataAccess.OpenReadOnlyMapped(resolved);
+    Console.WriteLine($"    类型：{(gd.IsBundles2 ? "Bundles2 索引" : "GGPK")}   PoE2：{gd.IsPoe2Client}");
+    if (!gd.IsPoe2Client)
+    {
+        Console.WriteLine("\n[!] 这不是 PoE2 客户端。本模块是二代专属，探测中止。");
+        return 1;
+    }
+
+    // ── [1] 表是否存在 + 对每份覆盖层采样 ───────────────────
+    Console.WriteLine("\n[1] 定位 endgamemaps.datc64（逐份采样，看哪份真有内容）");
+    var lang = a.Length > 1 ? a[1] : null;
+    const string basePath = "data/balance/endgamemaps.datc64";
+    var candidates = new List<string> { basePath };
+    foreach (var l in new[] { "traditional chinese", "simplified chinese", "english" })
+        candidates.Add($"data/balance/{l}/endgamemaps.datc64");
+
+    (int Cols, string Type, int NonEmpty, List<string> Samples, int Marked) Sample(byte[] bytes, string p)
+    {
+        var (i64, v) = Datc64File.DetectFromExtension(p);
+        var t = Datc64File.FromBytes(bytes, tableName, i64, v);
+        var type = t.Columns.Count > columnIndex ? t.Columns[columnIndex].Type : "（列数不足）";
+        var samples = new List<string>();
+        var nonEmpty = 0;
+        var marked = 0;
+        if (t.Columns.Count > columnIndex)
+        {
+            foreach (var r in t.Rows)
+            {
+                var s = r.GetValueOrDefault(columnKey) as string ?? "";
+                if (s.Length == 0) continue;
+                nonEmpty++;
+                if (s.Contains('<') && s.Contains('{')) marked++;
+                if (samples.Count < 3) samples.Add(s);
+            }
+        }
+        return (t.Columns.Count, type, nonEmpty, samples, marked);
+    }
+
+    Datc64File SampleTable(byte[] bytes, string p)
+    {
+        var (i64, v) = Datc64File.DetectFromExtension(p);
+        return Datc64File.FromBytes(bytes, tableName, i64, v);
+    }
+
+    var existing = new List<string>();
+    foreach (var p in candidates)
+    {
+        if (!gd.FileExists(p)) continue;
+        existing.Add(p);
+        var bytes = gd.ReadFile(p)!;
+        var s = Sample(bytes, p);
+        Console.WriteLine($"    [存在] {p}（{bytes.Length:N0} 字节）");
+        Console.WriteLine($"           列数={s.Cols}  第{columnIndex}列={s.Type}  非空={s.NonEmpty}  含标记={s.Marked}");
+        foreach (var v in s.Samples) Console.WriteLine($"           样本：{v}");
+    }
+
+    if (existing.Count == 0)
+    {
+        Console.WriteLine("    [缺失] 客户端里找不到 endgamemaps.datc64");
+        Console.WriteLine("\n结论：FAIL — A-2 不成立（表不存在）。");
+        return 1;
+    }
+
+    // 目标优先级：指定语言 > 有内容的语言覆盖层 > 有内容的 base > 第一份存在的
+    var scored = existing.Select(p => (Path: p, S: Sample(gd.ReadFile(p)!, p))).ToList();
+    var path = lang is not null ? $"data/balance/{lang}/endgamemaps.datc64" : null;
+    if (path is null || !gd.FileExists(path))
+        path = scored.FirstOrDefault(x => x.Path != basePath && x.S.NonEmpty > 0).Path
+            ?? scored.FirstOrDefault(x => x.S.NonEmpty > 0).Path
+            ?? scored[0].Path;
+    Console.WriteLine($"    采用：{path}" + (lang is null ? "（自动探测，优先取有内容的语言覆盖层）" : "（指定）"));
+    results.Add(("A-2 表存在", true, path));
+
+    var data = gd.ReadFile(path)!;
+
+    // ── [2] 列结构 ──────────────────────────────────────────
+    Console.WriteLine("\n[2] 列结构");
+    var (is64, vf) = Datc64File.DetectFromExtension(path);
+    Datc64File dt;
+    try
+    {
+        dt = Datc64File.FromBytes(data, tableName, is64, vf);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"    [失败] 解析抛异常：{ex.Message}");
+        Console.WriteLine("\n结论：FAIL — A-1 不成立（Datc64File 打不开这张表）。");
+        return 1;
+    }
+
+    Console.WriteLine($"    行数：{dt.Count:N0}  列数：{dt.Columns.Count}  RowLength：{dt.RowLength}");
+    var schemaLength = dt.Columns.Sum(c => Datc64Constants.ColumnSize(c, is64));
+    Console.WriteLine($"    schema 行长：{schemaLength}（{(dt.RowLength == schemaLength ? "一致" : "不一致，存在尾部未知列")}）");
+
+    var colOk = dt.Columns.Count > columnIndex && dt.Columns[columnIndex].Type == "string";
+    if (colOk)
+        Console.WriteLine($"    [OK] 第 {columnIndex} 列：Name={dt.Columns[columnIndex].Name} Type=string");
+    else
+        Console.WriteLine($"    [不符] 第 {columnIndex} 列：{(dt.Columns.Count > columnIndex ? $"Name={dt.Columns[columnIndex].Name} Type={dt.Columns[columnIndex].Type}" : "列数不足")}");
+    results.Add(("D3 列定位", colOk, colOk ? $"Columns[25] = string" : "类型/列数不符"));
+
+    // ── [3] 往返字节一致（A-1） ─────────────────────────────
+    Console.WriteLine("\n[3] 往返编码（不改任何内容）");
+    byte[] encoded;
+    try
+    {
+        encoded = dt.ToBytes();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"    [失败] ToBytes 抛异常：{ex.Message}");
+        Console.WriteLine("\n结论：FAIL — A-1 不成立。");
+        return 1;
+    }
+    var firstDiff = -1;
+    var minLen = Math.Min(data.Length, encoded.Length);
+    for (var i = 0; i < minLen; i++)
+        if (data[i] != encoded[i]) { firstDiff = i; break; }
+    if (firstDiff < 0 && data.Length != encoded.Length) firstDiff = minLen;
+
+    var byteIdentical = firstDiff < 0;
+    Console.WriteLine($"    原 {data.Length:N0} 字节 → 重编码 {encoded.Length:N0} 字节");
+    if (byteIdentical)
+        Console.WriteLine("    [OK] 逐字节完全一致");
+    else
+        Console.WriteLine($"    [差异] 首个不同字节 @ {firstDiff}（原 {data.Length:N0} vs 新 {encoded.Length:N0}）");
+    results.Add(("A-1 往返字节一致", byteIdentical, byteIdentical ? "identical" : $"firstDiff={firstDiff}"));
+
+    // 二次往返：把重编码结果再解析再编码，看是否继续变化（编码器是否幂等）
+    // 语义比对：重编码后再解析，逐行逐列按 JSON 比对（字节不等不代表内容坏了）
+    var semanticDiff = 0;
+    var semanticSample = "";
+    {
+        var dtR = Datc64File.FromBytes(encoded, tableName, is64, vf);
+        for (var i = 0; i < Math.Min(dt.Count, dtR.Count); i++)
+        {
+            foreach (var col in dt.Columns)
+            {
+                var s1 = System.Text.Json.JsonSerializer.Serialize(dt.Rows[i].GetValueOrDefault(col.Name));
+                var s2 = System.Text.Json.JsonSerializer.Serialize(dtR.Rows[i].GetValueOrDefault(col.Name));
+                if (s1 != s2)
+                {
+                    semanticDiff++;
+                    if (semanticSample.Length == 0)
+                        semanticSample = $"行 {i} 列 {col.Name}：{s1[..Math.Min(60, s1.Length)]} → {s2[..Math.Min(60, s2.Length)]}";
+                }
+            }
+        }
+        Console.WriteLine(semanticDiff == 0
+            ? "    语义比对：[OK] 全部行、全部列内容等价（字节不等只是布局/膨胀，不是损坏）"
+            : $"    语义比对：[损坏] {semanticDiff} 处内容不同，例：{semanticSample}");
+    }
+    results.Add(("A-1 往返语义无损", semanticDiff == 0, semanticDiff == 0 ? "equivalent" : semanticSample));
+
+    var encodedTwice = Datc64File.FromBytes(encoded, tableName, is64, vf).ToBytes();
+    var stable = encodedTwice.Length == encoded.Length;
+    Console.WriteLine($"    二次往返：{encoded.Length:N0} → {encodedTwice.Length:N0} 字节" +
+                      (stable ? "  [OK] 稳定（不再增长）" : "  [警告] 仍在变化，编码器不幂等"));
+    results.Add(("A-1 二次往返稳定", stable, $"{encoded.Length:N0} → {encodedTwice.Length:N0}"));
+
+    // ── [4] 改一行后其他行不漂移（A-1 的关键） ──────────────
+    Console.WriteLine("\n[4] 改一行后重编码，检查其他行是否漂移");
+    var probeText = "[<red>{PROBE}]";
+    if (colOk && dt.Count > 0)
+    {
+        var dt2 = Datc64File.FromBytes(data, tableName, is64, vf);
+        var before = dt2.Rows[0].GetValueOrDefault(columnKey) as string ?? "";
+        dt2.Rows[0][columnKey] = probeText + before;
+
+        var encoded2 = dt2.ToBytes();
+        var dt3 = Datc64File.FromBytes(encoded2, tableName, is64, vf);
+
+        var drift = 0;
+        var driftSample = "";
+        for (var i = 0; i < Math.Min(dt2.Count, dt3.Count); i++)
+        {
+            foreach (var col in dt2.Columns)
+            {
+                if (i == 0 && col.Name == columnKey) continue;   // 只跳过我们自己改的那一格
+                // 数组列的值是 List<object>，引用相等永远不等 ⇒ 必须按 JSON 比对（同 CmdCmp）
+                var s1 = System.Text.Json.JsonSerializer.Serialize(dt2.Rows[i].GetValueOrDefault(col.Name));
+                var s2 = System.Text.Json.JsonSerializer.Serialize(dt3.Rows[i].GetValueOrDefault(col.Name));
+                if (s1 != s2)
+                {
+                    drift++;
+                    if (driftSample.Length == 0)
+                        driftSample = $"行 {i} 列 {col.Name}：{s1[..Math.Min(60, s1.Length)]} → {s2[..Math.Min(60, s2.Length)]}";
+                }
+            }
+        }
+        var noDrift = drift == 0;
+        Console.WriteLine($"    改动：行 0 的 {columnKey} 前面加了 {probeText}（{before.Length} → {before.Length + probeText.Length} 字符）");
+        Console.WriteLine(noDrift
+            ? "    [OK] 其余所有行、所有列完全一致"
+            : $"    [漂移] {drift} 处不一致，例：{driftSample}");
+        results.Add(("A-1 改一行不漂移", noDrift, noDrift ? "no drift" : driftSample));
+    }
+    else
+    {
+        Console.WriteLine("    [跳过] 列定位未通过或表为空");
+    }
+
+    // ── [5] 目标列样本 + 颜色标记语法（A-5） ────────────────
+    Console.WriteLine("\n[5] 文本到底在哪一份文件、哪一个列里");
+
+    // 5a 每一份候选文件的字符串列，逐列统计非空条数 ⇒ 看出文本落在哪
+    foreach (var p in existing)
+    {
+        Console.WriteLine($"\n    ── {p}");
+        var t = SampleTable(gd.ReadFile(p)!, p);
+        foreach (var (idx, col) in t.Columns.Select((c, i) => (i, c)))
+        {
+            var n = 0;
+            foreach (var r in t.Rows)
+                if ((r.GetValueOrDefault(col.Name) as string ?? "").Length > 0) n++;
+            if (n > 0) Console.WriteLine($"       列 {idx,2} {col.Name,-24} 非空 {n,4} 条");
+        }
+    }
+
+    // 5b 目标文件 Unknown25 的全部非空值
+    Console.WriteLine($"\n    ── {path} 的 {columnKey} 全部非空值");
+    var colored = new List<string>();
+    if (colOk)
+    {
+        for (var i = 0; i < dt.Count; i++)
+        {
+            var v = dt.Rows[i].GetValueOrDefault(columnKey) as string ?? "";
+            if (v.Length == 0) continue;
+            Console.WriteLine($"       [{i,3}] {v}");
+            if (v.Contains('<') && v.Contains('{')) colored.Add($"[{i}] {v}");
+        }
+        // 5c 同一行上「列 2 FlavourText」与「列 25 Unknown25」并排，看清我们要改的是哪一个
+        Console.WriteLine($"\n    ── 对照：列 2 FlavourText vs 列 25 Unknown25（同一行）");
+        var shown = 0;
+        for (var i = 0; i < dt.Count && shown < 6; i++)
+        {
+            var u = dt.Rows[i].GetValueOrDefault(columnKey) as string ?? "";
+            if (u.Length == 0) continue;
+            var f = dt.Rows[i].GetValueOrDefault("FlavourText") as string ?? "";
+            Console.WriteLine($"       行 {i,3}  FlavourText = {Trim(f, 40)}");
+            Console.WriteLine($"                Unknown25   = {Trim(u, 40)}");
+            shown++;
+        }
+
+        Console.WriteLine($"\n    含 '<' 与 '{{' 的行（颜色/富文本标记样本）：{colored.Count} 条");
+        foreach (var s in colored.Take(5)) Console.WriteLine($"      {s}");
+        if (colored.Count == 0)
+            Console.WriteLine("      （无 — 客户端里没有现成的标记样本，A-5 需靠应用后目视确认）");
+    }
+
+    // ── 汇总 ────────────────────────────────────────────────
+    Console.WriteLine("\n" + new string('=', 68));
+    Console.WriteLine("W0 汇总");
+    foreach (var (name, ok, detail) in results)
+        Console.WriteLine($"    [{(ok ? "PASS" : "FAIL")}] {name} — {detail}");
+
+    var gate = results.Where(r => !r.Name.Contains("字节一致", StringComparison.Ordinal));
+    var allPass = gate.All(r => r.Ok);
+    var byteIdenticalResult = results.FirstOrDefault(r => r.Name.Contains("字节一致", StringComparison.Ordinal));
+
+    Console.WriteLine(allPass
+        ? "\n结论：PASS — 可以开工 W1（文字切片）。"
+        : "\n结论：FAIL — 修好失败项再开工。");
+    if (!byteIdenticalResult.Ok)
+        Console.WriteLine("注意：往返**字节不恒等**但语义无损且稳定 ⇒ 仍可走整表重编码，但实现时必须遵守：\n" +
+                          "  C1 状态判定与「已生效跳过」只比 Unknown25 文本，绝不比整文件字节或 SHA；\n" +
+                          "  C2 没有任何一行需要改动时不产出 FileChange，不写盘（避免空转把文件改大）。");
+    Console.WriteLine("颜色语法（A-5）需人工看上面 [5] 的样本，或应用后进游戏目视确认。");
+    return allPass ? 0 : 1;
+}
+
+static string Trim(string s, int max) => s.Length <= max ? s : s[..max] + "…";
+
+// ═══ try-endgamemaps ═══════════════════════════════════════
+// A-5/A9 实验：把「自定义前缀 + 原名 + 自定义后缀」写进终局地图文本列，生成可分发的补丁，
+// 由人工应用后进游戏目视确认颜色是否生效。本命令**不写游戏数据**，只产出补丁。
+static int CmdTryEndgameMaps(string[] a)
+{
+    if (a.Length < 1)
+    {
+        Console.Error.WriteLine("Usage: try-endgamemaps <game-data> [语言目录名] [前缀] [后缀] [dat|csd] [输出目录]");
+        Console.Error.WriteLine("  省略语言则自动取「有内容的覆盖层」；前缀/后缀支持任意文字与标点。");
+        Console.Error.WriteLine("  例：try-endgamemaps <index> \"traditional chinese\" \"[<red>{BOSS}]\" \" ♦\" dat");
+        return 1;
+    }
+
+    const string tableName = "EndgameMaps";
+    const string columnKey = "Unknown25";
+    const string basePath = "data/balance/endgamemaps.datc64";
+
+    var lang = a.Length > 1 && a[1].Length > 0 ? a[1] : null;
+    var syntax = a.Length > 4 && a[4].Equals("csd", StringComparison.OrdinalIgnoreCase) ? "csd" : "dat";
+    // 默认前缀/后缀各带一种颜色，进游戏一眼就能看出颜色到底生不生效
+    var defPrefix = syntax == "csd" ? "[<red>{{前}}</red>]" : "[<red>{前}]";
+    var defSuffix = syntax == "csd" ? "[<green>{{后}}</green>]" : "[<green>{后}]";
+    var prefix = a.Length > 2 ? a[2] : defPrefix;
+    var suffix = a.Length > 3 ? a[3] : defSuffix;
+    var outDir = a.Length > 5 ? a[5] : Path.Combine(Path.GetTempPath(), "emprobe", "patch");
+
+    Console.WriteLine(new string('=', 68));
+    Console.WriteLine($"A-5 实验：终局地图文本加前缀/后缀（语法={syntax}）");
+    Console.WriteLine(new string('=', 68));
+    Console.WriteLine($"    前缀：{prefix}");
+    Console.WriteLine($"    后缀：{suffix}");
+
+    var resolved = GameDataAccess.ResolvePath(a[0]);
+    using var gd = GameDataAccess.OpenReadOnlyMapped(resolved);
+
+    // 目标：指定语言 > 有内容的覆盖层 > base
+    var candidates = new List<string> { basePath };
+    foreach (var l in new[] { "traditional chinese", "simplified chinese" })
+        candidates.Add($"data/balance/{l}/endgamemaps.datc64");
+
+    var path = lang is not null ? $"data/balance/{lang}/endgamemaps.datc64" : null;
+    if (path is null || !gd.FileExists(path))
+    {
+        path = null;
+        foreach (var p in candidates)
+        {
+            if (!gd.FileExists(p)) continue;
+            var (i64, v) = Datc64File.DetectFromExtension(p);
+            var t = Datc64File.FromBytes(gd.ReadFile(p)!, tableName, i64, v);
+            var nonEmpty = t.Rows.Count(r => (r.GetValueOrDefault(columnKey) as string ?? "").Length > 0);
+            if (p != basePath && nonEmpty > 0) { path = p; break; }
+            path ??= p;
+        }
+    }
+    if (path is null) { Console.Error.WriteLine("客户端里找不到 endgamemaps.datc64。"); return 1; }
+    Console.WriteLine($"    目标：{path}");
+
+    var original = gd.ReadFile(path)!;
+    var (is64, vf) = Datc64File.DetectFromExtension(path);
+    var dt = Datc64File.FromBytes(original, tableName, is64, vf);
+
+    var changed = 0;
+    Console.WriteLine("\n改动预览（前 6 条）：");
+    for (var i = 0; i < dt.Count; i++)
+    {
+        var v = dt.Rows[i].GetValueOrDefault(columnKey) as string ?? "";
+        if (v.Length == 0) continue;
+        dt.Rows[i][columnKey] = prefix + v + suffix;
+        changed++;
+        if (changed <= 6) Console.WriteLine($"    [{i,3}] {Trim(v, 30)}  →  {Trim(dt.Rows[i][columnKey] as string ?? "", 50)}");
+    }
+    Console.WriteLine($"    共改动 {changed} 行。");
+    if (changed == 0) { Console.WriteLine("没有可改动的行，不生成补丁。"); return 1; }
+
+    var modified = dt.ToBytes();
+    var jsonPath = AffixPatchBuilder.BuildExport(
+        [new AffixPatchBuilder.FileChange(path, original, modified)],
+        outDir, "endgame-maps",
+        $"A-5 实验：终局地图文本加前缀/后缀（语法={syntax}）");
+
+    Console.WriteLine($"\n补丁已生成：{jsonPath}");
+    Console.WriteLine($"  （原 {original.Length:N0} → 新 {modified.Length:N0} 字节）");
+    Console.WriteLine("\n下一步（**先完全退出游戏客户端**再执行）：");
+    Console.WriteLine($"  应用：  PoEToolbox.Cli.exe fx-patch \"{resolved}\" \"{jsonPath}\" apply");
+    Console.WriteLine($"  进游戏看地图列表里那 20 张图的文本：前缀应显示为红色、后缀为绿色。");
+    Console.WriteLine($"  还原：  PoEToolbox.Cli.exe fx-patch \"{resolved}\" \"{jsonPath}\" revert");
+    Console.WriteLine("\n若颜色不显示，换 csd 语法再试一次：把第 5 个参数改成 csd。");
+    return 0;
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("PoE Toolbox - CLI");
@@ -856,6 +1247,8 @@ static void PrintUsage()
     Console.WriteLine("  dds-mapnumbers <in> <out> [font-size] Write centered 1-16 with white/yellow/red colors");
     Console.WriteLine("  dds-remove-map-t <in> <out> [first] [last] Remove T from mapnumber DDS files");
     Console.WriteLine("  cmp <file>     Round-trip encoder test");
+    Console.WriteLine("  probe-endgamemaps <game-data> [语言目录名]  W0 闸门：只读探测 EndgameMaps 表/列/往返编码/标记样本（不写任何文件）");
+    Console.WriteLine("  try-endgamemaps <game-data> [语言] [前缀] [后缀] [dat|csd] [输出目录]  A-5 实验：生成「加前缀/后缀」补丁（不写游戏数据，需另行 fx-patch apply）");
     Console.WriteLine("  copy-file <game-data> <src-path> <dest-path> Copy a file to a new path (isolated)");
     Console.WriteLine("  restore <game-data> Restore the original baseline index");
     Console.WriteLine("  fx-oilmod <game-data> [patch-id|all] <status|apply|revert|cleanup|purge> 内置特效补丁（地面燃烧特效 oil-ground-fx-lite / 黏油榴弹特效 oil-grenade-fx-lite，省略 patch-id 或用 all 对两者执行）");

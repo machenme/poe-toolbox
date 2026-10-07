@@ -34,6 +34,7 @@
     <ProjectReference Include="../../src/PoEToolbox.Plugins.PoeCnPatch/PoEToolbox.Plugins.PoeCnPatch.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.Poe2Font/PoEToolbox.Plugins.Poe2Font.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.AffixWorkbench/PoEToolbox.Plugins.AffixWorkbench.csproj" />
+    <ProjectReference Include="../../src/PoEToolbox.Plugins.MapWorkbench/PoEToolbox.Plugins.MapWorkbench.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Shared/PoEToolbox.Shared.csproj" />
   </ItemGroup>
 </Project>

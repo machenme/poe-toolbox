@@ -1,0 +1,14 @@
+Rarity: Rare
+Sulphurous Wasteland
+--------
+Map Tier: 16
+--------
+Item Level: 83
+--------
+{ +35% Monster Pack Size }
+{ +28% Item Quantity }
+{ +18% Item Rarity }
+{ +10% More Maps }
+{ Area contains additional Monsters }
+--------
+Corrupted
