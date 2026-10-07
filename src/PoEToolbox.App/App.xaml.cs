@@ -14,7 +14,12 @@ public partial class App : Application
         FileLogger.App.Info("App starting.");
         DispatcherUnhandledException += (_, args) =>
         {
-            var msg = $"Unhandled: {args.Exception.GetType().Name}: {args.Exception.Message}\n{args.Exception.StackTrace}";
+            // 必须用 ToString() 而不是 $"{Type}: {Message}" + StackTrace：
+            // XamlParseException 的 Message 只是一句「在某扩展上提供临时值时引发异常」，
+            // 真正的行号、缺失的资源键全在 InnerException 里，拆开打印就等于什么都没说。
+            // 另外调试期在弹窗里显示完整链，主人截屏就能直接看到根因，不必去翻日志。
+            var detailed = args.Exception.ToString();
+            var msg = $"Unhandled: {detailed}";
             FileLogger.WriteCritical(msg, args.Exception);
             MessageBox.Show(msg, "Crash", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;

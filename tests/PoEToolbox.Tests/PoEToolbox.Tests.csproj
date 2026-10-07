@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- XamlLoadTests 要真正 new 出来 MainWindow，必须引用 App 与 Ui。
+         App 是 WinExe，测试工程引用它没问题：入口点不参与，只当类库用。 -->
+    <ProjectReference Include="../../src/PoEToolbox.Ui/PoEToolbox.Ui.csproj" />
+    <ProjectReference Include="../../src/PoEToolbox.App/PoEToolbox.App.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Core/PoEToolbox.Core.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.DataBrowser/PoEToolbox.Plugins.DataBrowser.csproj" />
     <ProjectReference Include="../../src/PoEToolbox.Plugins.BagCleaner/PoEToolbox.Plugins.BagCleaner.csproj" />

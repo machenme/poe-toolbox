@@ -240,14 +240,19 @@
                  且标题走 UILabels 三语，不会在视图里散落硬编码中文。
 
                  内容整体水平居中并限制最大宽度：窗口拉宽时不至于让一行文字横跨
-                 两千像素，左侧导航仍保持左列（Fluent 习惯）。 -->
+                 两千像素，左侧导航仍保持左列（Fluent 习惯）。
+
+                 这里刻意不写 Width="100%"：Grid.Width 默认按绝对 Length 解析，
+                 "100%" 会抛 FormatException「无法将"100%"字符串转换为 Length」，
+                 整个窗口 LoadComponent 失败、启动即崩。居中 + MaxWidth 已经能
+                 撑满可用空间并居中，不需要显式宽度。 -->
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <Grid MaxWidth="1180" HorizontalAlignment="Center" Width="100%">
+                <Grid MaxWidth="1180" HorizontalAlignment="Center">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>

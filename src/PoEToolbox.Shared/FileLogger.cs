@@ -94,12 +94,12 @@ public sealed class FileLogger : IDisposable, ILogger
 
     public static void WriteCritical(string message, Exception? ex = null)
     {
-        try
-        {
-            using var logger = new FileLogger();
-            logger.Error(message, ex);
-        }
-        catch { }
+        // 必须复用 App 那一个实例，不能 new FileLogger()。
+        // App 在进程启动时就以 FileShare.Read 独占了当天日志的句柄；再开第二个
+        // FileAccess.Write 句柄必然被系统拒绝，而构造函数里那句 `catch { _writer = null; }`
+        // 会把失败吞掉——结果就是崩溃日志一条都写不出去，恰恰是最需要它的时候。
+        // 复用 App 还有个附带好处：_sessionBannerWritten 已经是 1，不会重复写分隔行。
+        App.Error(message, ex);
     }
 
     private static void CleanupOldLogs(string directory)
