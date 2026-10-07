@@ -51,6 +51,9 @@ Content.ggpk
 # 起草中的设计稿（定稿后移入 docs/ 入库，见 docs/PRD-engineering-hardening.md 的 D3）
 /PRD-affix-coloring.md
 /SPEC-affix-coloring.md
+/PRD-endgame-map-marks.md
+/SPEC-endgame-map-marks.md
+/STATUS-endgame-map-marks.md
 AUDIT_PRD.md
 AUDIT_SPEC.md
 TODO.md

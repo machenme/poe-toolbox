@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>PoEToolbox.Plugins.MapWorkbench</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PoEToolbox.Abstractions\PoEToolbox.Abstractions.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Shared\PoEToolbox.Shared.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Core\PoEToolbox.Core.csproj" />
+    <ProjectReference Include="..\PoEToolbox.Ui\PoEToolbox.Ui.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+</Project>

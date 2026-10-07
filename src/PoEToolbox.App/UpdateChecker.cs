@@ -66,7 +66,12 @@ public static class UpdateChecker
 
     public static async Task<UpdateCheckResult> CheckAsync()
     {
-        if (!ShouldCheck())
+        return await CheckAsync(force: false).ConfigureAwait(false);
+    }
+
+    public static async Task<UpdateCheckResult> CheckAsync(bool force)
+    {
+        if (!force && !ShouldCheck())
             return GetCachedResult();
 
         ConfigService.SetValue(LastCheckedAtKey, DateTimeOffset.UtcNow.ToString("O"));

@@ -183,9 +183,20 @@ public partial class MainWindow : Window
             : UILabels.Get("VersionTooltip");
     }
 
-    private void VersionBtn_Click(object sender, RoutedEventArgs e)
+    private async void VersionBtn_Click(object sender, RoutedEventArgs e)
     {
-        var cached = UpdateChecker.GetCachedResult();
+        VersionBtn.IsEnabled = false;
+        UpdateCheckResult cached;
+        try
+        {
+            cached = await UpdateChecker.CheckAsync(force: true);
+            ApplyVersionState(cached);
+        }
+        finally
+        {
+            VersionBtn.IsEnabled = true;
+        }
+
         if (!cached.HasUpdate || cached.LatestVersion is null)
             return;
 
