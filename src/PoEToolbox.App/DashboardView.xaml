@@ -20,13 +20,15 @@
             <Setter Property="Padding" Value="16"/>
         </Style>
 
-        <!-- 客户端不匹配：整卡压暗 + 右上角角标。判定与左导航的禁用态同一个 IsEnabled。 -->
+        <!-- 客户端不匹配：右上角角标。判定与左导航的禁用态同一个 IsEnabled。
+             默认 Collapsed（占位不占宽），不可用时才显现。 -->
         <Style x:Key="UnavailableBadge" TargetType="Border">
             <Setter Property="HorizontalAlignment" Value="Right"/>
-            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="CornerRadius" Value="{DynamicResource CornerXs}"/>
             <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
             <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Margin" Value="0,0,0,0"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                     <Setter Property="Visibility" Value="Visible"/>
@@ -105,30 +107,39 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="32" Height="32"
-                                            CornerRadius="{DynamicResource CornerSm}"
-                                            Background="{DynamicResource AccentSubtleBrush}">
-                                        <TextBlock Text="{Binding IconGlyph}"
-                                                   FontFamily="Segoe MDL2 Assets" FontSize="16"
-                                                   Foreground="{DynamicResource AccentBrush}"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <TextBlock Text="{Binding Name}"
-                                               Style="{StaticResource SectionText}"
-                                               Margin="10,0,0,0" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                <!-- 标题行：图标 + 模块名。角标独占第 1 列靠右，
+                                     不再和标题抢同一格（之前角标叠在模块名上，文字互相压住）。 -->
+                                <Border Grid.Column="0" Width="32" Height="32"
+                                        CornerRadius="{DynamicResource CornerSm}"
+                                        Background="{DynamicResource BrandSubtleBrush}"
+                                        BorderBrush="{DynamicResource BrandBorderBrush}"
+                                        BorderThickness="1"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding IconGlyph}"
+                                               FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                               Foreground="{DynamicResource BrandBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                           Style="{StaticResource SectionText}"
+                                           Margin="42,0,8,0" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
 
-                                <TextBlock Grid.Row="1" Text="{Binding Summary}"
-                                           Style="{StaticResource CaptionText}"
-                                           Margin="0,10,0,0" VerticalAlignment="Top"/>
-
-                                <Border Grid.Row="0" Grid.RowSpan="2"
+                                <!-- 客户端不匹配：右上角角标，占第 1 列 -->
+                                <Border Grid.Column="1" Grid.Row="0"
                                         Style="{StaticResource UnavailableBadge}">
                                     <TextBlock Text="{Binding UnavailableHint}"
                                                Style="{StaticResource CaptionText}"/>
                                 </Border>
+
+                                <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Summary}"
+                                           Style="{StaticResource CaptionText}"
+                                           Margin="0,10,0,0" VerticalAlignment="Top"/>
                             </Grid>
                         </Border>
                     </DataTemplate>

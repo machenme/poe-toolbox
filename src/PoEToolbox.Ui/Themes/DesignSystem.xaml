@@ -4,12 +4,11 @@
     <!-- Design system entry point. Merged by App.xaml.
          Order matters: tokens first, then components that consume them.
 
-         这层只放「随主题不变」的东西：排版与控件样式。
-         颜色令牌刻意不放这里 —— 它由 App.xaml 作为 MergedDictionaries[0] 单独持有，
-         ThemeService 切主题时整层替换（见 Tokens.Dark.xaml 顶部注释）。若把颜色
-         并进本字典，切换就得重建整个字典树，视图里300+ 处 StaticResource 样式引用
-         会因样式对象换了实例而失效。 -->
+         单一浅色主题，不再有运行时切主题，所以颜色令牌直接并回本字典：
+         Tokens.xaml 给 PoE 金 + Fluent 蓝的配色与全部尺寸令牌，
+         后面几个字典是排版与控件样式，消费上面的令牌。 -->
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Tokens.xaml"/>
         <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Typography.xaml"/>
         <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Controls.Button.xaml"/>
         <ResourceDictionary Source="pack://application:,,,/PoEToolbox.Ui;component/Themes/Controls.Input.xaml"/>

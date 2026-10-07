@@ -35,16 +35,6 @@
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
                             HorizontalAlignment="Right">
-                    <!-- 主题：跟随系统 / 浅色 / 深色 -->
-                    <ComboBox x:Name="ThemeCombo" Width="112" Height="30"
-                              Margin="0,0,8,0" VerticalAlignment="Center"
-                              SelectionChanged="ThemeCombo_SelectionChanged"
-                              ToolTip="界面主题">
-                        <ComboBoxItem Content="跟随系统"/>
-                        <ComboBoxItem Content="浅色"/>
-                        <ComboBoxItem Content="深色"/>
-                    </ComboBox>
-
                     <Button x:Name="OpenDataFolderButton" Click="OpenDataFolderButton_Click"
                             Height="30" Padding="12,0" Margin="0,0,8,0"
                             Style="{StaticResource SecondaryButton}"
@@ -216,10 +206,11 @@
                                                         Value="{DynamicResource CardHoverBrush}"/>
                                             </Trigger>
                                             <Trigger Property="IsSelected" Value="True">
+                                                <!-- 底色走品牌金浅底，指示条走品牌金：选中态一眼认出是本工具箱 -->
                                                 <Setter TargetName="bd" Property="Background"
                                                         Value="{DynamicResource NavSelectionBrush}"/>
                                                 <Setter TargetName="indicator" Property="Background"
-                                                        Value="{DynamicResource AccentBrush}"/>
+                                                        Value="{DynamicResource BrandBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -246,14 +237,24 @@
             <!-- Content area：模块页头（图标+标题+一句作用说明）+ 模块视图。
                  页头由外壳统一托管，不写进各插件视图 XAML：
                  IPlugin 已提供 IconGlyph / Name / Summary，新增插件自动获得页头，
-                 且标题走 UILabels 三语，不会在视图里散落硬编码中文。 -->
+                 且标题走 UILabels 三语，不会在视图里散落硬编码中文。
+
+                 内容整体水平居中并限制最大宽度：窗口拉宽时不至于让一行文字横跨
+                 两千像素，左侧导航仍保持左列（Fluent 习惯）。 -->
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <ui:PageHeader x:Name="ModuleHeader" Grid.Row="0"/>
-                <ContentControl x:Name="PluginContent" Grid.Row="1"/>
+
+                <Grid MaxWidth="1180" HorizontalAlignment="Center" Width="100%">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <ui:PageHeader x:Name="ModuleHeader" Grid.Row="0"/>
+                    <ContentControl x:Name="PluginContent" Grid.Row="1"/>
+                </Grid>
             </Grid>
         </Grid>
 

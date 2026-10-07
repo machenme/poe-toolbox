@@ -22,7 +22,6 @@ public partial class MainWindow : Window
     private IUiPlugin? _activePlugin;
     private DashboardView _dashboard = null!;
     private ICollectionView _navView = null!;
-    private bool _syncingThemeCombo;
     private bool _initialGameDataHintShown;
     private int _gameDataDetectionVersion;
     private bool _windowClosed;
@@ -31,9 +30,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-
-        // 主题必须在任何控件取到画刷之前落定：晚一步就会先按浅色画一遍再跳色。
-        ThemeService.Initialize();
 
         _pluginManager = new PluginManager(new EventBus());
         _sessionState = _pluginManager.SessionState;
@@ -62,7 +58,6 @@ public partial class MainWindow : Window
         NavList.SelectedItem = FindDashboardEntry();
 
         ApplyLocalization();
-        SyncThemeCombo();
         _pluginManager.EventBus.Publish(new GameContextChanged(
             PoeGameKind.Unknown, null, PoeDetector.Default.IsPoeRunning()));
         SourceInitialized += (_, _) => InitializeGlobalPluginHotkeys();
@@ -233,32 +228,6 @@ public partial class MainWindow : Window
                 p.Summary,
                 () => IsPluginAvailable(p, _sessionState.Game)))
             .ToList();
-
-    // ═══ 主题 ═══════════════════════════════════════════════════
-    private void SyncThemeCombo()
-    {
-        _syncingThemeCombo = true;
-        ThemeCombo.SelectedIndex = ThemeService.FollowSystem ? 0 : (ThemeService.IsDark ? 2 : 1);
-        _syncingThemeCombo = false;
-    }
-
-    private void ThemeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_syncingThemeCombo) return;
-
-        switch (ThemeCombo.SelectedIndex)
-        {
-            case 0:
-                ThemeService.UseSystem();
-                break;
-            case 2:
-                ThemeService.SetDark(true);
-                break;
-            default:
-                ThemeService.SetDark(false);
-                break;
-        }
-    }
 
     private void InitializeGlobalPluginHotkeys()
     {

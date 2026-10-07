@@ -3,12 +3,15 @@
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!--
-      ═══ 浅色令牌（PowerToys / Fluent 2 观感）═════════════════════════
-      切换主题的方式：ThemeService 只整体替换 App.xaml 的 MergedDictionaries[0]
-      （即本文件），样式字典（Typography / Controls.*）永远不动。
-      原因：视图里有 300+ 处 {StaticResource <Style>}，样式是解析期一次性绑定，
-      换样式字典会让已加载控件持有失效引用；换颜色字典则全部 DynamicResource 自动跟随。
-      因此本文件与 Tokens.Dark.xaml 的 key 集合必须完全一致。
+      ═══ 设计令牌（PoE 金色主调 + Fluent 交互规范）═════════════════════
+      配色分工：
+        · 金色 #C89B3C —— 品牌色。用在图标底板、强调标识、选中指示条这类「点缀」处，
+          让界面一眼认出是 PoE Toolbox，而不是任何一个 Fluent 应用。
+        · 蓝色 #0F6CBD —— 交互色。用在需要「可点/ 选中 / 聚焦」的控件状态上。
+          这类状态借用 Fluent 蓝是因为它经过对比度验证，深浅背景下都读得清；
+          若改金色，#C89B3C 在白底上对比度不足（≈2.4:1），会变成看不清的选中态。
+      界面结构（间距、圆角、字号、两级信息层次）仍然是 PowerToys 那一套，
+      只换配色不改骨架。
 
       改配色只改这里。控件与视图一律引用语义 key，不得出现字面色值
       （tests/PoEToolbox.Tests/XamlTokenGuardTests.cs 守着这条）。
@@ -29,7 +32,17 @@
     <SolidColorBrush x:Key="TextTertiaryBrush" Color="#8A8A8A"/>
     <SolidColorBrush x:Key="PlaceholderBrush" Color="#9E9E9E"/>
 
-    <!-- ═══ Accent（Fluent 蓝）═══════════════════════════ -->
+    <!-- ═══ Brand（PoE 金）：图标底板、选中指示条、品牌标识 ═════ -->
+    <SolidColorBrush x:Key="BrandBrush" Color="#C89B3C"/>
+    <SolidColorBrush x:Key="BrandHoverBrush" Color="#D8AC52"/>
+    <SolidColorBrush x:Key="BrandPressedBrush" Color="#A9822F"/>
+    <!-- 品牌色的浅底：图标底板 / 选中行底色用这个，金色本身当背景会太亮 -->
+    <SolidColorBrush x:Key="BrandSubtleBrush" Color="#FBF5E9"/>
+    <SolidColorBrush x:Key="BrandBorderBrush" Color="#E3CE9A"/>
+    <!-- 金色上的文字：必须用深色才读得清 -->
+    <SolidColorBrush x:Key="BrandForegroundBrush" Color="#FFFFFF"/>
+
+    <!-- ═══ Interactive（Fluent 蓝）：可点 / 聚焦 / 选中态 ═════ -->
     <SolidColorBrush x:Key="AccentBrush" Color="#0F6CBD"/>
     <SolidColorBrush x:Key="AccentHoverBrush" Color="#1B84E0"/>
     <SolidColorBrush x:Key="AccentPressedBrush" Color="#0C5AAC"/>
@@ -46,10 +59,11 @@
     <SolidColorBrush x:Key="ButtonBgBrush" Color="#F6F6F6"/>
     <SolidColorBrush x:Key="ButtonHoverBrush" Color="#EEEEEE"/>
     <SolidColorBrush x:Key="InputBgBrush" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="TagSelectedBgBrush" Color="#EFF6FC"/>
+    <!-- 选中/悬停底色走品牌金浅底，一眼可辨是本工具箱 -->
+    <SolidColorBrush x:Key="TagSelectedBgBrush" Color="#FBF5E9"/>
     <SolidColorBrush x:Key="RowHoverBgBrush" Color="#F6F6F6"/>
-    <SolidColorBrush x:Key="RowSelectedBgBrush" Color="#EFF6FC"/>
-    <SolidColorBrush x:Key="NavSelectionBrush" Color="#EFF6FC"/>
+    <SolidColorBrush x:Key="RowSelectedBgBrush" Color="#FBF5E9"/>
+    <SolidColorBrush x:Key="NavSelectionBrush" Color="#FBF5E9"/>
     <SolidColorBrush x:Key="FocusRingBrush" Color="#0F6CBD"/>
     <SolidColorBrush x:Key="DisabledBgBrush" Color="#F5F5F5"/>
     <SolidColorBrush x:Key="DisabledTextBrush" Color="#A0A0A0"/>

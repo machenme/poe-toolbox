@@ -20,16 +20,18 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 图标底板：40×40 圆角方块，accent 淡底 -->
+            <!-- 图标底板：40×40 圆角方块。品牌金浅底 + 金色字形。 -->
             <Border x:Name="IconPlate" Grid.Column="0"
                     Width="40" Height="40"
                     CornerRadius="{DynamicResource CornerMd}"
-                    Background="{DynamicResource AccentSubtleBrush}"
+                    Background="{DynamicResource BrandSubtleBrush}"
+                    BorderBrush="{DynamicResource BrandBorderBrush}"
+                    BorderThickness="1"
                     VerticalAlignment="Center">
                 <TextBlock x:Name="IconText"
                            FontFamily="Segoe MDL2 Assets"
                            FontSize="18"
-                           Foreground="{DynamicResource AccentBrush}"
+                           Foreground="{DynamicResource BrandBrush}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Text="{Binding IconGlyph, ElementName=Root}"/>

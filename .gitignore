@@ -9,6 +9,7 @@ obj/
 
 # Publish output
 publish/
+publish_fixed/
 release/
 
 # External packages, extracted game data and local test artifacts
