@@ -52,19 +52,20 @@ public sealed record MapNumberRestoreResult(int RestoredFiles, int AlreadyOrigin
 /// 「恢复」始终回到第一次改动之前，而不是回到上一次微调之前。
 /// 落点是游戏目录下的 <c>Bundles2/backup/map-numbers/</c>，与基线同处一处、随游戏目录走。
 /// </remarks>
-public static class MapNumberSnapshot
+public static partial class MapNumberSnapshot
 {
     private const string DirectoryName = "map-numbers";
     private const string ManifestName = "manifest.json";
 
-    private sealed class Manifest
+    // 源生成要求：context 生成的属性是 internal，注册的类型可见性不能低于它。
+    internal sealed class Manifest
     {
         [JsonPropertyName("createdAt")] public string CreatedAt { get; set; } = "";
         [JsonPropertyName("isPoe2")] public bool IsPoe2 { get; set; }
         [JsonPropertyName("files")] public List<ManifestFile> Files { get; set; } = [];
     }
 
-    private sealed class ManifestFile
+    internal sealed class ManifestFile
     {
         /// <summary>快照文件名（相对快照目录），按序号命名不受游戏路径里的斜杠影响。</summary>
         [JsonPropertyName("name")] public string Name { get; set; } = "";
@@ -78,6 +79,16 @@ public static class MapNumberSnapshot
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         PropertyNameCaseInsensitive = true,
     };
+
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 用上面那份 <see cref="JsonOpts"/> 构造实例而非 <c>Default</c>：<c>Encoder</c> 这类选项
+    /// 写不进 <c>JsonSourceGenerationOptions</c> 特性，传进去才能保住宽松转义的既有格式。
+    /// </summary>
+    [JsonSerializable(typeof(Manifest))]
+    internal sealed partial class MapSnapshotManifestContext : JsonSerializerContext;
+
+    private static readonly MapSnapshotManifestContext ManifestTypeInfo = new(JsonOpts);
 
     /// <summary>快照目录（游戏目录下，与基线同级）。</summary>
     /// <remarks>
@@ -166,7 +177,7 @@ public static class MapNumberSnapshot
         }
 
         File.WriteAllText(Path.Combine(directory, ManifestName),
-            JsonSerializer.Serialize(manifest, JsonOpts));
+            JsonSerializer.Serialize(manifest, ManifestTypeInfo.Manifest));
         log?.Invoke($"已保存改动前的快照（{manifest.Files.Count} 个文件）。");
         return true;
     }
@@ -212,7 +223,7 @@ public static class MapNumberSnapshot
             return null;
         try
         {
-            return JsonSerializer.Deserialize<Manifest>(File.ReadAllText(path), JsonOpts);
+            return JsonSerializer.Deserialize(File.ReadAllText(path), ManifestTypeInfo.Manifest);
         }
         catch (Exception ex)
         {

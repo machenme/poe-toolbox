@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PoEToolbox.Shared;
 
@@ -12,18 +13,33 @@ namespace PoEToolbox.Shared;
 /// （<c>FxPatchEngine.Log</c> / <c>LogErr</c>），否则 UI 的 LogSink 会漏掉解压输出。
 /// 可见性与基线一致：只有引擎会调的（解析、解压、资源路径）是 internal，包内自用的仍是 private。
 /// </remarks>
-internal static class FxPatchPackage
+internal static partial class FxPatchPackage
 {
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException），
+    /// 所以要解析的类型必须在这里显式注册。
+    /// </summary>
+    [JsonSerializable(typeof(PatchDef))]
+    internal sealed partial class FxPackagePatchDefContext : JsonSerializerContext;
+
     private static readonly JsonSerializerOptions PatchJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
     };
 
+    /// <summary>
+    /// 用上面那份 options 构造的 context 实例。
+    /// 刻意不用 <c>FxPackagePatchDefContext.Default</c>：Default 只会带上 <c>JsonSourceGenerationOptions</c>
+    /// 特性里能写的那几个选项，而 <c>Encoder</c>、<c>ReadCommentHandling</c> 这类写不进特性。
+    /// 把 options 实例传给构造函数可以原样保留全部设置——序列化格式与改动前逐字节一致。
+    /// </summary>
+    private static readonly FxPackagePatchDefContext PatchJsonTypeInfo = new(PatchJsonOptions);
+
     /// <summary>解析并校验补丁描述；<paramref name="basePath"/> 是包内资源（assets）相对路径基准，可为 null。</summary>
     internal static PatchDef ParsePatchJson(string json, string? basePath)
     {
-        var patch = JsonSerializer.Deserialize<PatchDef>(json, PatchJsonOptions)
+        var patch = JsonSerializer.Deserialize(json, PatchJsonTypeInfo.PatchDef)
             ?? throw new InvalidOperationException("补丁描述解析为空。");
         patch.BasePath = basePath;
         ValidatePatch(patch);

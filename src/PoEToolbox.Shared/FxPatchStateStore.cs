@@ -13,7 +13,7 @@ namespace PoEToolbox.Shared;
 /// 所以它可能和真实状态对不上（例如用启动器修复过客户端、或手动删了备份目录），
 /// 「刷新补丁状态」会重新扫描索引并按真实结果校正它。
 /// </remarks>
-public static class FxPatchStateStore
+public static partial class FxPatchStateStore
 {
     public const string FileName = "applied-patches.json";
 
@@ -33,6 +33,17 @@ public static class FxPatchStateStore
         WriteIndented = true,
     };
 
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 刻意用上面那份 <see cref="Json"/> 构造实例而不是 <c>Default</c>——
+    /// <c>JsonSourceGenerationOptions</c> 特性写不进 <c>PropertyNamingPolicy</c> 之外的全部选项，
+    /// 传 options 进构造函数才能原样保留格式（camelCase 大小写策略若丢了，账本就对不上了）。
+    /// </summary>
+    [System.Text.Json.Serialization.JsonSerializable(typeof(Document))]
+    internal sealed partial class FxPatchStateStoreContext : System.Text.Json.Serialization.JsonSerializerContext;
+
+    private static readonly FxPatchStateStoreContext JsonTypeInfo = new(Json);
+
     public sealed record AppliedPatch(
         string Id,
         string Name,
@@ -42,7 +53,8 @@ public static class FxPatchStateStore
         /// <summary>应用时用户提供的补丁文件路径（.patch.json / .zip）；界面靠它直接还原 / 卸载第三方补丁。旧记录没有这个字段。</summary>
         string? SourceFile = null);
 
-    private sealed class Document
+    // 源生成要求：context 生成的属性是 internal，注册的类型可见性不能低于它。
+    internal sealed class Document
     {
         public int Version { get; set; } = 1;
         public List<AppliedPatch> Patches { get; set; } = new();
@@ -60,7 +72,7 @@ public static class FxPatchStateStore
             return [];
         try
         {
-            var doc = JsonSerializer.Deserialize<Document>(File.ReadAllText(path), Json);
+            var doc = JsonSerializer.Deserialize(File.ReadAllText(path), JsonTypeInfo.Document);
             return doc?.Patches.Where(p => !string.IsNullOrWhiteSpace(p.Id)).ToList() ?? [];
         }
         catch (Exception ex)
@@ -130,7 +142,7 @@ public static class FxPatchStateStore
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             // 先写临时文件再替换：写一半被打断也不会留下损坏的账本。
             var temp = path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(new Document { Patches = patches }, Json));
+            File.WriteAllText(temp, JsonSerializer.Serialize(new Document { Patches = patches }, JsonTypeInfo.Document));
             File.Move(temp, path, overwrite: true);
         }
         catch (Exception ex)

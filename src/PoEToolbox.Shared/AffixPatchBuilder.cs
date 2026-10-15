@@ -12,14 +12,14 @@ namespace PoEToolbox.Shared;
 /// 布局与 op 格式同实例补丁（addfile-asset + 原版备份）。
 /// 每次重新生成 Version+1——引擎按版本号复用 PATCHED bundle，改内容必须升版本。
 /// </summary>
-public static class AffixPatchBuilder
+public static partial class AffixPatchBuilder
 {
     /// <summary>工作台补丁固定单例 id（方案不改变补丁身份，靠 Version 递增演进）。</summary>
     public const string PatchId = "affix-workbench";
 
     public sealed record FileChange(string GamePath, byte[] Original, byte[] Modified);
 
-    private sealed record PatchJson(
+    internal sealed record PatchJson(
         [property: JsonPropertyOrder(0)] string PatchId,
         [property: JsonPropertyOrder(1)] string BundleName,
         [property: JsonPropertyOrder(2)] string Version,
@@ -27,7 +27,7 @@ public static class AffixPatchBuilder
         [property: JsonPropertyName("_comment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         string? Comment = null);
 
-    private sealed record OpJson(
+    internal sealed record OpJson(
         [property: JsonPropertyOrder(0)] string Op,
         [property: JsonPropertyOrder(1)] string Dst,
         [property: JsonPropertyOrder(2)] List<object> Replace,
@@ -39,6 +39,16 @@ public static class AffixPatchBuilder
         WriteIndented = true,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
+
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 用上面那份 <see cref="JsonOpts"/> 构造实例而非 <c>Default</c>：<c>Encoder</c> 写不进
+    /// <c>JsonSourceGenerationOptions</c> 特性，传进去才能保住宽松转义（中文不被转成 \uXXXX）。
+    /// </summary>
+    [JsonSerializable(typeof(PatchJson))]
+    internal sealed partial class AffixPatchJsonContext : JsonSerializerContext;
+
+    private static readonly AffixPatchJsonContext PatchJsonTypeInfo = new(JsonOpts);
 
     /// <summary>生成/更新补丁目录，返回 patch.json 完整路径。</summary>
     public static string Build(IReadOnlyList<FileChange> changes, string? patchesDir = null)
@@ -69,7 +79,7 @@ public static class AffixPatchBuilder
 
         var patch = new PatchJson(PatchId, PatchId, version.ToString(), ops);
         var jsonPath = Path.Combine(dir, PatchId + ".patch.json");
-        File.WriteAllText(jsonPath, JsonSerializer.Serialize(patch, JsonOpts));
+        File.WriteAllText(jsonPath, JsonSerializer.Serialize(patch, PatchJsonTypeInfo.PatchJson));
         return jsonPath;
     }
 
@@ -79,7 +89,7 @@ public static class AffixPatchBuilder
             return 1;
         try
         {
-            var existing = JsonSerializer.Deserialize<PatchJson>(File.ReadAllText(existingJsonPath), JsonOpts);
+            var existing = JsonSerializer.Deserialize(File.ReadAllText(existingJsonPath), PatchJsonTypeInfo.PatchJson);
             return int.TryParse(existing?.Version, out var v) ? v + 1 : 1;
         }
         catch
@@ -113,7 +123,7 @@ public static class AffixPatchBuilder
 
         var patch = new PatchJson(patchId, patchId, "1", ops, comment);
         var jsonPath = Path.Combine(dir, patchId + ".patch.json");
-        File.WriteAllText(jsonPath, JsonSerializer.Serialize(patch, JsonOpts));
+        File.WriteAllText(jsonPath, JsonSerializer.Serialize(patch, PatchJsonTypeInfo.PatchJson));
         return jsonPath;
     }
 

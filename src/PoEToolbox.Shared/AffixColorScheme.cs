@@ -10,7 +10,7 @@ namespace PoEToolbox.Shared;
 /// 持久化为 <see cref="ConfigService.AffixSchemesDirectory"/> 下的 JSON（文件名 = 方案名），
 /// 导入/导出同一格式，可直接分享（PRD Story 5）。
 /// </summary>
-public sealed class AffixColorScheme
+public sealed partial class AffixColorScheme
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -18,6 +18,16 @@ public sealed class AffixColorScheme
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
+
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 用上面那份 <see cref="JsonOpts"/> 构造实例而非 <c>Default</c>，保住缩进、大小写不敏感
+    /// 与忽略 null 的既有格式——方案文件是用户可编辑可分享的，格式不能漂。
+    /// </summary>
+    [JsonSerializable(typeof(AffixColorScheme))]
+    internal sealed partial class AffixSchemeContext : JsonSerializerContext;
+
+    private static readonly AffixSchemeContext SchemeTypeInfo = new(JsonOpts);
 
     public int SchemaVersion { get; set; } = 1;
     public string Name { get; set; } = "";
@@ -100,7 +110,7 @@ public sealed class AffixColorScheme
     public static AffixColorScheme Load(string name)
     {
         var path = PathOf(name);
-        var scheme = JsonSerializer.Deserialize<AffixColorScheme>(File.ReadAllText(path), JsonOpts)
+        var scheme = JsonSerializer.Deserialize(File.ReadAllText(path), SchemeTypeInfo.AffixColorScheme)
             ?? throw new InvalidDataException($"方案文件为空：{path}");
         scheme.Name = name;
         return scheme;
@@ -111,20 +121,20 @@ public sealed class AffixColorScheme
         if (string.IsNullOrWhiteSpace(Name))
             throw new InvalidOperationException("方案名不能为空。");
         Directory.CreateDirectory(StorageDirectory);
-        var serialized = JsonSerializer.Serialize(this, JsonOpts);
+        var serialized = JsonSerializer.Serialize(this, SchemeTypeInfo.AffixColorScheme);
         File.WriteAllText(PathOf(Name), serialized);
     }
 
     /// <summary>从外部 JSON 文件导入（方案名以目标文件名为准）。</summary>
     public static AffixColorScheme Import(string jsonPath, string? newName = null)
     {
-        var scheme = JsonSerializer.Deserialize<AffixColorScheme>(File.ReadAllText(jsonPath), JsonOpts)
+        var scheme = JsonSerializer.Deserialize(File.ReadAllText(jsonPath), SchemeTypeInfo.AffixColorScheme)
             ?? throw new InvalidDataException($"方案文件为空：{jsonPath}");
         scheme.Name = newName ?? scheme.Name;
         return scheme;
     }
 
-    public void Export(string jsonPath) => File.WriteAllText(jsonPath, JsonSerializer.Serialize(this, JsonOpts));
+    public void Export(string jsonPath) => File.WriteAllText(jsonPath, JsonSerializer.Serialize(this, SchemeTypeInfo.AffixColorScheme));
 
     public static string PathOf(string name)
     {

@@ -10,8 +10,26 @@ using System.IO;
 /// 自动归类：dat 表默认整表 asset（--dat-ptr opt-in 逐行 patchptr）；文本 → edittext；二进制/新增 → addfile-asset。
 /// 已知边界：整包 bundle 替换式修改（record 三元组不变、仅 bundle 内容被换）在 record 层不可见，无法被 diff 捕捉。
 /// </summary>
-public static class FxDiff
+public static partial class FxDiff
 {
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 生成的补丁是给别人分发的产物，格式必须与改动前一致 —— 所以把原 options 整个传给构造函数
+    /// 而不是用 <c>Default</c>：<c>Encoder</c>、<c>DefaultIgnoreCondition</c> 这类选项写不进
+    /// <c>JsonSourceGenerationOptions</c> 特性，只有传实例才保得住。
+    /// </summary>
+    [System.Text.Json.Serialization.JsonSerializable(typeof(PatchDef))]
+    internal sealed partial class FxDiffPatchDefContext : System.Text.Json.Serialization.JsonSerializerContext;
+
+    private static readonly JsonSerializerOptions PatchJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    private static readonly FxDiffPatchDefContext PatchJsonTypeInfo = new(PatchJsonOptions);
+
     private static readonly AsyncLocal<Action<string>?> LogSinkCurrent = new();
 
     /// <summary>UI 日志钩子：设置后所有输出同时流入该回调。按异步流隔离，并发执行互不覆盖。</summary>
@@ -204,13 +222,7 @@ public static class FxDiff
             Version = version,
             Operations = ops,
         };
-        var json = JsonSerializer.Serialize(patch,
-            new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-            });
+        var json = JsonSerializer.Serialize(patch, PatchJsonTypeInfo.PatchDef);
         var patchPath = Path.Combine(outDir, $"{patchId}.patch.json");
         File.WriteAllText(patchPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         Log($"[完成] 补丁已生成: {patchPath}");
