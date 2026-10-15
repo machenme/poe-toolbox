@@ -11,6 +11,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseSystemDrawing>true</UseSystemDrawing>
+    <!-- Native AOT 目标（CLI 是第一个 AOT 发布目标）：普通 build 就报 trim/AOT 警告。
+         exe 用 IsAotCompatible 无效（那只针对库），这里逐个开分析器。 -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
   </PropertyGroup>
 
 </Project>

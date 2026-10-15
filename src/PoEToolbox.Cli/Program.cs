@@ -809,7 +809,9 @@ static int CmdCmp(string[] a)
     var schemaRL = dt.Columns.Sum(c => Datc64Constants.ColumnSize(c, is64));
     Console.WriteLine($"Schema row_length={schemaRL}, Detected row_length={dt.RowLength}");
 
-    // Compare rows: use JSON serialization for deep equality
+    // Compare rows: deep equality via DatRowValueComparer.
+    // 数组列的值是 List<object>，引用相等永远不等 ⇒ 必须逐元素比。
+    // 不再借用 JsonSerializer：反射序列化在 Native AOT 下会被直接禁用。
     var dt2 = Datc64File.FromBytes(encoded, "BaseItemTypes", is64, vf);
     Console.WriteLine($"Re-parsed encoded: {dt2.Count} rows, row_length={dt2.RowLength}");
     var mismatchCount = 0;
@@ -819,12 +821,12 @@ static int CmdCmp(string[] a)
         var r2 = dt2.Rows[i];
         foreach (var key in r1.Keys)
         {
-            var v1 = System.Text.Json.JsonSerializer.Serialize(r1[key]);
-            var v2 = System.Text.Json.JsonSerializer.Serialize(r2.GetValueOrDefault(key));
-            if (v1 != v2)
+            var v1 = r1[key];
+            var v2 = r2.GetValueOrDefault(key);
+            if (!DatRowValueComparer.AreEqual(v1, v2))
             {
                 if (mismatchCount < 5)
-                    Console.WriteLine($"  Row {i}, col '{key}': {v1[..Math.Min(60,v1.Length)]} vs {v2[..Math.Min(60,v2.Length)]}");
+                    Console.WriteLine($"  Row {i}, col '{key}': {DatRowValueComparer.Describe(v1)} vs {DatRowValueComparer.Describe(v2)}");
                 mismatchCount++;
                 break;
             }
@@ -1003,13 +1005,14 @@ static int CmdProbeEndgameMaps(string[] a)
         {
             foreach (var col in dt.Columns)
             {
-                var s1 = System.Text.Json.JsonSerializer.Serialize(dt.Rows[i].GetValueOrDefault(col.Name));
-                var s2 = System.Text.Json.JsonSerializer.Serialize(dtR.Rows[i].GetValueOrDefault(col.Name));
-                if (s1 != s2)
+                // 数组列的值是 List<object>，引用相等永远不等 ⇒ 必须逐元素比（同 CmdCmp）
+                var v1 = dt.Rows[i].GetValueOrDefault(col.Name);
+                var v2 = dtR.Rows[i].GetValueOrDefault(col.Name);
+                if (!DatRowValueComparer.AreEqual(v1, v2))
                 {
                     semanticDiff++;
                     if (semanticSample.Length == 0)
-                        semanticSample = $"行 {i} 列 {col.Name}：{s1[..Math.Min(60, s1.Length)]} → {s2[..Math.Min(60, s2.Length)]}";
+                        semanticSample = $"行 {i} 列 {col.Name}：{DatRowValueComparer.Describe(v1)} → {DatRowValueComparer.Describe(v2)}";
                 }
             }
         }
@@ -1044,14 +1047,14 @@ static int CmdProbeEndgameMaps(string[] a)
             foreach (var col in dt2.Columns)
             {
                 if (i == 0 && col.Name == columnKey) continue;   // 只跳过我们自己改的那一格
-                // 数组列的值是 List<object>，引用相等永远不等 ⇒ 必须按 JSON 比对（同 CmdCmp）
-                var s1 = System.Text.Json.JsonSerializer.Serialize(dt2.Rows[i].GetValueOrDefault(col.Name));
-                var s2 = System.Text.Json.JsonSerializer.Serialize(dt3.Rows[i].GetValueOrDefault(col.Name));
-                if (s1 != s2)
+                // 数组列的值是 List<object>，引用相等永远不等 ⇒ 必须逐元素比（同 CmdCmp）
+                var s1 = dt2.Rows[i].GetValueOrDefault(col.Name);
+                var s2 = dt3.Rows[i].GetValueOrDefault(col.Name);
+                if (!DatRowValueComparer.AreEqual(s1, s2))
                 {
                     drift++;
                     if (driftSample.Length == 0)
-                        driftSample = $"行 {i} 列 {col.Name}：{s1[..Math.Min(60, s1.Length)]} → {s2[..Math.Min(60, s2.Length)]}";
+                        driftSample = $"行 {i} 列 {col.Name}：{DatRowValueComparer.Describe(s1)} → {DatRowValueComparer.Describe(s2)}";
                 }
             }
         }

@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PoEToolbox.Shared</RootNamespace>
+    <!-- Native AOT 目标：普通 build 就要暴露 trim/AOT 不兼容，不等 publish。
+         警告清零前这条链不算 AOT 就绪。 -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
