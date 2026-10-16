@@ -464,11 +464,7 @@ static int CmdBuildNameDictionary(string[] a)
         Directory.CreateDirectory(outputDirectory);
 
     File.WriteAllText(outputPath, System.Text.Json.JsonSerializer.Serialize(names,
-        new System.Text.Json.JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        }));
+        NameDictionaryOutputContext.Instance.DictionaryStringString));
     Console.WriteLine($"Saved {names.Count} names: {outputPath}");
     return 0;
 }
@@ -1259,3 +1255,23 @@ static void PrintUsage()
 }
 static int Help() { PrintUsage(); return 0; }
 static int Unknown(string cmd) { Console.Error.WriteLine($"Unknown: {cmd}"); PrintUsage(); return 1; }
+
+// ═══ 源生成上下文（Native AOT：反射序列化被禁用） ══════════════
+// 顶级语句文件里类型声明必须放在所有局部函数之后，所以放在文件最末尾。
+
+/// <summary>
+/// <c>build-name-dictionary</c> 的 JSON 输出。类型是具体类
+/// <see cref="Dictionary{TKey,TValue}"/>（<c>BuildEmbeddedNameDictionary</c> 的返回类型），
+/// 直接源生成即可；⛔ 不要退化成 <c>IReadOnlyDictionary</c>。
+/// 用带 <c>WriteIndented</c> + <c>UnsafeRelaxedJsonEscaping</c> 的 options 实例构造，
+/// 保住既有格式（缩进 + 中文不写成 \uXXXX）。
+/// </summary>
+[System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string>))]
+internal sealed partial class NameDictionaryOutputContext : System.Text.Json.Serialization.JsonSerializerContext
+{
+    internal static readonly NameDictionaryOutputContext Instance = new(new System.Text.Json.JsonSerializerOptions
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    });
+}

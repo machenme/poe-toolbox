@@ -2,14 +2,28 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PoEToolbox.Shared;
 
 namespace PoEToolbox.Core.Translation;
 
 public sealed class TranslationException(string message, Exception? innerException = null) : Exception(message, innerException);
 
-public sealed class EdgeTranslationClient
+public sealed partial class EdgeTranslationClient
 {
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 原来是不带 options 的 <c>Serialize(texts)</c>（默认选项 ⇒ 非 ASCII 转义成 \uXXXX，
+    /// Edge 接口认这个），这里传一份默认 <see cref="JsonSerializerOptions"/> 实例保持一致。
+    /// 请求体的静态类型是 <see cref="IReadOnlyList{T}"/>（<c>texts.Chunk</c> 的元素），
+    /// 同时登记 <c>string[]</c> 备用。
+    /// </summary>
+    [JsonSerializable(typeof(IReadOnlyList<string>))]
+    [JsonSerializable(typeof(string[]))]
+    internal sealed partial class EdgeTranslationJsonContext : JsonSerializerContext;
+
+    private static readonly EdgeTranslationJsonContext JsonTypeInfo = new(new JsonSerializerOptions());
+
     private const string Endpoint = "https://edge.microsoft.com/translate/translatetext";
     private const int MaxBatchSize = 50;
     private static readonly HttpClient Http = new()
@@ -51,7 +65,10 @@ public sealed class EdgeTranslationClient
                 var uri = $"{Endpoint}?from={source.ToEdgeCode()}&to={target.ToEdgeCode()}&isEnterpriseClient=false";
                 using var request = new HttpRequestMessage(HttpMethod.Post, uri)
                 {
-                    Content = new StringContent(JsonSerializer.Serialize(texts), Encoding.UTF8, "application/json"),
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(texts, JsonTypeInfo.IReadOnlyListString),
+                        Encoding.UTF8,
+                        "application/json"),
                 };
                 request.Headers.Accept.ParseAdd("application/json");
                 using var response = await Http.SendAsync(request, cancellationToken);

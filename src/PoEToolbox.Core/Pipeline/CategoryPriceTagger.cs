@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -12,8 +13,18 @@ namespace PoEToolbox.Core.Pipeline;
 /// Matches poe.ninja exchange category data to BaseItemTypes rows
 /// and applies price tags to item names.
 /// </summary>
-public static class CategoryPriceTagger
+public static partial class CategoryPriceTagger
 {
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 原来是不带 options 的 <c>Deserialize&lt;T&gt;(stream)</c>（默认选项），这里传一份默认
+    /// <see cref="JsonSerializerOptions"/> 实例，保持与改动前完全一致的读法。
+    /// </summary>
+    [JsonSerializable(typeof(Dictionary<string, string>))]
+    internal sealed partial class NameDictionaryJsonContext : JsonSerializerContext;
+
+    private static readonly NameDictionaryJsonContext NameDictionaryTypeInfo = new(new JsonSerializerOptions());
+
     // PoE1 data paths
     public const string PoE1_EnPath = "data/baseitemtypes.datc64";
     public const string PoE1_TcPath = "data/traditional chinese/baseitemtypes.datc64";
@@ -113,7 +124,7 @@ public static class CategoryPriceTagger
         var resourceName = $"PoEToolbox.Core.Assets.NameDictionaries.{fileName}";
         using var stream = typeof(CategoryPriceTagger).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded name dictionary missing: {fileName}");
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(stream)
+        return JsonSerializer.Deserialize(stream, NameDictionaryTypeInfo.DictionaryStringString)
             ?? throw new InvalidDataException($"Embedded name dictionary is invalid: {fileName}");
     }
 

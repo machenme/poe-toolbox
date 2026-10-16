@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Net;
 using System.Net.Http;
 using PoEToolbox.Shared;
@@ -9,8 +10,24 @@ namespace PoEToolbox.Core.Pipeline;
 /// Fetches economy data from poe.ninja API for both PoE1 and PoE2.
 /// Respects rate limits with configurable delays between requests.
 /// </summary>
-public static class PoeNinjaFetcher
+public static partial class PoeNinjaFetcher
 {
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 用 <see cref="PrettyJsonOptions"/> 构造实例而非 <c>Default</c>——输出文件是给用户看的，
+    /// 缩进与宽松转义（中文不写成 \uXXXX）都不能漂。
+    /// </summary>
+    [JsonSerializable(typeof(JsonElement))]
+    internal sealed partial class PoeNinjaJsonContext : JsonSerializerContext;
+
+    private static readonly JsonSerializerOptions PrettyJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private static readonly PoeNinjaJsonContext PrettyJsonTypeInfo = new(PrettyJsonOptions);
+
     public enum PoeGame { Poe1, Poe2 }
 
     public sealed record League(string Id, string Name);
@@ -231,11 +248,7 @@ public static class PoeNinjaFetcher
 
                 // Pretty-print
                 using var doc = JsonDocument.Parse(json);
-                var pretty = JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                });
+                var pretty = JsonSerializer.Serialize(doc.RootElement, PrettyJsonTypeInfo.JsonElement);
 
                 var outPath = Path.Combine(outputDir, $"{type}.json");
                 var tempPath = outPath + ".tmp." + Guid.NewGuid().ToString("N");
