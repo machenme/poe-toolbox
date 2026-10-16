@@ -490,6 +490,12 @@ namespace LibDat2 {
 		/// This won't affect the existing instances of <see cref="DatContainer"/>.
 		/// </summary>
 		[MemberNotNull(nameof(DatDefinitions))]
+		[UnconditionalSuppressMessage("SingleFile", "IL3000",
+			Justification = "Assembly.Location 在单文件 / AOT 下恒为空串，而本方法正是按「可能为空」写的：" +
+				"空 ⇒ 落到 AppContext.BaseDirectory（AOT 下可用），再空 ⇒ 落到进程路径，最后读内嵌资源。" +
+				"探针顺序不能改（先看程序旁边那份是为了支持把 DatDefinitions.json 放过去替换 / 调试）。" +
+				"用特性而不是 #pragma：这条告警由**调用方编译**（Cli 的单文件分析器）在方法声明处报出，" +
+				"#pragma 只对本程序集的编译生效，拦不住消费方的跨程序集诊断。")]
 		public static void ReloadDefinitions() {
 			// 优先用程序旁边放的那份（便于替换/调试），没有就退回程序内嵌的那份：
 			// 单文件发布后 exe 旁什么都没有，读磁盘那一步必然失败。
