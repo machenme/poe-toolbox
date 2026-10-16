@@ -70,7 +70,14 @@ tests/**/obj/
 miscanimated.json
 
 # Local assistant workspace
+# ⛔ .workbuddy-ai/ 存的是本工具的项目记忆与工作日志，不是缓存，别删；
+#    但它属于本机状态，不入库。
 .workbuddy/
+.workbuddy-ai/
+
+# 本机专用的 AOT 验收脚本：publish 那一步要查注册表拿 Windows SDK 路径，
+# 沙箱与 CI 都跑不通，只有主人的终端能跑通 ⇒ 只在本机存在，不进仓库。
+/tools/VerifyAotPublish.ps1
 
 # Mise
 .python-version
