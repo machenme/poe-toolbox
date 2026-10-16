@@ -31,7 +31,7 @@ public partial class PriceTaggerView : UserControl
     private PoeNinjaFetcher.PoeGame? _clientGame;
     private string? _gameDataPath;
     private readonly IConfigService<PriceTaggerConfig> _config =
-        new PluginConfigService<PriceTaggerConfig>("PriceTagger");
+        new PluginConfigService<PriceTaggerConfig>("PriceTagger", PriceTaggerConfigJson.ConfigTypeInfo);
     private readonly IEventBus _eventBus;
 
     private bool _langSwapped;

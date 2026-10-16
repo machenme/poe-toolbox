@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Encodings.Web;
 
 namespace PoEToolbox.Shared;
@@ -9,7 +12,7 @@ namespace PoEToolbox.Shared;
 /// Reads/writes plugin configs to the per-user config.json in sections.
 /// Uses atomic write (temp file + rename) to prevent corruption.
 /// </summary>
-public static class ConfigService
+public static partial class ConfigService
 {
     private static readonly string DefaultDataDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -36,12 +39,38 @@ public static class ConfigService
     public static string AffixSchemesDirectory => Path.Combine(DataDirectory, "affix-schemes");
     private static readonly string LegacyConfigPath = Path.Combine(AppContext.BaseDirectory, "work", "config.json");
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
+    /// <summary>
+    /// 插件配置的规范 JSON 选项（<strong>每次调用返回新实例</strong>）。
+    ///
+    /// <para>源生成上下文必须用它构造，⛔ 不能用 <c>MyContext.Default</c>：<c>Encoder</c> 写不进
+    /// <c>[JsonSourceGenerationOptions]</c> 特性，用 <c>Default</c> 会丢掉宽松转义（中文被写成
+    /// <c>\uXXXX</c>）；<c>PropertyNameCaseInsensitive</c> 丢了则既有 config.json 读不出来。</para>
+    ///
+    /// <para>为什么返回新实例而不是共享单例：一个 <see cref="JsonSerializerOptions"/> 绑定到源生成
+    /// context 之后就不能再给反射式序列化用（<see cref="SetJsonValue"/> 那条路仍要反射），
+    /// 所以本类的 context、各插件的 context、以及反射路径各持一份。</para>
+    /// </summary>
+    public static JsonSerializerOptions CreatePluginConfigJsonOptions() => new()
     {
         WriteIndented = true,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         PropertyNameCaseInsensitive = true,
     };
+
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用（运行时抛 InvalidOperationException）。
+    /// 覆盖 config.json 自身读写用到的两个具体类型；插件配置段落走调用方传进来的
+    /// <see cref="JsonTypeInfo{T}"/>（见 <see cref="GetPluginConfig{T}(string, JsonTypeInfo{T})"/>）。
+    /// </summary>
+    [JsonSerializable(typeof(Dictionary<string, JsonElement>))]
+    [JsonSerializable(typeof(string))]
+    internal sealed partial class ConfigServiceJsonContext : JsonSerializerContext;
+
+    /// <summary>给上面那个 context 用的选项实例（与 <see cref="JsonOpts"/> 同设置，但刻意不共用实例）。</summary>
+    private static readonly ConfigServiceJsonContext SourceGenJson = new(CreatePluginConfigJsonOptions());
+
+    /// <summary>反射路径（<see cref="SetJsonValue"/>）用的选项。不能与源生成 context 共用同一个实例。</summary>
+    private static readonly JsonSerializerOptions JsonOpts = CreatePluginConfigJsonOptions();
 
     private static readonly object _lock = new();
     public static string? LastReadError { get; private set; }
@@ -58,7 +87,7 @@ public static class ConfigService
             try
             {
                 var json = File.ReadAllText(ConfigPath);
-                return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JsonOpts) ?? [];
+                return JsonSerializer.Deserialize(json, SourceGenJson.DictionaryStringJsonElement) ?? [];
             }
             catch (Exception ex)
             {
@@ -79,13 +108,18 @@ public static class ConfigService
         }
     }
 
-    /// <summary>Get a plugin's config section, deserialized to T. Returns default if not found.</summary>
-    public static T? GetPluginConfig<T>(string pluginName) where T : class, new()
+    /// <summary>
+    /// Get a plugin's config section, deserialized to T. Returns default if not found.
+    /// <paramref name="typeInfo"/> 由调用方（插件）自己声明并传入：类型 <c>T</c> 定义在插件里，
+    /// <c>Shared</c> 不能引用插件，所以这里没法替它们注册。用
+    /// <see cref="CreatePluginConfigJsonOptions"/> 构造 context，保住既有的读法（含大小写不敏感）。
+    /// </summary>
+    public static T? GetPluginConfig<T>(string pluginName, JsonTypeInfo<T> typeInfo) where T : class, new()
     {
         var cfg = ReadFullConfig();
         if (cfg.TryGetValue(pluginName, out var element))
         {
-            try { return JsonSerializer.Deserialize<T>(element.GetRawText(), JsonOpts); }
+            try { return JsonSerializer.Deserialize(element.GetRawText(), typeInfo); }
             catch (Exception ex)
             {
                 // 静默回落到默认值看起来像「配置没生效」，不留痕迹就只能靠猜。
@@ -95,14 +129,17 @@ public static class ConfigService
         return new T();
     }
 
-    /// <summary>Save a plugin's config section. Atomic write.</summary>
-    public static void SavePluginConfig<T>(string pluginName, T config) where T : class
+    /// <summary>
+    /// Save a plugin's config section. Atomic write.
+    /// <paramref name="typeInfo"/> 的来由见 <see cref="GetPluginConfig{T}(string, JsonTypeInfo{T})"/>。
+    /// </summary>
+    public static void SavePluginConfig<T>(string pluginName, T config, JsonTypeInfo<T> typeInfo) where T : class
     {
         lock (_lock)
         {
             var cfg = ReadFullConfig();
 
-            var element = JsonSerializer.SerializeToElement(config, JsonOpts);
+            var element = JsonSerializer.SerializeToElement(config, typeInfo);
             cfg[pluginName] = element;
             WriteFullConfig(cfg);
         }
@@ -122,12 +159,22 @@ public static class ConfigService
         lock (_lock)
         {
             var cfg = ReadFullConfig();
-            cfg[key] = JsonSerializer.SerializeToElement(value);
+            cfg[key] = JsonSerializer.SerializeToElement(value, SourceGenJson.String);
             WriteFullConfig(cfg);
         }
     }
 
-    /// <summary>Write a structured JSON value to config. Atomic write.</summary>
+    /// <summary>
+    /// Write a structured JSON value to config. Atomic write.
+    /// </summary>
+    /// <remarks>
+    /// ⛔ <strong>这条 API 不能上 Native AOT。</strong> 调用方（<c>App/UpdateChecker</c>）传的是
+    /// <strong>匿名对象</strong>（<c>new { }</c>），匿名类型无法源生成，因此保留反射式实现并如实标注。
+    /// 标注后警告会转移到调用方；<c>App</c> 与各插件都没开 trim/AOT 分析器，所以不产生噪音。
+    /// AOT 路径上请改用带 <see cref="JsonTypeInfo{T}"/> 的 <see cref="SavePluginConfig{T}"/>。
+    /// </remarks>
+    [RequiresUnreferencedCode("SetJsonValue 走反射式序列化；调用方传匿名对象，无法源生成。AOT 下请改用带 JsonTypeInfo 的重载。")]
+    [RequiresDynamicCode("SetJsonValue 走反射式序列化，AOT 下需要运行时代码生成。")]
     public static void SetJsonValue(string key, object value)
     {
         lock (_lock)
@@ -141,7 +188,7 @@ public static class ConfigService
     private static void WriteFullConfig(Dictionary<string, JsonElement> config)
     {
         Directory.CreateDirectory(DataDirectory);
-        var serialized = JsonSerializer.Serialize(config, JsonOpts);
+        var serialized = JsonSerializer.Serialize(config, SourceGenJson.DictionaryStringJsonElement);
         var tmp = ConfigPath + ".tmp";
         File.WriteAllText(tmp, serialized);
         File.Move(tmp, ConfigPath, true);

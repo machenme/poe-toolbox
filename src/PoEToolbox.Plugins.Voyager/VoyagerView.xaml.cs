@@ -215,7 +215,7 @@ public partial class VoyagerView : UserControl
 
     private void SaveAndReregister()
     {
-        PoEToolbox.Shared.ConfigService.SavePluginConfig("Voyager", _config);
+        PoEToolbox.Shared.ConfigService.SavePluginConfig("Voyager", _config, VoyagerConfig.ConfigTypeInfo);
         PluginRef?.RegisterAllHotkeys();
     }
 

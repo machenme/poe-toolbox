@@ -27,7 +27,7 @@ public class VoyagerPlugin : IUiPlugin
 
     public VoyagerPlugin(IHotkeyServiceFactory hotkeys)
     {
-        _config = PoEToolbox.Shared.ConfigService.GetPluginConfig<VoyagerConfig>("Voyager")
+        _config = PoEToolbox.Shared.ConfigService.GetPluginConfig("Voyager", VoyagerConfig.ConfigTypeInfo)
                   ?? new VoyagerConfig();
         // The smart-click map layout is fixed for the current 2K display profile.
         // Keep legacy configurable values in sync so old config files cannot show 20×12.
@@ -149,7 +149,7 @@ public class VoyagerPlugin : IUiPlugin
             _config.StepX = (rx - _calX1) / Math.Max(_config.Columns - 1, 1);
             _config.StepY = (ry - _calY1) / Math.Max(_config.Rows - 1, 1);
             _calState = CalState.Idle;
-            PoEToolbox.Shared.ConfigService.SavePluginConfig("Voyager", _config);
+            PoEToolbox.Shared.ConfigService.SavePluginConfig("Voyager", _config, VoyagerConfig.ConfigTypeInfo);
             _calWindow?.Close();
             _calWindow = null;
             _view?.UpdateCopyCalDisplay();

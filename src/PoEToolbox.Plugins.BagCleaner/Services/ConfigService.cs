@@ -26,7 +26,7 @@ public sealed class ConfigService : IConfigService
     {
         try
         {
-            var loaded = Shared.ConfigService.GetPluginConfig<AppConfig>(PluginKey);
+            var loaded = Shared.ConfigService.GetPluginConfig(PluginKey, AppConfig.ConfigTypeInfo);
             if (loaded == null)
             {
                 _current = new AppConfig();
@@ -55,7 +55,7 @@ public sealed class ConfigService : IConfigService
     public void SaveConfig(AppConfig config)
     {
         Normalize(config);
-        Shared.ConfigService.SavePluginConfig(PluginKey, config);
+        Shared.ConfigService.SavePluginConfig(PluginKey, config, AppConfig.ConfigTypeInfo);
         _current = config;
     }
 

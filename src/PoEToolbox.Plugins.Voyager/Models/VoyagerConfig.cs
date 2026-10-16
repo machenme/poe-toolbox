@@ -1,6 +1,10 @@
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using PoEToolbox.Shared;
+
 namespace PoEToolbox.Plugins.Voyager.Models;
 
-public class VoyagerConfig
+public partial class VoyagerConfig
 {
     // ── 复制模式 (Ctrl+C) ──────────────────────────────
     public int HotkeyTrigger { get; set; } = 0x76;             // F7
@@ -30,4 +34,15 @@ public class VoyagerConfig
     public int SmartOffsetY { get; set; } = 0;
 
     public bool IsSmartCalibrated => SmartStartX != 0 || SmartStartY != 0; // legacy field
+
+    /// <summary>
+    /// 源生成上下文：反射序列化在 Native AOT 下被禁用。
+    /// 用 <see cref="ConfigService.CreatePluginConfigJsonOptions"/> 构造实例而非 <c>Default</c>，
+    /// 保住既有 config.json 的读法（大小写不敏感 + 宽松转义）。
+    /// </summary>
+    [JsonSerializable(typeof(VoyagerConfig))]
+    internal sealed partial class VoyagerConfigJsonContext : JsonSerializerContext;
+
+    internal static readonly JsonTypeInfo<VoyagerConfig> ConfigTypeInfo =
+        new VoyagerConfigJsonContext(ConfigService.CreatePluginConfigJsonOptions()).VoyagerConfig;
 }

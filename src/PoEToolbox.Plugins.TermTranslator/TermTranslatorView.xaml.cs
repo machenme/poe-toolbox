@@ -25,7 +25,7 @@ public partial class TermTranslatorView : UserControl
     public TermTranslatorView()
     {
         InitializeComponent();
-        _config = ConfigService.GetPluginConfig<TermTranslatorConfig>(ConfigKey)
+        _config = ConfigService.GetPluginConfig(ConfigKey, TermTranslatorConfig.ConfigTypeInfo)
             ?? new TermTranslatorConfig();
         _config.TranslationFontSize = Math.Clamp(
             _config.TranslationFontSize,
@@ -154,7 +154,7 @@ public partial class TermTranslatorView : UserControl
 
         _config.TranslationFontSize = nextSize;
         ApplyTranslationFontSize();
-        ConfigService.SavePluginConfig(ConfigKey, _config);
+        ConfigService.SavePluginConfig(ConfigKey, _config, TermTranslatorConfig.ConfigTypeInfo);
     }
 
     private void ApplyTranslationFontSize()

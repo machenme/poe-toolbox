@@ -41,7 +41,7 @@ public partial class DataBrowserView : UserControl
     {
         _eventBus = eventBus ?? new EventBus();
         InitializeComponent();
-        _config = ConfigService.GetPluginConfig<DataBrowserConfig>("DataBrowser")
+        _config = ConfigService.GetPluginConfig("DataBrowser", DataBrowserConfig.ConfigTypeInfo)
                   ?? new DataBrowserConfig();
         ExtensionFilter.SelectedIndex = 0;
         TextPreview.FontSize = Math.Clamp(_config.EditorFontSize, 8, 32);
@@ -294,7 +294,7 @@ public partial class DataBrowserView : UserControl
             }
 
             _config.LastDataPath = path;
-            ConfigService.SavePluginConfig("DataBrowser", _config);
+            ConfigService.SavePluginConfig("DataBrowser", _config, DataBrowserConfig.ConfigTypeInfo);
         }
         catch (OperationCanceledException)
         {
@@ -919,7 +919,7 @@ public partial class DataBrowserView : UserControl
     {
         TextPreview.FontSize = Math.Clamp(size, 8, 32);
         _config.EditorFontSize = TextPreview.FontSize;
-        ConfigService.SavePluginConfig("DataBrowser", _config);
+        ConfigService.SavePluginConfig("DataBrowser", _config, DataBrowserConfig.ConfigTypeInfo);
     }
 
     private static bool IsEditablePreview(PreviewDocument document)
@@ -1017,7 +1017,7 @@ public partial class DataBrowserView : UserControl
 
         var destination = dlg.FileName;
         _config.LastExtractDir = Path.GetDirectoryName(destination);
-        ConfigService.SavePluginConfig("DataBrowser", _config);
+        ConfigService.SavePluginConfig("DataBrowser", _config, DataBrowserConfig.ConfigTypeInfo);
 
         _ = RunExtractionAsync(async cancellationToken =>
         {
@@ -1060,7 +1060,7 @@ public partial class DataBrowserView : UserControl
 
         var gameDataPath = _gd.GameDataPath;
         _config.LastExtractDir = Path.GetDirectoryName(dialog.FileName);
-        ConfigService.SavePluginConfig("DataBrowser", _config);
+        ConfigService.SavePluginConfig("DataBrowser", _config, DataBrowserConfig.ConfigTypeInfo);
 
         if (!ReleaseFileLocks(keepReopenPath: true))
             return;
@@ -1205,7 +1205,7 @@ public partial class DataBrowserView : UserControl
 
         var destination = dlg.FileName;
         _config.LastExtractDir = Path.GetDirectoryName(destination);
-        ConfigService.SavePluginConfig("DataBrowser", _config);
+        ConfigService.SavePluginConfig("DataBrowser", _config, DataBrowserConfig.ConfigTypeInfo);
 
         _ = RunExtractionAsync(cancellationToken =>
             ExtractService.ExtractDatc64AsJsonAsync(file, sourcePath, destination, cancellationToken));
@@ -1236,7 +1236,7 @@ public partial class DataBrowserView : UserControl
         if (string.IsNullOrEmpty(destination)) return;
 
         _config.LastExtractDir = destination;
-        ConfigService.SavePluginConfig("DataBrowser", _config);
+        ConfigService.SavePluginConfig("DataBrowser", _config, DataBrowserConfig.ConfigTypeInfo);
 
         _ = RunExtractionAsync(cancellationToken =>
         {

@@ -1,8 +1,27 @@
 using System.IO;
+using System.Text.Json.Serialization;
 using PoEToolbox.Shared;
 using Xunit;
 
 namespace PoEToolbox.Tests;
+
+/// <summary>
+/// 源生成上下文：<c>ConfigService.GetPluginConfig/SavePluginConfig</c> 现在要调用方传
+/// <c>JsonTypeInfo&lt;T&gt;</c>（反射式序列化在 Native AOT 下被禁用）。
+/// <c>SampleConfig</c> 因此从 private 嵌套类提到 internal——生成的属性是 internal，
+/// 可见性不够会 CS0053。
+/// </summary>
+[JsonSerializable(typeof(SampleConfig))]
+internal sealed partial class SampleConfigJsonContext : JsonSerializerContext
+{
+    internal static readonly SampleConfigJsonContext Instance = new(ConfigService.CreatePluginConfigJsonOptions());
+}
+
+internal sealed class SampleConfig
+{
+    public string Title { get; set; } = "";
+    public int Count { get; set; }
+}
 
 /// <summary>
 /// 不变式 10（README「必须保持的不变式」表）：断言日志内容前先加锁取快照，不直接枚举订阅列表。
@@ -43,12 +62,6 @@ public sealed class ConfigServiceTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
     }
 
-    private sealed class SampleConfig
-    {
-        public string Title { get; set; } = "";
-        public int Count { get; set; }
-    }
-
     [Fact]
     public void CorruptConfig_ReturnsEmpty_RenamesAsideAndWarns()
     {
@@ -70,7 +83,7 @@ public sealed class ConfigServiceTests : IDisposable
         // 段落存在但形状不对：整段是个字符串，反序列化成 SampleConfig 会抛
         File.WriteAllText(ConfigService.ConfigPath, """{"SomePlugin": "oops"}""");
 
-        var cfg = ConfigService.GetPluginConfig<SampleConfig>("SomePlugin");
+        var cfg = ConfigService.GetPluginConfig("SomePlugin", SampleConfigJsonContext.Instance.SampleConfig);
 
         Assert.NotNull(cfg);
         Assert.Equal("", cfg.Title);
@@ -82,7 +95,7 @@ public sealed class ConfigServiceTests : IDisposable
     [Fact]
     public void Save_WritesUnderTheOverriddenDirectoryOnly()
     {
-        ConfigService.SavePluginConfig("SomePlugin", new SampleConfig { Title = "标题", Count = 7 });
+        ConfigService.SavePluginConfig("SomePlugin", new SampleConfig { Title = "标题", Count = 7 }, SampleConfigJsonContext.Instance.SampleConfig);
 
         Assert.True(File.Exists(ConfigService.ConfigPath));
         var json = File.ReadAllText(ConfigService.ConfigPath);
