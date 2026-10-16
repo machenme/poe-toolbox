@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Text;
 using System.Text.Json;
 using PoEToolbox.Core.Schema;
 
@@ -86,15 +85,10 @@ public sealed class Datc64File
         return FromBytes(data, tableName, is64Bit, validFor);
     }
 
-    public static Datc64File FromJson(string path, string tableName, bool is64Bit = true)
-    {
-        var schema = SchemaManager.LoadTable(tableName, is64Bit ? 2 : 1);
-        var instance = new Datc64File(tableName, is64Bit, schema);
-        var json = File.ReadAllText(path, Encoding.UTF8);
-        instance.Rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(json)
-                        ?? [];
-        return instance;
-    }
+    // FromJson 已删除：它是死代码（全仓只有定义、无调用者），而 <object> 的多态反序列化
+    // 在 Native AOT 下走不通（反射式序列化被禁用）。若要恢复，须为 object 多态手写读取器。
+    // ⚠️ 语义坑备忘：反射式 Deserialize 把 JSON 值填进 object? 时得到的是 JsonElement，
+    // 而不是 List<object?> / 原生数值 —— 手写读取器必须复现这一点，否则下游 Datc64Encoder 行为会变。
 
     // ═══ Parse ═══════════════════════════════════════════════
 
@@ -136,7 +130,7 @@ public sealed class Datc64File
         for (var rowIdx = 0; rowIdx < layout.RowCount; rowIdx++)
         {
             var rowStart = 4 + rowIdx * layout.RowLength;
-            JsonSerializer.Serialize(writer, ParseRow(data, rowStart, layout.DataSectionOffset), JsonOptions);
+            WriteRow(writer, ParseRow(data, rowStart, layout.DataSectionOffset));
         }
         writer.WriteEndArray();
         writer.Flush();
@@ -433,8 +427,65 @@ public sealed class Datc64File
     {
         using var stream = File.Create(path);
         using var writer = new Utf8JsonWriter(stream, JsonWriterOptions);
-        JsonSerializer.Serialize(writer, Rows, JsonOptions);
+        writer.WriteStartArray();
+        foreach (var row in Rows)
+            WriteRow(writer, row);
+        writer.WriteEndArray();
         writer.Flush();
+    }
+
+    // ═══ JSON Writing (AOT-safe, hand-rolled) ════════════════
+    //
+    // 为什么手写而不是源生成：行值是 object 的多态分发（运行时类型决定怎么写），
+    // 源生成做不到；改 [JsonDerivedType] 又要给值域里每个类型打标签、读回类型还会变。
+    //
+    // 值域是封闭的，由 FormatValue / ReadColumn 决定：
+    //   null / bool / short / ushort / int / uint / long / ulong / float / double / string
+    //   / List<object>（数组列，可再嵌一层 List<object>）
+    //
+    // 必须逐字节复现改动前的反射式输出（否则 extract-all 的 JSON 会漂）：
+    //   · 键序 = 字典枚举顺序（= 列的声明顺序），不要排序；
+    //   · 数值按各自的运行时类型写（WriteNumberValue((int)v) 等）。⛔ 绝不先提升成 double：
+    //     (float)0.1 一旦变 double 就是 0.100000001490116 —— 与 DatRowValueComparer 里同一个坑；
+    //   · float.NaN / Infinity：由 Utf8JsonWriter 抛异常（与反射式路径同一处抛），保持抛，别改成写字符串；
+    //   · 缩进与宽松转义（中文不写成 \uXXXX）由 JsonWriterOptions 统一保证。
+
+    private static void WriteRow(Utf8JsonWriter writer, Dictionary<string, object?> row)
+    {
+        writer.WriteStartObject();
+        foreach (var (key, value) in row)
+        {
+            writer.WritePropertyName(key);
+            WriteRowValue(writer, value);
+        }
+        writer.WriteEndObject();
+    }
+
+    private static void WriteRowValue(Utf8JsonWriter writer, object? value)
+    {
+        switch (value)
+        {
+            case null: writer.WriteNullValue(); break;
+            case bool b: writer.WriteBooleanValue(b); break;
+            case short n: writer.WriteNumberValue(n); break;
+            case ushort n: writer.WriteNumberValue(n); break;
+            case int n: writer.WriteNumberValue(n); break;
+            case uint n: writer.WriteNumberValue(n); break;
+            case long n: writer.WriteNumberValue(n); break;
+            case ulong n: writer.WriteNumberValue(n); break;
+            case float n: writer.WriteNumberValue(n); break;
+            case double n: writer.WriteNumberValue(n); break;
+            case string s: writer.WriteStringValue(s); break;
+            case List<object> list:
+                writer.WriteStartArray();
+                foreach (var item in list)
+                    WriteRowValue(writer, item);
+                writer.WriteEndArray();
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unexpected row value type '{value.GetType()}': the hand-written writer must be kept in sync with FormatValue/ReadColumn.");
+        }
     }
 
     public override string ToString() => $"Datc64File({TableName}, rows={Rows.Count}, 64bit={Is64Bit})";
@@ -445,11 +496,8 @@ public sealed class Datc64File
     private readonly record struct RowNull;
     private readonly record struct ForeignRowNull;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
+    // 原先这里还有一份 JsonSerializerOptions（只设了宽松转义）供 JsonSerializer.Serialize 用；
+    // 改手写 writer 后序列化选项不再需要，缩进 + 宽松转义全部由 JsonWriterOptions 承担。
     private static readonly JsonWriterOptions JsonWriterOptions = new()
     {
         Indented = true,
